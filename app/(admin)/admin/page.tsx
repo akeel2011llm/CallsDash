@@ -39,19 +39,23 @@ export default async function AdminHome() {
                   <td>
                     {fmtNum(w.balance, locale, 1)} {w.low && <Badge tone="warn">!</Badge>} {asked && <Badge tone="info">{t("admin.topUpRequests")}</Badge>}
                   </td>
-                  <td className="row">
+                  <td>
+                    <div className="row">
                     {(Object.entries(c.channels) as [keyof typeof c.channels, string][]).map(([ch, st]) => (
                       <Badge key={ch} tone={st === "connected" ? "ok" : st === "pending" ? "warn" : "neutral"}>
                         {t(`channel.${ch}` as "channel.website")}
                       </Badge>
                     ))}
+                    </div>
                   </td>
-                  <td className="row">
+                  <td>
+                    <div className="row">
                     <Link className="btn small ghost" href={`/admin/clients/${c.id}`}>{t("admin.manage")}</Link>
                     <form action={viewAsClient}>
                       <input type="hidden" name="tenantId" value={getTenant(c.id)!.id} />
                       <button className="btn small" type="submit">{t("admin.viewAs")}</button>
                     </form>
+                    </div>
                   </td>
                 </tr>
               );

@@ -43,7 +43,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
           <span key={d.id} className="row"><span className="logo" style={{ background: d.color, width: 12, height: 12, borderRadius: 99 }} />{d.name}</span>
         ))}
       </div>
-      <div className="card table-wrap" dir="ltr">
+      <div className="card table-wrap">
         <div className="week">
           <div className="head" />
           {days.map((d) => {

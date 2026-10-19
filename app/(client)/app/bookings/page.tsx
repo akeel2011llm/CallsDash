@@ -44,7 +44,8 @@ export default async function BookingsPage({ searchParams }: { searchParams: Pro
                 <td>{docName.get(b.doctorId)}</td>
                 <td>{b.service}</td>
                 <td><Badge tone={b.status === "confirmed" ? "ok" : b.status === "cancelled" ? "bad" : b.status === "no_show" ? "warn" : "info"}>{t(`booking.${b.status}` as "booking.confirmed")}</Badge></td>
-                <td className="row">
+                <td>
+                  <div className="row">
                   {b.status !== "cancelled" && (
                     <form action={setBookingStatusAction}>
                       <input type="hidden" name="id" value={b.id} /><input type="hidden" name="status" value="cancelled" /><input type="hidden" name="returnTo" value={returnTo} />
@@ -57,6 +58,7 @@ export default async function BookingsPage({ searchParams }: { searchParams: Pro
                       <button className="btn small ghost">{t("bookings.markNoShow")}</button>
                     </form>
                   )}
+                  </div>
                 </td>
               </tr>
             ))}
