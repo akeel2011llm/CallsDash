@@ -38,7 +38,7 @@ npm test                     # credits wallet and webhook tests
 ## Going live on Supabase
 
 1. Create a Supabase project, run `supabase/migrations/0001_init.sql` in the SQL editor.
-2. Set `DATABASE_URL`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` and remove `DEMO_MODE`.
+2. Set `DATABASE_URL`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` and remove `DEMO_MODE`.
 3. Create your admin user in Supabase Auth, then link it:
    ```sql
    insert into profiles (id, role) values ('<auth user uuid>', 'admin');

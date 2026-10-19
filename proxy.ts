@@ -1,10 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { demoMode } from "./lib/demo-flag";
+import { supabasePublicKey, supabaseUrl } from "./lib/supabase-env";
 
 /** Keeps the Supabase session fresh on every page request (token refresh needs cookie writes, which pages cannot do). */
 export async function proxy(req: NextRequest) {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL, key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const url = supabaseUrl(), key = supabasePublicKey();
   if (demoMode() || !url || !key) return NextResponse.next();
   let res = NextResponse.next({ request: req });
   const supabase = createServerClient(url, key, {
