@@ -1,0 +1,227 @@
+import "server-only";
+import { addTopUp, balance, creditsFor, deduct, lowBalance, renewPackage, round2, sweepExpired, addMonths } from "./credits";
+import { seed, type DB, ELEVENLABS_USD_PER_MIN, ELEVENLABS_USD_PER_MSG } from "./seed";
+import type {
+  AgentSettings, BookingStatus, Channel, Conversation, Locale, Permissions, Tenant,
+} from "./types";
+
+/**
+ * Demo data layer. State lives in process memory and is re-seeded on cold start, so it is only
+ * for demos and local development. The production schema is in supabase/migrations; the Supabase
+ * adapter replaces this module behind the same function names.
+ */
+const g = globalThis as unknown as { __callsdash?: DB };
+const db = (): DB => (g.__callsdash ??= seed());
+const id = (p: string) => `${p}_${++db().seq}`;
+const now = () => new Date();
+
+function sweep(tenantId: string) {
+  const d = db();
+  const mine = d.batches.filter((b) => b.tenantId === tenantId);
+  const { batches, expired } = sweepExpired(mine, now());
+  if (expired > 0) {
+    d.batches = [...d.batches.filter((b) => b.tenantId !== tenantId), ...batches];
+    d.ledger.push({ id: id("l"), tenantId, at: now().toISOString(), kind: "expiry", credits: -expired, note: "Credits expired" });
+  }
+}
+
+export const listTenants = () => db().tenants;
+export const getTenant = (tenantId: string) => db().tenants.find((t) => t.id === tenantId);
+export const getAgent = (tenantId: string) => db().agents[tenantId];
+export const getAgentVersions = (tenantId: string) =>
+  db().agentVersions.filter((v) => v.tenantId === tenantId).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+export const getDoctors = (tenantId: string) => db().doctors.filter((d) => d.tenantId === tenantId);
+export const getBookings = (tenantId: string) =>
+  db().bookings.filter((b) => b.tenantId === tenantId).sort((a, b) => a.startsAt.localeCompare(b.startsAt));
+export const getConversations = (tenantId: string) => db().conversations.filter((c) => c.tenantId === tenantId);
+export const getConversation = (tenantId: string, convId: string) =>
+  db().conversations.find((c) => c.tenantId === tenantId && c.id === convId);
+export const getKnowledge = (tenantId: string) => db().knowledge.filter((k) => k.tenantId === tenantId);
+export const getUnanswered = (tenantId: string) => db().unanswered.filter((u) => u.tenantId === tenantId);
+export const getAlerts = (tenantId?: string) =>
+  db().alerts.filter((a) => !tenantId || a.tenantId === tenantId).sort((a, b) => b.at.localeCompare(a.at));
+export const getAudit = (tenantId?: string) =>
+  db().audit.filter((a) => !tenantId || a.tenantId === tenantId).sort((a, b) => b.at.localeCompare(a.at));
+export const getLedger = (tenantId: string) => db().ledger.filter((l) => l.tenantId === tenantId).sort((a, b) => b.at.localeCompare(a.at));
+export const getTopUpRequests = () => db().topUpRequests.filter((r) => r.status === "open");
+
+export function getWallet(tenantId: string) {
+  sweep(tenantId);
+  const t = getTenant(tenantId)!;
+  const batches = db().batches.filter((b) => b.tenantId === tenantId);
+  const n = now();
+  const low = lowBalance(batches, t.plan, t.lowBalanceThreshold, n);
+  return { batches, balance: balance(batches, n), low: low.low, reference: low.reference };
+}
+
+export function usageByChannel(tenantId: string, since: Date) {
+  const out: Record<Channel, number> = { website: 0, whatsapp: 0, instagram: 0, phone: 0 };
+  for (const c of getConversations(tenantId)) if (new Date(c.startedAt) >= since) out[c.channel] = round2(out[c.channel] + c.creditsCharged);
+  return out;
+}
+
+export function audit(actor: string, action: string, tenantId?: string) {
+  db().audit.push({ id: id("au"), tenantId, at: now().toISOString(), actor, action });
+}
+
+/** Credits for one finished conversation, deducted from the wallet. Returns whether the wallet ran dry. */
+export function recordConversation(tenantId: string, conv: Omit<Conversation, "id" | "tenantId" | "creditsCharged" | "costUsd">) {
+  const d = db();
+  const t = getTenant(tenantId);
+  if (!t) throw new Error("unknown tenant");
+  // webhooks are retried, so the same ElevenLabs conversation must never be charged twice
+  const dup = conv.elevenLabsConversationId && d.conversations.find((c) => c.elevenLabsConversationId === conv.elevenLabsConversationId);
+  if (dup) return { conversation: dup, shortfall: 0, duplicate: true };
+  sweep(tenantId);
+  const credits = creditsFor(conv);
+  const mine = d.batches.filter((b) => b.tenantId === tenantId);
+  const res = deduct(mine, credits, now());
+  d.batches = [...d.batches.filter((b) => b.tenantId !== tenantId), ...res.batches];
+  const full: Conversation = {
+    ...conv, id: id("c"), tenantId, creditsCharged: credits,
+    costUsd: round2(conv.mode === "voice" ? (conv.durationSec / 60) * ELEVENLABS_USD_PER_MIN : conv.messages * ELEVENLABS_USD_PER_MSG),
+  };
+  d.conversations.unshift(full);
+  d.ledger.push({ id: id("l"), tenantId, at: conv.startedAt, kind: "usage", credits: -credits, channel: conv.channel, conversationId: full.id });
+  const after = getWallet(tenantId);
+  if (res.shortfall > 0 || after.low) {
+    const already = d.alerts.some((a) => a.tenantId === tenantId && !a.resolved && a.message.startsWith("Low credit"));
+    if (!already) d.alerts.push({ id: id("a"), tenantId, at: now().toISOString(), severity: "warning", resolved: false, message: `Low credit balance: ${after.balance} credits left.` });
+  }
+  return { conversation: full, shortfall: res.shortfall, duplicate: false };
+}
+
+export function topUp(tenantId: string, credits: number, actor: string, note = "Top-up") {
+  const d = db();
+  const t = getTenant(tenantId)!;
+  d.batches = addTopUp(d.batches, { id: id("cb"), tenantId, amount: credits, now: now(), kind: t.plan.type === "payg" ? "payg" : "topup", note });
+  d.ledger.push({ id: id("l"), tenantId, at: now().toISOString(), kind: "topup", credits, note });
+  d.topUpRequests.filter((r) => r.tenantId === tenantId && r.status === "open").forEach((r) => (r.status = "done"));
+  d.alerts.filter((a) => a.tenantId === tenantId && a.message.startsWith("Low credit")).forEach((a) => (a.resolved = true));
+  audit(actor, `Added ${credits} credits`, tenantId);
+}
+
+export function requestTopUp(tenantId: string, credits: number, actor: string) {
+  db().topUpRequests.push({ id: id("tr"), tenantId, at: now().toISOString(), credits, status: "open" });
+  audit(actor, `Requested a top-up of ${credits} credits`, tenantId);
+}
+
+/** Start the next package period (admin button here; a monthly cron in production). */
+export function renewTenantPackage(tenantId: string, actor: string) {
+  const d = db();
+  const t = getTenant(tenantId)!;
+  if (t.plan.type !== "package") throw new Error("not a package plan");
+  const periodStart = addMonths(t.plan.periodStart, 1);
+  const res = renewPackage(d.batches.filter((b) => b.tenantId === tenantId), {
+    tenantId, plan: t.plan, periodStart, ids: { rollover: id("cb"), package: id("cb") },
+  });
+  d.batches = [...d.batches.filter((b) => b.tenantId !== tenantId), ...res.batches];
+  t.plan.periodStart = periodStart;
+  const at = now().toISOString();
+  if (res.lapsed > 0) d.ledger.push({ id: id("l"), tenantId, at, kind: "expiry", credits: -res.lapsed, note: "Unused package credits lapsed" });
+  if (res.carried > 0) d.ledger.push({ id: id("l"), tenantId, at, kind: "rollover", credits: res.carried, note: "Rollover from previous month" });
+  d.ledger.push({ id: id("l"), tenantId, at, kind: "package_renewal", credits: t.plan.includedCredits, note: t.plan.name });
+  audit(actor, `Renewed package: ${res.carried} credits rolled over, ${res.lapsed} lapsed`, tenantId);
+  return res;
+}
+
+export function saveAgent(tenantId: string, settings: AgentSettings, actor: string, summary: string) {
+  const d = db();
+  d.agents[tenantId] = settings;
+  d.agentVersions.push({ id: id("v"), tenantId, createdAt: now().toISOString(), author: actor, summary, settings: structuredClone(settings) });
+  audit(actor, `Agent settings saved: ${summary}`, tenantId);
+}
+
+export function rollbackAgent(tenantId: string, versionId: string, actor: string) {
+  const v = db().agentVersions.find((x) => x.id === versionId && x.tenantId === tenantId);
+  if (!v) throw new Error("version not found");
+  saveAgent(tenantId, structuredClone(v.settings), actor, `Rolled back to version of ${v.createdAt.slice(0, 10)}`);
+}
+
+export function addKnowledge(tenantId: string, question: string, answer: string, language: Locale, actor: string) {
+  db().knowledge.push({ id: id("k"), tenantId, question, answer, language });
+  audit(actor, "Knowledge item added", tenantId);
+}
+export function deleteKnowledge(tenantId: string, itemId: string, actor: string) {
+  const d = db();
+  d.knowledge = d.knowledge.filter((k) => !(k.tenantId === tenantId && k.id === itemId));
+  audit(actor, "Knowledge item deleted", tenantId);
+}
+export function dismissUnanswered(tenantId: string, itemId: string) {
+  const d = db();
+  d.unanswered = d.unanswered.filter((u) => !(u.tenantId === tenantId && u.id === itemId));
+}
+
+export function setBookingStatus(tenantId: string, bookingId: string, status: BookingStatus, actor: string) {
+  const b = db().bookings.find((x) => x.tenantId === tenantId && x.id === bookingId);
+  if (!b) throw new Error("booking not found");
+  b.status = status;
+  audit(actor, `Booking ${bookingId} set to ${status}`, tenantId);
+}
+
+export function setPermissions(tenantId: string, p: Permissions, actor: string) {
+  getTenant(tenantId)!.permissions = p;
+  audit(actor, "Client permissions changed", tenantId);
+}
+
+export function updateTenant(tenantId: string, patch: Partial<Pick<Tenant, "zeroBalancePolicy" | "status" | "allowedDomains" | "lowBalanceThreshold">> & { branding?: Partial<Tenant["branding"]> }, actor: string) {
+  const t = getTenant(tenantId)!;
+  const { branding, ...rest } = patch;
+  Object.assign(t, rest);
+  if (branding) t.branding = { ...t.branding, ...branding };
+  audit(actor, "Client settings changed", tenantId);
+}
+
+export function resolveAlert(alertId: string) {
+  const a = db().alerts.find((x) => x.id === alertId);
+  if (a) a.resolved = true;
+}
+
+export function createTenant(p: {
+  name: string; nameAr: string; color: string; domain: string; planType: "package" | "payg"; actor: string;
+}) {
+  const d = db();
+  const tid = id("t");
+  const start = new Date(Date.UTC(now().getUTCFullYear(), now().getUTCMonth(), 1)).toISOString();
+  const pkg = p.planType === "package";
+  const tenant: Tenant = {
+    id: tid, slug: p.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || tid,
+    name: p.name, status: "live",
+    branding: { displayName: p.name, displayNameAr: p.nameAr || p.name, primaryColor: p.color, domain: p.domain || undefined },
+    plan: pkg
+      ? { type: "package", name: "Clinic package", includedCredits: 2500, monthlyPriceBhd: 199, pricePerCreditBhd: 0.08, rolloverCap: 0.5, periodStart: start }
+      : { type: "payg", name: "Pay as you go", includedCredits: 0, monthlyPriceBhd: 20, pricePerCreditBhd: 0.11, rolloverCap: 0, periodStart: start },
+    permissions: { editPrompt: true, editVoice: true, editBehaviour: true, editKnowledge: true },
+    allowedDomains: p.domain ? [p.domain] : [], zeroBalancePolicy: "pause", lowBalanceThreshold: 0.15, retentionDays: 90,
+    calendarConnected: false, channels: { website: "pending", whatsapp: "off", instagram: "off", phone: "off" },
+    createdAt: now().toISOString(),
+  };
+  d.tenants.push(tenant);
+  const template = d.agents.t_alnoor;
+  d.agents[tid] = { ...structuredClone(template), elevenLabsAgentId: "", prompt: { ...template.prompt, identity: `You are the virtual receptionist of ${p.name}. Be warm, calm and concise.` } };
+  if (pkg) {
+    d.batches.push({ id: id("cb"), tenantId: tid, kind: "package", amount: 2500, remaining: 2500, purchasedAt: start, expiresAt: addMonths(start, 1), note: "Clinic package" });
+    d.ledger.push({ id: id("l"), tenantId: tid, at: now().toISOString(), kind: "package_renewal", credits: 2500, note: "Clinic package" });
+  }
+  audit(p.actor, "Created client from clinic template", tid);
+  return tenant;
+}
+
+export function marginFor(tenantId: string, since: Date) {
+  const t = getTenant(tenantId)!;
+  const convs = getConversations(tenantId).filter((c) => new Date(c.startedAt) >= since);
+  const credits = round2(convs.reduce((s, c) => s + c.creditsCharged, 0));
+  const costBhd = round2(convs.reduce((s, c) => s + c.costUsd, 0) * 0.377);
+  const perCredit = t.plan.type === "package" && t.plan.includedCredits > 0 ? t.plan.monthlyPriceBhd / t.plan.includedCredits : t.plan.pricePerCreditBhd;
+  const revenueBhd = round2(credits * perCredit);
+  return { conversations: convs.length, credits, costBhd, revenueBhd, marginBhd: round2(revenueBhd - costBhd) };
+}
+
+export function creditsOwed() {
+  const n = now();
+  return round2(db().batches.reduce((s, b) => (b.remaining > 0 && new Date(b.expiresAt) > n ? s + b.remaining : s), 0));
+}
+
+export function findTenantByAgent(agentId: string) {
+  return db().tenants.find((t) => db().agents[t.id]?.elevenLabsAgentId === agentId);
+}
