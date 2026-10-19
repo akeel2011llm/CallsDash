@@ -1,22 +1,23 @@
 import Link from "next/link";
 import { getT } from "@/lib/i18n";
 import { fmtNum } from "@/lib/format";
-import { creditsOwed, getAlerts, getTenant, getTopUpRequests, getWallet, listTenants } from "@/lib/store";
+import { creditsOwed, getAlerts, getTopUpRequests, getWallet, listTenants } from "@/lib/data";
 import { viewAsClient } from "@/lib/actions";
 import { Badge, PageHead, Stat } from "@/components/ui";
 
 export default async function AdminHome() {
   const { t, locale } = await getT();
-  const tenants = listTenants();
-  const openAlerts = getAlerts().filter((a) => !a.resolved);
-  const requests = getTopUpRequests();
+  const tenants = await listTenants();
+  const openAlerts = (await getAlerts()).filter((a) => !a.resolved);
+  const requests = await getTopUpRequests();
+  const wallets = new Map(await Promise.all(tenants.map(async (c) => [c.id, await getWallet(c.id)] as const)));
   return (
     <>
       <PageHead title={t("admin.title")} actions={<Link className="btn" href="/admin/clients/new">{t("admin.newClient")}</Link>} />
       <div className="grid">
         <Stat label={t("admin.clientsLive")} value={`${tenants.filter((x) => x.status === "live").length} / ${tenants.length}`} />
         <Stat label={t("admin.openAlerts")} value={openAlerts.length} tone={openAlerts.length ? "warn" : undefined} />
-        <Stat label={t("admin.creditsOwed")} value={fmtNum(creditsOwed(), locale, 0)} />
+        <Stat label={t("admin.creditsOwed")} value={fmtNum(await creditsOwed(), locale, 0)} />
         <Stat label={t("admin.topUpRequests")} value={requests.length} tone={requests.length ? "warn" : undefined} />
       </div>
       <div className="card table-wrap">
@@ -29,7 +30,7 @@ export default async function AdminHome() {
           </thead>
           <tbody>
             {tenants.map((c) => {
-              const w = getWallet(c.id);
+              const w = wallets.get(c.id)!;
               const asked = requests.some((r) => r.tenantId === c.id);
               return (
                 <tr key={c.id}>
@@ -52,7 +53,7 @@ export default async function AdminHome() {
                     <div className="row">
                     <Link className="btn small ghost" href={`/admin/clients/${c.id}`}>{t("admin.manage")}</Link>
                     <form action={viewAsClient}>
-                      <input type="hidden" name="tenantId" value={getTenant(c.id)!.id} />
+                      <input type="hidden" name="tenantId" value={c.id} />
                       <button className="btn small" type="submit">{t("admin.viewAs")}</button>
                     </form>
                     </div>

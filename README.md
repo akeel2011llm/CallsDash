@@ -13,11 +13,13 @@ Implementation plan: see the project's "CallsDash Implementation Plan" doc.
 | Credits wallet: batches, 12-month expiry, oldest first, package rollover capped at 50% (used first, one month only), low-balance alert at 15% | Working, 11 unit tests (`lib/credits.ts`) |
 | Website widget (`/widget.js`): consent notice first, then the ElevenLabs widget for the clinic's agent; domain allow-list; paused when credits run out | Working; ElevenLabs agent id still a placeholder |
 | ElevenLabs post-call webhook: signature check, idempotent charge, credit deduction | Working; payload field names to confirm on the first real call |
-| Supabase schema with row-level security (`supabase/migrations/0001_init.sql`) | Written, not yet applied to a live project |
+| Supabase schema with row-level security (`supabase/migrations/0001_init.sql`) | Tested on an in-process Postgres: RLS isolation, 90-day purge, Arabic search |
+| Postgres data layer (`lib/data/pg.ts`), used when `DATABASE_URL` is set | Tested on Postgres: wallet, rollover, expiry, idempotent webhook, versions; the whole UI was clicked through on it |
+| Supabase Auth sign-in (email + password; role and clinic from `profiles`) | Written, **not tested** against a real Supabase project |
 
 ## Not in phase 1 yet
 
-- **Supabase data adapter and Supabase Auth.** The app currently reads and writes `lib/store.ts`, an in-memory demo store that resets on restart. The adapter replaces that module behind the same function names.
+- Recording playback from Supabase Storage (signed links) and the "unanswered questions" list in production (both empty until built).
 - Google Calendar sync and the agent tools (`check_availability`, `book_appointment`, ...). The calendar page shows the CallsDash booking records.
 - Pushing agent settings and knowledge to ElevenLabs. Saving creates a version and audit entry only.
 - WhatsApp, Instagram bridge and phone (phases as per plan), outbound reminders, online payment.
@@ -31,7 +33,20 @@ npm run dev                  # http://localhost:3000
 npm test                     # credits wallet and webhook tests
 ```
 
-Demo mode shows a login page with the admin and each sample clinic. **Never set `DEMO_MODE=true` on a real deployment**: it replaces authentication with a cookie.
+## Going live on Supabase
+
+1. Create a Supabase project, run `supabase/migrations/0001_init.sql` in the SQL editor.
+2. Set `DATABASE_URL`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` and remove `DEMO_MODE`.
+3. Create your admin user in Supabase Auth, then link it:
+   ```sql
+   insert into profiles (id, role) values ('<auth user uuid>', 'admin');
+   ```
+   Clinic staff: `insert into profiles (id, tenant_id, role) values ('<uuid>', '<tenant uuid>', 'manager');`
+4. Optional sample data: `DATABASE_URL=... npx tsx scripts/seed-db.ts`.
+
+Local Postgres without Supabase: `npx tsx scripts/pglite-server.mts` starts an in-process Postgres on port 5433 with the migration applied (`PG_POOL_MAX=1` for the app, it accepts one connection).
+
+Demo mode shows a login page with the admin and each sample clinic. **Never set `DEMO_MODE=true` on a real deployment**: it replaces authentication with a cookie. A production build with `DATABASE_URL` set ignores it.
 
 ## Defaults chosen where the plan was silent
 

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getT } from "@/lib/i18n";
 import { fmtDate, fmtDateTime, fmtNum } from "@/lib/format";
-import { getAgent, getAgentVersions, getAudit, getLedger, getTenant, getWallet } from "@/lib/store";
+import { getAgent, getAgentVersions, getAudit, getLedger, getTenant, getWallet } from "@/lib/data";
 import {
   adminPermissionsAction, adminRenewAction, adminRollbackAction, adminTenantSettingsAction, adminTopUpAction, viewAsClient,
 } from "@/lib/actions";
@@ -11,10 +11,10 @@ import { Badge, Notice, PageHead, Stat } from "@/components/ui";
 export default async function ClientAdmin({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ saved?: string }> }) {
   const { id } = await params;
   const { saved } = await searchParams;
-  const tenant = getTenant(id);
+  const tenant = await getTenant(id);
   if (!tenant) notFound();
   const { t, locale } = await getT();
-  const w = getWallet(id);
+  const w = await getWallet(id);
   const returnTo = `/admin/clients/${id}`;
   const perms = [
     ["editPrompt", "admin.perm.editPrompt"], ["editVoice", "admin.perm.editVoice"],
@@ -35,7 +35,7 @@ export default async function ClientAdmin({ params, searchParams }: { params: Pr
       <div className="grid">
         <Stat label={t("admin.balance")} value={fmtNum(w.balance, locale, 1)} tone={w.low ? "warn" : undefined} hint={tenant.plan.name} />
         <Stat label={t("common.status")} value={t(`status.${tenant.status}` as "status.live")} />
-        <Stat label="Agent id" value={<code>{getAgent(id).elevenLabsAgentId || "–"}</code>} />
+        <Stat label="Agent id" value={<code>{(await getAgent(id)).elevenLabsAgentId || "–"}</code>} />
       </div>
 
       <div className="grid two">
@@ -105,7 +105,7 @@ export default async function ClientAdmin({ params, searchParams }: { params: Pr
           <div className="table-wrap">
             <table>
               <tbody>
-                {getAgentVersions(id).map((v, i) => (
+                {(await getAgentVersions(id)).map((v, i) => (
                   <tr key={v.id}>
                     <td>{fmtDateTime(v.createdAt, locale)}<br /><small className="muted">{v.author} · {v.summary}</small></td>
                     <td>
@@ -129,7 +129,7 @@ export default async function ClientAdmin({ params, searchParams }: { params: Pr
         <div className="table-wrap">
           <table>
             <tbody>
-              {getLedger(id).filter((l) => l.kind !== "usage").slice(0, 10).map((l) => (
+              {(await getLedger(id)).filter((l) => l.kind !== "usage").slice(0, 10).map((l) => (
                 <tr key={l.id}>
                   <td>{fmtDateTime(l.at, locale)}</td>
                   <td><Badge>{t(`ledger.${l.kind}` as "ledger.topup")}</Badge></td>
@@ -147,7 +147,7 @@ export default async function ClientAdmin({ params, searchParams }: { params: Pr
         <div className="table-wrap">
           <table>
             <tbody>
-              {getAudit(id).slice(0, 12).map((a) => (
+              {(await getAudit(id)).slice(0, 12).map((a) => (
                 <tr key={a.id}><td>{fmtDateTime(a.at, locale)}</td><td>{a.actor}</td><td>{a.action}</td></tr>
               ))}
             </tbody>

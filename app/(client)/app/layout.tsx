@@ -1,14 +1,14 @@
 import { requireClient } from "@/lib/auth";
 import { getT } from "@/lib/i18n";
 import { Shell } from "@/components/Shell";
-import { getWallet } from "@/lib/store";
+import { getWallet } from "@/lib/data";
 
 export const dynamic = "force-dynamic";
 
 export default async function ClientLayout({ children }: { children: React.ReactNode }) {
   const { tenant, viewingAsAdmin } = await requireClient();
   const { t, locale } = await getT();
-  const w = getWallet(tenant.id);
+  const w = await getWallet(tenant.id);
   return (
     <Shell
       title={locale === "ar" ? tenant.branding.displayNameAr : tenant.branding.displayName}

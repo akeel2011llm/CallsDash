@@ -3,13 +3,13 @@ import { notFound } from "next/navigation";
 import { requireClient } from "@/lib/auth";
 import { getT } from "@/lib/i18n";
 import { fmtDate, fmtDateTime, fmtDuration, fmtNum } from "@/lib/format";
-import { getConversation } from "@/lib/store";
+import { getConversation } from "@/lib/data";
 import { Badge, Notice, PageHead } from "@/components/ui";
 
 export default async function ConversationPage({ params }: { params: Promise<{ id: string }> }) {
   const { tenant } = await requireClient();
   const { id } = await params;
-  const c = getConversation(tenant.id, id);
+  const c = await getConversation(tenant.id, id);
   if (!c) notFound();
   const { t, locale } = await getT();
   const deleteOn = new Date(new Date(c.startedAt).getTime() + tenant.retentionDays * 86_400_000).toISOString();

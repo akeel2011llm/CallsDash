@@ -1,7 +1,7 @@
 import { requireClient } from "@/lib/auth";
 import { getT } from "@/lib/i18n";
 import { fmtDate, fmtDateTime, fmtNum } from "@/lib/format";
-import { getLedger, getWallet, usageByChannel } from "@/lib/store";
+import { getLedger, getWallet, usageByChannel } from "@/lib/data";
 import { requestTopUpAction } from "@/lib/actions";
 import { Badge, Notice, PageHead, Stat } from "@/components/ui";
 
@@ -9,9 +9,9 @@ export default async function CreditsPage({ searchParams }: { searchParams: Prom
   const { tenant } = await requireClient();
   const { requested } = await searchParams;
   const { t, locale } = await getT();
-  const w = getWallet(tenant.id);
+  const w = await getWallet(tenant.id);
   const monthStart = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1));
-  const usage = usageByChannel(tenant.id, monthStart);
+  const usage = await usageByChannel(tenant.id, monthStart);
   const total = Object.values(usage).reduce((a, b) => a + b, 0) || 1;
   return (
     <>
@@ -60,7 +60,7 @@ export default async function CreditsPage({ searchParams }: { searchParams: Prom
         <div className="table-wrap">
           <table>
             <tbody>
-              {getLedger(tenant.id).slice(0, 15).map((l) => (
+              {(await getLedger(tenant.id)).slice(0, 15).map((l) => (
                 <tr key={l.id}>
                   <td>{fmtDateTime(l.at, locale)}</td>
                   <td><Badge>{t(`ledger.${l.kind}` as "ledger.topup")}</Badge></td>

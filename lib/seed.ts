@@ -35,7 +35,7 @@ function rng(seed: number) {
   };
 }
 
-const defaultPrompt = (clinic: string) => ({
+export const defaultPrompt = (clinic: string) => ({
   identity: `You are the virtual receptionist of ${clinic}. Be warm, calm and concise. Introduce yourself as the clinic's AI assistant.`,
   languages: "Speak English or Gulf Arabic. Detect the language from the first words and stay in it. Switch if the patient switches.",
   mayDo: "Answer questions from the knowledge base, check availability, book, reschedule and cancel appointments, take messages.",
@@ -44,7 +44,7 @@ const defaultPrompt = (clinic: string) => ({
   handoff: "Transfer to staff when the patient asks for a person, is upset, or you cannot help after two attempts.",
 });
 
-function agent(id: string, clinic: string, over: Partial<AgentSettings> = {}): AgentSettings {
+export function agent(id: string, clinic: string, over: Partial<AgentSettings> = {}): AgentSettings {
   return {
     elevenLabsAgentId: id,
     prompt: defaultPrompt(clinic),

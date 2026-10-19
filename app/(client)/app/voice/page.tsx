@@ -1,6 +1,6 @@
 import { requireClient } from "@/lib/auth";
 import { getT } from "@/lib/i18n";
-import { getAgent } from "@/lib/store";
+import { getAgent } from "@/lib/data";
 import { saveAgentAction } from "@/lib/actions";
 import { VOICES } from "@/lib/voices";
 import { Notice, PageHead } from "@/components/ui";
@@ -9,7 +9,7 @@ export default async function VoicePage({ searchParams }: { searchParams: Promis
   const { tenant } = await requireClient();
   const { saved } = await searchParams;
   const { t } = await getT();
-  const agent = getAgent(tenant.id);
+  const agent = await getAgent(tenant.id);
   const locked = !tenant.permissions.editVoice;
   return (
     <>

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { requireClient } from "@/lib/auth";
 import { getT } from "@/lib/i18n";
 import { dayKey, fmtTime } from "@/lib/format";
-import { getBookings, getDoctors } from "@/lib/store";
+import { getBookings, getDoctors } from "@/lib/data";
 import { Notice, PageHead } from "@/components/ui";
 
 const FIRST_HOUR = 8;
@@ -20,10 +20,10 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
   const start = new Date(local.getTime() - local.getUTCDay() * 86_400_000 + offset * 7 * 86_400_000); // week starts Sunday
   const days = Array.from({ length: 7 }, (_, i) => new Date(start.getTime() + i * 86_400_000));
   const todayKey = dayKey(new Date().toISOString());
-  const doctors = getDoctors(tenant.id);
+  const doctors = await getDoctors(tenant.id);
   const color = new Map(doctors.map((d) => [d.id, d.color]));
   const name = new Map(doctors.map((d) => [d.id, d.name]));
-  const bookings = getBookings(tenant.id);
+  const bookings = await getBookings(tenant.id);
   const dayFmt = new Intl.DateTimeFormat(locale === "ar" ? "ar-BH-u-nu-latn" : "en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
   return (
     <>

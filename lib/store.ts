@@ -26,6 +26,8 @@ function sweep(tenantId: string) {
 }
 
 export const listTenants = () => db().tenants;
+/** Demo mode has no user profiles; sign-in is the demo cookie. */
+export const getProfile = (_userId: string): { role: "admin" | "manager" | "receptionist"; tenantId: string | null } | undefined => undefined;
 export const getTenant = (tenantId: string) => db().tenants.find((t) => t.id === tenantId);
 export const getAgent = (tenantId: string) => db().agents[tenantId];
 export const getAgentVersions = (tenantId: string) =>

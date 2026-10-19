@@ -1,12 +1,13 @@
 import { getT } from "@/lib/i18n";
 import { fmtDateTime } from "@/lib/format";
-import { getAlerts, getTenant } from "@/lib/store";
+import { getAlerts, listTenants } from "@/lib/data";
 import { resolveAlertAction } from "@/lib/actions";
 import { Badge, Notice, PageHead } from "@/components/ui";
 
 export default async function AlertsPage() {
   const { t, locale } = await getT();
-  const open = getAlerts().filter((a) => !a.resolved);
+  const names = new Map((await listTenants()).map((c) => [c.id, c.name]));
+  const open = (await getAlerts()).filter((a) => !a.resolved);
   return (
     <>
       <PageHead title={t("admin.alerts.title")} />
@@ -16,7 +17,7 @@ export default async function AlertsPage() {
           <div key={a.id} className="card row" style={{ justifyContent: "space-between" }}>
             <div>
               <Badge tone={a.severity === "error" ? "bad" : a.severity === "warning" ? "warn" : "info"}>{a.severity}</Badge>{" "}
-              <strong>{getTenant(a.tenantId)?.name}</strong>
+              <strong>{names.get(a.tenantId)}</strong>
               <div>{a.message}</div>
               <small className="muted">{fmtDateTime(a.at, locale)}</small>
             </div>

@@ -2,17 +2,17 @@ import Link from "next/link";
 import { requireClient } from "@/lib/auth";
 import { getT } from "@/lib/i18n";
 import { fmtDateTime, fmtNum } from "@/lib/format";
-import { getBookings, getConversations, getWallet } from "@/lib/store";
+import { getBookings, getConversations, getWallet } from "@/lib/data";
 import { Badge, Notice, PageHead, Stat } from "@/components/ui";
 
 export default async function Home() {
   const { tenant } = await requireClient();
   const { t, locale } = await getT();
-  const w = getWallet(tenant.id);
+  const w = await getWallet(tenant.id);
   const weekAgo = Date.now() - 7 * 86_400_000;
-  const convs = getConversations(tenant.id);
+  const convs = await getConversations(tenant.id);
   const recent = convs.filter((c) => new Date(c.startedAt).getTime() >= weekAgo);
-  const upcoming = getBookings(tenant.id).filter((b) => new Date(b.startsAt).getTime() > Date.now() && b.status !== "cancelled");
+  const upcoming = (await getBookings(tenant.id)).filter((b) => new Date(b.startsAt).getTime() > Date.now() && b.status !== "cancelled");
   return (
     <>
       <PageHead title={t("home.title")} />

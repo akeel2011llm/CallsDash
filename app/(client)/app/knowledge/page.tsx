@@ -1,6 +1,6 @@
 import { requireClient } from "@/lib/auth";
 import { getT } from "@/lib/i18n";
-import { getKnowledge, getUnanswered } from "@/lib/store";
+import { getKnowledge, getUnanswered } from "@/lib/data";
 import { addKnowledgeAction, deleteKnowledgeAction, dismissUnansweredAction } from "@/lib/actions";
 import { Notice, PageHead } from "@/components/ui";
 
@@ -9,7 +9,7 @@ export default async function KnowledgePage({ searchParams }: { searchParams: Pr
   const sp = await searchParams;
   const { t } = await getT();
   const locked = !tenant.permissions.editKnowledge;
-  const unanswered = getUnanswered(tenant.id);
+  const unanswered = await getUnanswered(tenant.id);
   return (
     <>
       <PageHead title={t("knowledge.title")} />
@@ -50,8 +50,8 @@ export default async function KnowledgePage({ searchParams }: { searchParams: Pr
         </form>
       </section>
       <section className="card stack">
-        {getKnowledge(tenant.id).length === 0 && <span className="muted">{t("common.none")}</span>}
-        {getKnowledge(tenant.id).map((k) => (
+        {(await getKnowledge(tenant.id)).length === 0 && <span className="muted">{t("common.none")}</span>}
+        {(await getKnowledge(tenant.id)).map((k) => (
           <div key={k.id} className="row" style={{ justifyContent: "space-between", alignItems: "start" }}>
             <div dir={k.language === "ar" ? "rtl" : "ltr"}>
               <strong>{k.question}</strong>

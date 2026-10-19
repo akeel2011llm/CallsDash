@@ -2,7 +2,7 @@ import Link from "next/link";
 import { requireClient } from "@/lib/auth";
 import { getT } from "@/lib/i18n";
 import { fmtDateTime, fmtDuration } from "@/lib/format";
-import { getConversations } from "@/lib/store";
+import { getConversations } from "@/lib/data";
 import { Badge, PageHead } from "@/components/ui";
 
 type SP = { q?: string; channel?: string; outcome?: string; lang?: string };
@@ -12,7 +12,7 @@ export default async function ConversationsPage({ searchParams }: { searchParams
   const sp = await searchParams;
   const { t, locale } = await getT();
   const q = (sp.q ?? "").trim().toLowerCase();
-  const rows = getConversations(tenant.id).filter((c) =>
+  const rows = (await getConversations(tenant.id)).filter((c) =>
     (!sp.channel || c.channel === sp.channel) && (!sp.outcome || c.outcome === sp.outcome) && (!sp.lang || c.language === sp.lang) &&
     (!q || c.summary.toLowerCase().includes(q) || c.transcript.some((l) => l.text.toLowerCase().includes(q))));
   return (

@@ -5,7 +5,8 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { demoMode, requireAdmin, requireClient } from "./auth";
 import { safePath } from "./format";
-import * as store from "./store";
+import { supabaseConfigured, supabaseServer } from "./supabase";
+import * as store from "./data";
 import type { AgentSettings, BookingStatus, Locale, Permissions } from "./types";
 
 const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
@@ -31,14 +32,22 @@ export async function login(f: FormData) {
     jar.delete("cd_view");
     redirect("/admin");
   }
-  if (who.startsWith("client:") && store.getTenant(who.slice(7))) {
+  if (who.startsWith("client:") && await store.getTenant(who.slice(7))) {
     jar.set("cd_session", who, cookieOpts);
     redirect("/app");
   }
   redirect("/login");
 }
 
+export async function loginWithPassword(f: FormData) {
+  if (!supabaseConfigured() || demoMode()) redirect("/login");
+  const { error } = await (await supabaseServer()).auth.signInWithPassword({ email: str(f, "email"), password: String(f.get("password") ?? "") });
+  if (error) redirect("/login?error=1");
+  redirect("/");
+}
+
 export async function logout() {
+  if (supabaseConfigured() && !demoMode()) await (await supabaseServer()).auth.signOut();
   const jar = await cookies();
   jar.delete("cd_session");
   jar.delete("cd_view");
@@ -48,7 +57,7 @@ export async function logout() {
 export async function viewAsClient(f: FormData) {
   await requireAdmin();
   const id = str(f, "tenantId");
-  if (!store.getTenant(id)) redirect("/admin");
+  if (!await store.getTenant(id)) redirect("/admin");
   (await cookies()).set("cd_view", id, cookieOpts);
   redirect("/app");
 }
@@ -63,7 +72,7 @@ export async function exitViewAs() {
 
 export async function saveAgentAction(f: FormData) {
   const { tenant, actor } = await requireClient();
-  const cur = store.getAgent(tenant.id);
+  const cur = await store.getAgent(tenant.id);
   const next: AgentSettings = structuredClone(cur);
   const changed: string[] = [];
   if (f.has("prompt.identity")) {
@@ -88,7 +97,7 @@ export async function saveAgentAction(f: FormData) {
     next.voiceAr = str(f, "voiceAr");
     changed.push("voice");
   }
-  if (changed.length) store.saveAgent(tenant.id, next, actor, changed.join(", "));
+  if (changed.length) await store.saveAgent(tenant.id, next, actor, changed.join(", "));
   revalidatePath("/app", "layout");
   back(f, "/app/agent");
 }
@@ -97,9 +106,9 @@ export async function addKnowledgeAction(f: FormData) {
   const { tenant, actor } = await requireClient();
   if (!tenant.permissions.editKnowledge) throw new Error("forbidden");
   const q = str(f, "question"), a = str(f, "answer");
-  if (q && a) store.addKnowledge(tenant.id, q.slice(0, 500), a.slice(0, 2000), str(f, "language") === "ar" ? "ar" : "en", actor);
+  if (q && a) await store.addKnowledge(tenant.id, q.slice(0, 500), a.slice(0, 2000), str(f, "language") === "ar" ? "ar" : "en", actor);
   const fromUnanswered = str(f, "unansweredId");
-  if (fromUnanswered) store.dismissUnanswered(tenant.id, fromUnanswered);
+  if (fromUnanswered) await store.dismissUnanswered(tenant.id, fromUnanswered);
   revalidatePath("/app/knowledge");
   back(f, "/app/knowledge");
 }
@@ -107,14 +116,14 @@ export async function addKnowledgeAction(f: FormData) {
 export async function deleteKnowledgeAction(f: FormData) {
   const { tenant, actor } = await requireClient();
   if (!tenant.permissions.editKnowledge) throw new Error("forbidden");
-  store.deleteKnowledge(tenant.id, str(f, "id"), actor);
+  await store.deleteKnowledge(tenant.id, str(f, "id"), actor);
   revalidatePath("/app/knowledge");
   back(f, "/app/knowledge", "deleted=1");
 }
 
 export async function dismissUnansweredAction(f: FormData) {
   const { tenant } = await requireClient();
-  store.dismissUnanswered(tenant.id, str(f, "id"));
+  await store.dismissUnanswered(tenant.id, str(f, "id"));
   revalidatePath("/app/knowledge");
   back(f, "/app/knowledge", "deleted=1");
 }
@@ -123,7 +132,7 @@ export async function setBookingStatusAction(f: FormData) {
   const { tenant, actor } = await requireClient();
   const status = str(f, "status") as BookingStatus;
   if (!["cancelled", "no_show", "confirmed"].includes(status)) throw new Error("bad status");
-  store.setBookingStatus(tenant.id, str(f, "id"), status, actor);
+  await store.setBookingStatus(tenant.id, str(f, "id"), status, actor);
   revalidatePath("/app", "layout");
   back(f, "/app/bookings");
 }
@@ -131,7 +140,7 @@ export async function setBookingStatusAction(f: FormData) {
 export async function requestTopUpAction(f: FormData) {
   const { tenant, actor } = await requireClient();
   const credits = Math.min(100_000, Math.max(1, Math.round(num(f, "credits")) || 500));
-  store.requestTopUp(tenant.id, credits, actor);
+  await store.requestTopUp(tenant.id, credits, actor);
   revalidatePath("/admin");
   back(f, "/app/credits", "requested=1");
 }
@@ -142,8 +151,8 @@ export async function adminTopUpAction(f: FormData) {
   const { actor } = await requireAdmin();
   const id = str(f, "tenantId");
   const credits = Math.round(num(f, "credits") * 100) / 100;
-  if (!store.getTenant(id) || !(credits > 0) || credits > 1_000_000) redirect(`/admin/clients/${id}`);
-  store.topUp(id, credits, actor, str(f, "note") || "Top-up");
+  if (!await store.getTenant(id) || !(credits > 0) || credits > 1_000_000) redirect(`/admin/clients/${id}`);
+  await store.topUp(id, credits, actor, str(f, "note") || "Top-up");
   revalidatePath("/admin", "layout");
   back(f, `/admin/clients/${id}`);
 }
@@ -151,7 +160,7 @@ export async function adminTopUpAction(f: FormData) {
 export async function adminRenewAction(f: FormData) {
   const { actor } = await requireAdmin();
   const id = str(f, "tenantId");
-  if (store.getTenant(id)?.plan.type === "package") store.renewTenantPackage(id, actor);
+  if ((await store.getTenant(id))?.plan.type === "package") await store.renewTenantPackage(id, actor);
   revalidatePath("/admin", "layout");
   back(f, `/admin/clients/${id}`);
 }
@@ -165,7 +174,7 @@ export async function adminPermissionsAction(f: FormData) {
     editBehaviour: f.get("editBehaviour") === "on",
     editKnowledge: f.get("editKnowledge") === "on",
   };
-  store.setPermissions(id, p, actor);
+  await store.setPermissions(id, p, actor);
   revalidatePath("/admin", "layout");
   back(f, `/admin/clients/${id}`);
 }
@@ -179,7 +188,7 @@ export async function adminTenantSettingsAction(f: FormData) {
   if (str(f, "displayName")) branding.displayName = str(f, "displayName").slice(0, 120);
   if (str(f, "displayNameAr")) branding.displayNameAr = str(f, "displayNameAr").slice(0, 120);
   if (hex.test(color)) branding.primaryColor = color;
-  store.updateTenant(id, {
+  await store.updateTenant(id, {
     zeroBalancePolicy: str(f, "zeroBalancePolicy") === "overdraft" ? "overdraft" : "pause",
     allowedDomains: str(f, "allowedDomains").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean),
     branding,
@@ -191,7 +200,7 @@ export async function adminTenantSettingsAction(f: FormData) {
 export async function adminRollbackAction(f: FormData) {
   const { actor } = await requireAdmin();
   const id = str(f, "tenantId");
-  store.rollbackAgent(id, str(f, "versionId"), actor);
+  await store.rollbackAgent(id, str(f, "versionId"), actor);
   revalidatePath("/admin", "layout");
   back(f, `/admin/clients/${id}`);
 }
@@ -201,7 +210,7 @@ export async function adminCreateTenantAction(f: FormData) {
   const name = str(f, "name");
   if (!name) redirect("/admin/clients/new");
   const color = str(f, "color");
-  const t = store.createTenant({
+  const t = await store.createTenant({
     name: name.slice(0, 120), nameAr: str(f, "nameAr").slice(0, 120), color: hex.test(color) ? color : "#0e7c86",
     domain: str(f, "domain").toLowerCase().slice(0, 200), planType: str(f, "planType") === "payg" ? "payg" : "package", actor,
   });
@@ -211,7 +220,7 @@ export async function adminCreateTenantAction(f: FormData) {
 
 export async function resolveAlertAction(f: FormData) {
   await requireAdmin();
-  store.resolveAlert(str(f, "id"));
+  await store.resolveAlert(str(f, "id"));
   revalidatePath("/admin", "layout");
   back(f, "/admin/alerts", "saved=1");
 }

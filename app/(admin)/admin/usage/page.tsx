@@ -1,12 +1,12 @@
 import { getT } from "@/lib/i18n";
 import { fmtNum } from "@/lib/format";
-import { listTenants, marginFor } from "@/lib/store";
+import { listTenants, marginFor } from "@/lib/data";
 import { Notice, PageHead } from "@/components/ui";
 
 export default async function UsagePage() {
   const { t, locale } = await getT();
   const since = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1));
-  const rows = listTenants().map((c) => ({ c, m: marginFor(c.id, since) }));
+  const rows = await Promise.all((await listTenants()).map(async (c) => ({ c, m: await marginFor(c.id, since) })));
   const sum = (k: "conversations" | "credits" | "revenueBhd" | "costBhd" | "marginBhd") => rows.reduce((s, r) => s + r.m[k], 0);
   return (
     <>

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { parsePostCall, verifySignature } from "@/lib/elevenlabs";
-import { findTenantByAgent, recordConversation } from "@/lib/store";
+import { findTenantByAgent, recordConversation } from "@/lib/data";
 
 export const dynamic = "force-dynamic";
 
@@ -19,8 +19,8 @@ export async function POST(req: Request) {
   }
   const parsed = parsePostCall(body as Record<string, unknown>);
   if (!parsed) return NextResponse.json({ ok: true, ignored: true }); // other event types are acknowledged and dropped
-  const tenant = findTenantByAgent(parsed.agentId);
+  const tenant = await findTenantByAgent(parsed.agentId);
   if (!tenant) return NextResponse.json({ error: "unknown agent" }, { status: 404 });
-  const res = recordConversation(tenant.id, parsed.conversation);
+  const res = await recordConversation(tenant.id, parsed.conversation);
   return NextResponse.json({ ok: true, duplicate: res.duplicate, credits: res.conversation.creditsCharged });
 }

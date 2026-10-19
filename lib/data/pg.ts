@@ -1,0 +1,295 @@
+import { randomUUID } from "node:crypto";
+import { addMonths, addTopUp, balance, creditsFor, deduct, lowBalance, renewPackage, round2, sweepExpired } from "../credits";
+import { ELEVENLABS_USD_PER_MIN, ELEVENLABS_USD_PER_MSG, USD_TO_BHD, agent as defaultAgent } from "../seed";
+import type {
+  AgentSettings, AgentVersion, Alert, AuditEntry, Booking, BookingStatus, Conversation, CreditBatch, Doctor,
+  KnowledgeItem, LedgerEntry, Locale, Permissions, Tenant, UnansweredQuestion,
+} from "../types";
+import type { Data } from "./demo";
+
+/** Minimal query surface shared by `pg` (production) and PGlite (tests). */
+export type Q = <T = Record<string, unknown>>(sql: string, params?: unknown[]) => Promise<T[]>;
+export interface Db {
+  q: Q;
+  /** Runs `fn` in one transaction; everything it queries commits or rolls back together. */
+  tx<T>(fn: (q: Q) => Promise<T>): Promise<T>;
+}
+
+type Row = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+const iso = (v: unknown) => (v instanceof Date ? v.toISOString() : String(v));
+const num = (v: unknown) => Number(v);
+const jsonish = <T>(v: unknown): T => (typeof v === "string" ? JSON.parse(v) : (v as T));
+
+const tenantOf = (r: Row): Tenant => ({
+  id: r.id, slug: r.slug, name: r.name, status: r.status, branding: jsonish(r.branding), plan: jsonish(r.plan),
+  permissions: jsonish(r.permissions), allowedDomains: r.allowed_domains ?? [], zeroBalancePolicy: r.zero_balance_policy,
+  lowBalanceThreshold: num(r.low_balance_threshold), retentionDays: r.retention_days, calendarConnected: r.calendar_connected,
+  channels: jsonish(r.channels), createdAt: iso(r.created_at),
+});
+const batchOf = (r: Row): CreditBatch => ({
+  id: r.id, tenantId: r.tenant_id, kind: r.kind, amount: num(r.amount), remaining: num(r.remaining),
+  purchasedAt: iso(r.purchased_at), expiresAt: iso(r.expires_at), note: r.note ?? undefined,
+});
+const convOf = (r: Row): Conversation => ({
+  id: r.id, tenantId: r.tenant_id, channel: r.channel, mode: r.mode, language: r.language, startedAt: iso(r.started_at),
+  durationSec: r.duration_sec, messages: r.messages, outcome: r.outcome, summary: r.summary, sentiment: r.sentiment,
+  transcript: jsonish(r.transcript), recordingUrl: undefined, // signed URLs for `recording_path` are issued by the storage layer
+  creditsCharged: num(r.credits_charged), costUsd: num(r.cost_usd), elevenLabsConversationId: r.elevenlabs_conversation_id ?? undefined,
+});
+const ledgerOf = (r: Row): LedgerEntry => ({
+  id: r.id, tenantId: r.tenant_id, at: iso(r.at), kind: r.kind, credits: num(r.credits), channel: r.channel ?? undefined,
+  conversationId: r.conversation_id ?? undefined, note: r.note ?? undefined,
+});
+
+export function createPgData(db: Db): Data {
+  const { q } = db;
+  const tenantsWhere = async (where: string, params: unknown[]) => (await q<Row>(`select * from tenants ${where}`, params)).map(tenantOf);
+
+  async function audit(run: Q, actor: string, action: string, tenantId?: string) {
+    await run(`insert into audit_log (tenant_id, actor, action) values ($1, $2, $3)`, [tenantId ?? null, actor, action]);
+  }
+
+  async function lockTenant(run: Q, tenantId: string) {
+    const r = await run<Row>(`select * from tenants where id = $1 for update`, [tenantId]);
+    if (!r[0]) throw new Error("unknown tenant");
+    return tenantOf(r[0]);
+  }
+
+  const loadBatches = async (run: Q, tenantId: string) =>
+    (await run<Row>(`select * from credit_batches where tenant_id = $1 order by purchased_at`, [tenantId])).map(batchOf);
+
+  async function saveBatches(run: Q, before: CreditBatch[], after: CreditBatch[]) {
+    const old = new Map(before.map((b) => [b.id, b]));
+    for (const b of after) {
+      const o = old.get(b.id);
+      if (!o) {
+        await run(
+          `insert into credit_batches (id, tenant_id, kind, amount, remaining, purchased_at, expires_at, note) values ($1,$2,$3,$4,$5,$6,$7,$8)`,
+          [b.id, b.tenantId, b.kind, b.amount, b.remaining, b.purchasedAt, b.expiresAt, b.note ?? null]);
+      } else if (o.remaining !== b.remaining) {
+        await run(`update credit_batches set remaining = $2 where id = $1`, [b.id, b.remaining]);
+      }
+    }
+  }
+
+  const ledger = (run: Q, e: Omit<LedgerEntry, "id" | "at"> & { at?: string }) =>
+    run(`insert into credit_ledger (tenant_id, at, kind, credits, channel, conversation_id, note) values ($1, coalesce($2, now()), $3, $4, $5, $6, $7)`,
+      [e.tenantId, e.at ?? null, e.kind, e.credits, e.channel ?? null, e.conversationId ?? null, e.note ?? null]);
+
+  async function sweep(run: Q, tenantId: string, now = new Date()) {
+    const before = await loadBatches(run, tenantId);
+    const { batches, expired } = sweepExpired(before, now);
+    if (expired > 0) {
+      await saveBatches(run, before, batches);
+      await ledger(run, { tenantId, kind: "expiry", credits: -expired, note: "Credits expired" });
+    }
+    return batches;
+  }
+
+  async function walletOf(run: Q, t: Tenant) {
+    const batches = await sweep(run, t.id);
+    const now = new Date();
+    const low = lowBalance(batches, t.plan, t.lowBalanceThreshold, now);
+    return { batches, balance: balance(batches, now), low: low.low, reference: low.reference };
+  }
+
+  async function saveAgentRow(run: Q, tenantId: string, settings: AgentSettings, actor: string, summary: string) {
+    await run(`update agents set settings = $2, elevenlabs_agent_id = $3, updated_at = now() where tenant_id = $1`, [tenantId, JSON.stringify(settings), settings.elevenLabsAgentId || null]);
+    await run(`insert into agent_versions (tenant_id, author, summary, settings) values ($1,$2,$3,$4)`, [tenantId, actor, summary, JSON.stringify(settings)]);
+    await audit(run, actor, `Agent settings saved: ${summary}`, tenantId);
+  }
+
+  const data: Data = {
+    listTenants: async () => tenantsWhere("order by created_at", []),
+    getTenant: async (id) => (await tenantsWhere("where id = $1", [id]))[0],
+    getProfile: async (userId) => {
+      const r = await q<Row>(`select role, tenant_id from profiles where id = $1`, [userId]);
+      return r[0] ? { role: r[0].role, tenantId: r[0].tenant_id ?? null } : undefined;
+    },
+    getAgent: async (tenantId) => {
+      const r = await q<Row>(`select settings, elevenlabs_agent_id from agents where tenant_id = $1`, [tenantId]);
+      if (!r[0]) throw new Error("agent not found");
+      return { ...jsonish<AgentSettings>(r[0].settings), elevenLabsAgentId: r[0].elevenlabs_agent_id ?? "" };
+    },
+    getAgentVersions: async (tenantId) =>
+      (await q<Row>(`select * from agent_versions where tenant_id = $1 order by created_at desc`, [tenantId])).map((r): AgentVersion => ({
+        id: r.id, tenantId: r.tenant_id, createdAt: iso(r.created_at), author: r.author, summary: r.summary, settings: jsonish(r.settings) })),
+    getDoctors: async (tenantId) =>
+      (await q<Row>(`select * from doctors where tenant_id = $1 order by name`, [tenantId])).map((r): Doctor => ({
+        id: r.id, tenantId: r.tenant_id, name: r.name, specialty: r.specialty ?? "", color: r.color })),
+    getBookings: async (tenantId) =>
+      (await q<Row>(`select * from bookings where tenant_id = $1 order by starts_at`, [tenantId])).map((r): Booking => ({
+        id: r.id, tenantId: r.tenant_id, doctorId: r.doctor_id, patientName: r.patient_name, patientPhone: r.patient_phone,
+        service: r.service ?? "", startsAt: iso(r.starts_at), durationMin: r.duration_min, status: r.status, conversationId: r.conversation_id ?? undefined })),
+    getConversations: async (tenantId) =>
+      (await q<Row>(`select * from conversations where tenant_id = $1 order by started_at desc limit 1000`, [tenantId])).map(convOf),
+    getConversation: async (tenantId, id) =>
+      (await q<Row>(`select * from conversations where tenant_id = $1 and id = $2`, [tenantId, id])).map(convOf)[0],
+    getKnowledge: async (tenantId) =>
+      (await q<Row>(`select * from knowledge_items where tenant_id = $1 order by question`, [tenantId])).map((r): KnowledgeItem => ({
+        id: r.id, tenantId: r.tenant_id, question: r.question, answer: r.answer, language: r.language })),
+    // Unanswered questions are derived from conversations in a later phase; the demo table has no production counterpart yet.
+    getUnanswered: async (): Promise<UnansweredQuestion[]> => [],
+    getAlerts: async (tenantId) =>
+      (await q<Row>(`select * from alerts where ($1::uuid is null or tenant_id = $1) order by at desc`, [tenantId ?? null])).map((r): Alert => ({
+        id: r.id, tenantId: r.tenant_id, at: iso(r.at), severity: r.severity, message: r.message, resolved: r.resolved })),
+    getAudit: async (tenantId) =>
+      (await q<Row>(`select * from audit_log where ($1::uuid is null or tenant_id = $1) order by at desc limit 500`, [tenantId ?? null])).map((r): AuditEntry => ({
+        id: r.id, tenantId: r.tenant_id ?? undefined, at: iso(r.at), actor: r.actor, action: r.action })),
+    getLedger: async (tenantId) =>
+      (await q<Row>(`select * from credit_ledger where tenant_id = $1 order by at desc limit 500`, [tenantId])).map(ledgerOf),
+    getTopUpRequests: async () =>
+      (await q<Row>(`select * from top_up_requests where status = 'open' order by at`)).map((r) => ({
+        id: r.id, tenantId: r.tenant_id, at: iso(r.at), credits: r.credits, status: r.status as "open" | "done" })),
+
+    getWallet: async (tenantId) => db.tx(async (run) => walletOf(run, await lockTenant(run, tenantId))),
+
+    usageByChannel: async (tenantId, since) => {
+      const out = { website: 0, whatsapp: 0, instagram: 0, phone: 0 };
+      for (const r of await q<Row>(`select channel, sum(credits_charged) as c from conversations where tenant_id = $1 and started_at >= $2 group by channel`, [tenantId, since.toISOString()]))
+        out[r.channel as keyof typeof out] = round2(num(r.c));
+      return out;
+    },
+
+    audit: async (actor, action, tenantId) => { await audit(q, actor, action, tenantId); },
+
+    recordConversation: async (tenantId, conv) => db.tx(async (run) => {
+      const t = await lockTenant(run, tenantId); // serialises charges per tenant
+      const credits = creditsFor(conv);
+      const costUsd = round2(conv.mode === "voice" ? (conv.durationSec / 60) * ELEVENLABS_USD_PER_MIN : conv.messages * ELEVENLABS_USD_PER_MSG);
+      const ins = await run<Row>(
+        `insert into conversations (tenant_id, elevenlabs_conversation_id, channel, mode, language, started_at, duration_sec, messages, outcome, sentiment, summary, transcript, credits_charged, cost_usd)
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+         on conflict (elevenlabs_conversation_id) do nothing returning *`,
+        [tenantId, conv.elevenLabsConversationId ?? null, conv.channel, conv.mode, conv.language, conv.startedAt, conv.durationSec, conv.messages,
+         conv.outcome, conv.sentiment, conv.summary, JSON.stringify(conv.transcript), credits, costUsd]);
+      if (!ins[0]) {
+        const existing = await run<Row>(`select * from conversations where elevenlabs_conversation_id = $1`, [conv.elevenLabsConversationId]);
+        return { conversation: convOf(existing[0]), shortfall: 0, duplicate: true };
+      }
+      const now = new Date();
+      const before = await sweep(run, tenantId, now);
+      const res = deduct(before, credits, now);
+      await saveBatches(run, before, res.batches);
+      await ledger(run, { tenantId, at: conv.startedAt, kind: "usage", credits: -credits, channel: conv.channel, conversationId: ins[0].id });
+      const low = lowBalance(res.batches, t.plan, t.lowBalanceThreshold, now);
+      if (res.shortfall > 0 || low.low) {
+        const open = await run(`select 1 from alerts where tenant_id = $1 and not resolved and message like 'Low credit%'`, [tenantId]);
+        if (open.length === 0) await run(`insert into alerts (tenant_id, severity, message) values ($1,'warning',$2)`, [tenantId, `Low credit balance: ${low.balance} credits left.`]);
+      }
+      return { conversation: convOf(ins[0]), shortfall: res.shortfall, duplicate: false };
+    }),
+
+    topUp: async (tenantId, credits, actor, note = "Top-up") => db.tx(async (run) => {
+      const t = await lockTenant(run, tenantId);
+      const before = await loadBatches(run, tenantId);
+      const after = addTopUp(before, { id: randomUUID(), tenantId, amount: credits, now: new Date(), kind: t.plan.type === "payg" ? "payg" : "topup", note });
+      await saveBatches(run, before, after);
+      await ledger(run, { tenantId, kind: "topup", credits, note });
+      await run(`update top_up_requests set status = 'done' where tenant_id = $1 and status = 'open'`, [tenantId]);
+      await run(`update alerts set resolved = true where tenant_id = $1 and message like 'Low credit%'`, [tenantId]);
+      await audit(run, actor, `Added ${credits} credits`, tenantId);
+    }),
+
+    requestTopUp: async (tenantId, credits, actor) => db.tx(async (run) => {
+      await run(`insert into top_up_requests (tenant_id, credits) values ($1,$2)`, [tenantId, credits]);
+      await audit(run, actor, `Requested a top-up of ${credits} credits`, tenantId);
+    }),
+
+    renewTenantPackage: async (tenantId, actor) => db.tx(async (run) => {
+      const t = await lockTenant(run, tenantId);
+      if (t.plan.type !== "package") throw new Error("not a package plan");
+      const periodStart = addMonths(t.plan.periodStart, 1);
+      const before = await loadBatches(run, tenantId);
+      const res = renewPackage(before, { tenantId, plan: t.plan, periodStart, ids: { rollover: randomUUID(), package: randomUUID() } });
+      await saveBatches(run, before, res.batches);
+      await run(`update tenants set plan = $2 where id = $1`, [tenantId, JSON.stringify({ ...t.plan, periodStart })]);
+      if (res.lapsed > 0) await ledger(run, { tenantId, kind: "expiry", credits: -res.lapsed, note: "Unused package credits lapsed" });
+      if (res.carried > 0) await ledger(run, { tenantId, kind: "rollover", credits: res.carried, note: "Rollover from previous month" });
+      await ledger(run, { tenantId, kind: "package_renewal", credits: t.plan.includedCredits, note: t.plan.name });
+      await audit(run, actor, `Renewed package: ${res.carried} credits rolled over, ${res.lapsed} lapsed`, tenantId);
+      return res;
+    }),
+
+    saveAgent: async (tenantId, settings, actor, summary) => db.tx((run) => saveAgentRow(run, tenantId, settings, actor, summary)),
+
+    rollbackAgent: async (tenantId, versionId, actor) => db.tx(async (run) => {
+      const v = await run<Row>(`select * from agent_versions where id = $1 and tenant_id = $2`, [versionId, tenantId]);
+      if (!v[0]) throw new Error("version not found");
+      await saveAgentRow(run, tenantId, jsonish<AgentSettings>(v[0].settings), actor, `Rolled back to version of ${iso(v[0].created_at).slice(0, 10)}`);
+    }),
+
+    addKnowledge: async (tenantId, question, answer, language: Locale, actor) => db.tx(async (run) => {
+      await run(`insert into knowledge_items (tenant_id, question, answer, language) values ($1,$2,$3,$4)`, [tenantId, question, answer, language]);
+      await audit(run, actor, "Knowledge item added", tenantId);
+    }),
+    deleteKnowledge: async (tenantId, id, actor) => db.tx(async (run) => {
+      await run(`delete from knowledge_items where tenant_id = $1 and id = $2`, [tenantId, id]);
+      await audit(run, actor, "Knowledge item deleted", tenantId);
+    }),
+    dismissUnanswered: async () => {},
+
+    setBookingStatus: async (tenantId, bookingId, status: BookingStatus, actor) => db.tx(async (run) => {
+      const r = await run(`update bookings set status = $3 where tenant_id = $1 and id = $2 returning id`, [tenantId, bookingId, status]);
+      if (!r[0]) throw new Error("booking not found");
+      await audit(run, actor, `Booking ${bookingId} set to ${status}`, tenantId);
+    }),
+
+    setPermissions: async (tenantId, p: Permissions, actor) => db.tx(async (run) => {
+      await run(`update tenants set permissions = $2 where id = $1`, [tenantId, JSON.stringify(p)]);
+      await audit(run, actor, "Client permissions changed", tenantId);
+    }),
+
+    updateTenant: async (tenantId, patch, actor) => db.tx(async (run) => {
+      const t = await lockTenant(run, tenantId);
+      await run(
+        `update tenants set zero_balance_policy = $2, allowed_domains = $3, low_balance_threshold = $4, status = $5, branding = $6 where id = $1`,
+        [tenantId, patch.zeroBalancePolicy ?? t.zeroBalancePolicy, patch.allowedDomains ?? t.allowedDomains, patch.lowBalanceThreshold ?? t.lowBalanceThreshold,
+         patch.status ?? t.status, JSON.stringify({ ...t.branding, ...(patch.branding ?? {}) })]);
+      await audit(run, actor, "Client settings changed", tenantId);
+    }),
+
+    resolveAlert: async (alertId) => { await q(`update alerts set resolved = true where id = $1`, [alertId]); },
+
+    createTenant: async (p) => db.tx(async (run) => {
+      const start = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1)).toISOString();
+      const pkg = p.planType === "package";
+      const plan = pkg
+        ? { type: "package", name: "Clinic package", includedCredits: 2500, monthlyPriceBhd: 199, pricePerCreditBhd: 0.08, rolloverCap: 0.5, periodStart: start }
+        : { type: "payg", name: "Pay as you go", includedCredits: 0, monthlyPriceBhd: 20, pricePerCreditBhd: 0.11, rolloverCap: 0, periodStart: start };
+      const slugBase = p.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "client";
+      const taken = new Set((await run<Row>(`select slug from tenants where slug like $1`, [`${slugBase}%`])).map((r) => r.slug));
+      let slug = slugBase;
+      for (let i = 2; taken.has(slug); i++) slug = `${slugBase}-${i}`;
+      const rows = await run<Row>(
+        `insert into tenants (slug, name, branding, plan, allowed_domains) values ($1,$2,$3,$4,$5) returning *`,
+        [slug, p.name, JSON.stringify({ displayName: p.name, displayNameAr: p.nameAr || p.name, primaryColor: p.color, domain: p.domain || undefined }),
+         JSON.stringify(plan), p.domain ? [p.domain] : []]);
+      const t = tenantOf(rows[0]);
+      const settings = defaultAgent("", p.name);
+      await run(`insert into agents (tenant_id, elevenlabs_agent_id, settings) values ($1, null, $2)`, [t.id, JSON.stringify(settings)]);
+      await run(`insert into agent_versions (tenant_id, author, summary, settings) values ($1,$2,'Initial clinic template',$3)`, [t.id, p.actor, JSON.stringify(settings)]);
+      if (pkg) {
+        await saveBatches(run, [], [{ id: randomUUID(), tenantId: t.id, kind: "package", amount: 2500, remaining: 2500, purchasedAt: start, expiresAt: addMonths(start, 1), note: "Clinic package" }]);
+        await ledger(run, { tenantId: t.id, kind: "package_renewal", credits: 2500, note: "Clinic package" });
+      }
+      await audit(run, p.actor, "Created client from clinic template", t.id);
+      return t;
+    }),
+
+    marginFor: async (tenantId, since) => {
+      const t = (await tenantsWhere("where id = $1", [tenantId]))[0];
+      const r = (await q<Row>(`select count(*) as n, coalesce(sum(credits_charged),0) as c, coalesce(sum(cost_usd),0) as u from conversations where tenant_id = $1 and started_at >= $2`, [tenantId, since.toISOString()]))[0];
+      const credits = round2(num(r.c));
+      const costBhd = round2(num(r.u) * USD_TO_BHD);
+      const perCredit = t.plan.type === "package" && t.plan.includedCredits > 0 ? t.plan.monthlyPriceBhd / t.plan.includedCredits : t.plan.pricePerCreditBhd;
+      const revenueBhd = round2(credits * perCredit);
+      return { conversations: num(r.n), credits, costBhd, revenueBhd, marginBhd: round2(revenueBhd - costBhd) };
+    },
+
+    creditsOwed: async () => round2(num((await q<Row>(`select coalesce(sum(remaining),0) as s from credit_batches where remaining > 0 and expires_at > now()`))[0].s)),
+
+    findTenantByAgent: async (agentId) => (await tenantsWhere("where id = (select tenant_id from agents where elevenlabs_agent_id = $1)", [agentId]))[0],
+  };
+  return data;
+}

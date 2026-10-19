@@ -2,7 +2,7 @@ import Link from "next/link";
 import { requireClient } from "@/lib/auth";
 import { getT } from "@/lib/i18n";
 import { fmtDateTime } from "@/lib/format";
-import { getBookings, getDoctors } from "@/lib/store";
+import { getBookings, getDoctors } from "@/lib/data";
 import { setBookingStatusAction } from "@/lib/actions";
 import { Badge, PageHead } from "@/components/ui";
 
@@ -10,9 +10,9 @@ export default async function BookingsPage({ searchParams }: { searchParams: Pro
   const { tenant } = await requireClient();
   const sp = await searchParams;
   const { t, locale } = await getT();
-  const doctors = getDoctors(tenant.id);
+  const doctors = await getDoctors(tenant.id);
   const docName = new Map(doctors.map((d) => [d.id, d.name]));
-  const rows = getBookings(tenant.id).filter((b) => (!sp.doctor || b.doctorId === sp.doctor) && (!sp.status || b.status === sp.status)).reverse();
+  const rows = (await getBookings(tenant.id)).filter((b) => (!sp.doctor || b.doctorId === sp.doctor) && (!sp.status || b.status === sp.status)).reverse();
   const returnTo = "/app/bookings" + (sp.doctor || sp.status ? `?${new URLSearchParams(Object.entries(sp).filter(([, v]) => v) as [string, string][])}` : "");
   return (
     <>

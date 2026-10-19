@@ -1,8 +1,6 @@
 -- CallsDash phase 1 schema. Multi-tenant: every row carries tenant_id and row-level security limits
 -- clinic users to their own tenant. Admins (role = 'admin') see everything.
--- NOTE: not yet applied to a live Supabase project; run it in a fresh project and report any errors.
-
-create extension if not exists pgcrypto;
+-- Verified on PGlite (tests/db.test.ts); apply it to Supabase with `supabase db push` or the SQL editor.
 
 create type user_role as enum ('admin', 'manager', 'receptionist');
 create type batch_kind as enum ('rollover', 'package', 'topup', 'payg');
@@ -145,33 +143,8 @@ create table top_up_requests (
   credits int not null, status text not null default 'open' check (status in ('open', 'done'))
 );
 
-/*
- * Spend credits: rollover first, then the package, then top-ups oldest first (same order as lib/credits.ts).
- * Returns the shortfall (credits that could not be covered). Called by the webhook with the service role.
- */
-create function deduct_credits(p_tenant uuid, p_amount numeric, p_conversation uuid default null, p_channel text default null)
-returns numeric language plpgsql security definer set search_path = public as $$
-declare
-  b record;
-  left_over numeric := round(p_amount, 2);
-  take numeric;
-begin
-  for b in
-    select id, remaining from credit_batches
-    where tenant_id = p_tenant and remaining > 0 and expires_at > now()
-    order by case kind when 'rollover' then 0 when 'package' then 1 else 2 end, purchased_at
-    for update
-  loop
-    exit when left_over <= 0;
-    take := least(b.remaining, left_over);
-    update credit_batches set remaining = remaining - take where id = b.id;
-    left_over := left_over - take;
-  end loop;
-  insert into credit_ledger (tenant_id, kind, credits, channel, conversation_id)
-    values (p_tenant, 'usage', -(round(p_amount, 2) - left_over), p_channel, p_conversation);
-  return left_over;
-end $$;
-revoke all on function deduct_credits from public, anon, authenticated;
+-- Credit spending (rollover, then package, then top-ups oldest first) lives in lib/credits.ts and runs
+-- inside a transaction in lib/data/pg.ts, so the order has one source of truth.
 
 -- Row-level security -----------------------------------------------------------------------------
 alter table tenants enable row level security;

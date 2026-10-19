@@ -2,7 +2,7 @@ import { headers } from "next/headers";
 import Script from "next/script";
 import { requireClient } from "@/lib/auth";
 import { getT } from "@/lib/i18n";
-import { getAgent } from "@/lib/store";
+import { getAgent } from "@/lib/data";
 import { Notice, PageHead } from "@/components/ui";
 
 export default async function WebsitePage() {
@@ -12,7 +12,7 @@ export default async function WebsitePage() {
   const host = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000";
   const proto = h.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
   const snippet = `<script src="${proto}://${host}/widget.js" data-tenant="${tenant.slug}" async></script>`;
-  const connected = Boolean(getAgent(tenant.id).elevenLabsAgentId);
+  const connected = Boolean((await getAgent(tenant.id)).elevenLabsAgentId);
   return (
     <>
       <PageHead title={t("website.title")} />
