@@ -84,6 +84,8 @@ export interface Tenant {
   lowBalanceThreshold: number; // fraction, 0.15
   retentionDays: number;
   calendarConnected: boolean;
+  /** Local (Bahrain) opening intervals per weekday, keys "0" (Sunday) to "6" (Saturday), as ["HH:MM", "HH:MM"]. */
+  openingHours: Record<string, [string, string][]>;
   channels: Record<Channel, "connected" | "pending" | "off">;
   createdAt: string;
 }
@@ -94,6 +96,7 @@ export interface Doctor {
   name: string;
   specialty: string;
   color: string;
+  googleCalendarId?: string;
 }
 
 export interface Booking {
@@ -107,6 +110,7 @@ export interface Booking {
   durationMin: number;
   status: BookingStatus;
   conversationId?: string;
+  calendarEventId?: string;
 }
 
 export interface TranscriptLine {

@@ -3,6 +3,7 @@ import type {
   LedgerEntry, Outcome, Tenant, TranscriptLine, UnansweredQuestion,
 } from "./types";
 import { addMonths, creditsFor, round2 } from "./credits";
+import { DEFAULT_OPENING_HOURS } from "./availability";
 
 export interface DB {
   tenants: Tenant[];
@@ -136,7 +137,7 @@ export function seed(): DB {
       plan: { type: "package", name: "Clinic package", includedCredits: 2500, monthlyPriceBhd: 199, pricePerCreditBhd: 0.08, rolloverCap: 0.5, periodStart: monthStart },
       permissions: { editPrompt: true, editVoice: true, editBehaviour: true, editKnowledge: true },
       allowedDomains: ["alnoor.example.bh", "localhost"], zeroBalancePolicy: "pause", lowBalanceThreshold: 0.15,
-      retentionDays: 90, calendarConnected: true,
+      retentionDays: 90, calendarConnected: true, openingHours: DEFAULT_OPENING_HOURS,
       channels: { website: "connected", whatsapp: "connected", instagram: "pending", phone: "off" },
       createdAt: iso(nowMs - 40 * DAY),
     },
@@ -146,7 +147,7 @@ export function seed(): DB {
       plan: { type: "payg", name: "Pay as you go", includedCredits: 0, monthlyPriceBhd: 20, pricePerCreditBhd: 0.11, rolloverCap: 0, periodStart: monthStart },
       permissions: { editPrompt: false, editVoice: true, editBehaviour: true, editKnowledge: true },
       allowedDomains: ["smile.example.bh", "localhost"], zeroBalancePolicy: "overdraft", lowBalanceThreshold: 0.15,
-      retentionDays: 90, calendarConnected: false,
+      retentionDays: 90, calendarConnected: false, openingHours: DEFAULT_OPENING_HOURS,
       channels: { website: "connected", whatsapp: "pending", instagram: "off", phone: "off" },
       createdAt: iso(nowMs - 12 * DAY),
     },
@@ -156,7 +157,7 @@ export function seed(): DB {
       plan: { type: "package", name: "Clinic package", includedCredits: 2500, monthlyPriceBhd: 199, pricePerCreditBhd: 0.08, rolloverCap: 0.5, periodStart: monthStart },
       permissions: { editPrompt: true, editVoice: true, editBehaviour: true, editKnowledge: true },
       allowedDomains: ["physio.example.bh"], zeroBalancePolicy: "pause", lowBalanceThreshold: 0.15,
-      retentionDays: 90, calendarConnected: true,
+      retentionDays: 90, calendarConnected: true, openingHours: DEFAULT_OPENING_HOURS,
       channels: { website: "connected", whatsapp: "connected", instagram: "off", phone: "off" },
       createdAt: iso(nowMs - 25 * DAY),
     },

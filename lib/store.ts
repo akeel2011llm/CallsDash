@@ -1,8 +1,10 @@
 import "server-only";
 import { addTopUp, balance, creditsFor, deduct, lowBalance, renewPackage, round2, sweepExpired, addMonths } from "./credits";
+import { SlotTakenError } from "./errors";
+import { DEFAULT_OPENING_HOURS } from "./availability";
 import { seed, type DB, ELEVENLABS_USD_PER_MIN, ELEVENLABS_USD_PER_MSG } from "./seed";
 import type {
-  AgentSettings, BookingStatus, Channel, Conversation, Locale, Permissions, Tenant,
+  AgentSettings, Booking, BookingStatus, Channel, Conversation, Locale, Permissions, Tenant,
 } from "./types";
 
 /**
@@ -161,6 +163,40 @@ export function setBookingStatus(tenantId: string, bookingId: string, status: Bo
   audit(actor, `Booking ${bookingId} set to ${status}`, tenantId);
 }
 
+export function createBooking(tenantId: string, b: Omit<Booking, "id" | "tenantId">, actor: string): Booking {
+  const d = db();
+  const live = (x: Booking) => x.status === "confirmed" || x.status === "rescheduled";
+  if (live(b as Booking) && d.bookings.some((x) => x.doctorId === b.doctorId && x.startsAt === b.startsAt && live(x))) throw new SlotTakenError();
+  const booking: Booking = { ...b, id: id("b"), tenantId };
+  d.bookings.push(booking);
+  audit(actor, `Booking ${booking.id} created`, tenantId);
+  return booking;
+}
+
+export function updateBooking(tenantId: string, bookingId: string, patch: Partial<Pick<Booking, "startsAt" | "status" | "calendarEventId">>, actor: string): Booking {
+  const d = db();
+  const b = d.bookings.find((x) => x.tenantId === tenantId && x.id === bookingId);
+  if (!b) throw new Error("booking not found");
+  const startsAt = patch.startsAt ?? b.startsAt;
+  if (d.bookings.some((x) => x.id !== b.id && x.doctorId === b.doctorId && x.startsAt === startsAt && (x.status === "confirmed" || x.status === "rescheduled"))
+    && (patch.startsAt || patch.status === "confirmed")) throw new SlotTakenError();
+  Object.assign(b, patch);
+  audit(actor, `Booking ${bookingId} updated`, tenantId);
+  return b;
+}
+
+export function addAlert(tenantId: string, severity: "info" | "warning" | "error", message: string) {
+  db().alerts.push({ id: id("a"), tenantId, at: now().toISOString(), severity, message, resolved: false });
+}
+
+export function setDoctorCalendar(tenantId: string, doctorId: string, calendarId: string, actor: string) {
+  const doc = db().doctors.find((x) => x.tenantId === tenantId && x.id === doctorId);
+  if (!doc) throw new Error("doctor not found");
+  doc.googleCalendarId = calendarId || undefined;
+  getTenant(tenantId)!.calendarConnected = db().doctors.some((x) => x.tenantId === tenantId && x.googleCalendarId);
+  audit(actor, `Calendar for ${doc.name} ${calendarId ? "linked" : "unlinked"}`, tenantId);
+}
+
 export function setPermissions(tenantId: string, p: Permissions, actor: string) {
   getTenant(tenantId)!.permissions = p;
   audit(actor, "Client permissions changed", tenantId);
@@ -195,7 +231,7 @@ export function createTenant(p: {
       : { type: "payg", name: "Pay as you go", includedCredits: 0, monthlyPriceBhd: 20, pricePerCreditBhd: 0.11, rolloverCap: 0, periodStart: start },
     permissions: { editPrompt: true, editVoice: true, editBehaviour: true, editKnowledge: true },
     allowedDomains: p.domain ? [p.domain] : [], zeroBalancePolicy: "pause", lowBalanceThreshold: 0.15, retentionDays: 90,
-    calendarConnected: false, channels: { website: "pending", whatsapp: "off", instagram: "off", phone: "off" },
+    calendarConnected: false, openingHours: DEFAULT_OPENING_HOURS, channels: { website: "pending", whatsapp: "off", instagram: "off", phone: "off" },
     createdAt: now().toISOString(),
   };
   d.tenants.push(tenant);

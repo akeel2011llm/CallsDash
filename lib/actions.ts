@@ -197,6 +197,14 @@ export async function adminTenantSettingsAction(f: FormData) {
   back(f, `/admin/clients/${id}`);
 }
 
+export async function adminSetCalendarAction(f: FormData) {
+  const { actor } = await requireAdmin();
+  const id = str(f, "tenantId");
+  await store.setDoctorCalendar(id, str(f, "doctorId"), str(f, "calendarId").slice(0, 300), actor);
+  revalidatePath("/admin", "layout");
+  back(f, `/admin/clients/${id}`);
+}
+
 export async function adminRollbackAction(f: FormData) {
   const { actor } = await requireAdmin();
   const id = str(f, "tenantId");

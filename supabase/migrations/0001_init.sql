@@ -18,6 +18,7 @@ create table tenants (
   low_balance_threshold numeric not null default 0.15,
   retention_days int not null default 90,
   calendar_connected boolean not null default false,
+  opening_hours jsonb not null default '{"0":[["08:00","21:00"]],"1":[["08:00","21:00"]],"2":[["08:00","21:00"]],"3":[["08:00","21:00"]],"4":[["08:00","21:00"]],"5":[["16:00","21:00"]],"6":[["08:00","21:00"]]}',
   channels jsonb not null default '{"website":"pending","whatsapp":"off","instagram":"off","phone":"off"}',
   created_at timestamptz not null default now()
 );
@@ -70,6 +71,8 @@ create table bookings (
   created_at timestamptz not null default now()
 );
 create index on bookings (tenant_id, starts_at);
+-- one live booking per doctor and start time: the last line of defence against double booking
+create unique index bookings_no_double on bookings (doctor_id, starts_at) where status in ('confirmed', 'rescheduled');
 
 create table conversations (
   id uuid primary key default gen_random_uuid(),

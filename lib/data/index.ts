@@ -52,3 +52,9 @@ export const createTenant = call("createTenant");
 export const marginFor = call("marginFor");
 export const creditsOwed = call("creditsOwed");
 export const findTenantByAgent = call("findTenantByAgent");
+export const createBooking = call("createBooking");
+export const updateBooking = call("updateBooking");
+export const addAlert = call("addAlert");
+export const setDoctorCalendar = call("setDoctorCalendar");
+
+export const getData = backend;

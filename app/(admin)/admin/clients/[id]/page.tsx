@@ -2,9 +2,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getT } from "@/lib/i18n";
 import { fmtDate, fmtDateTime, fmtNum } from "@/lib/format";
-import { getAgent, getAgentVersions, getAudit, getLedger, getTenant, getWallet } from "@/lib/data";
+import { getAgent, getAgentVersions, getDoctors, getAudit, getLedger, getTenant, getWallet } from "@/lib/data";
 import {
-  adminPermissionsAction, adminRenewAction, adminRollbackAction, adminTenantSettingsAction, adminTopUpAction, viewAsClient,
+  adminPermissionsAction, adminRenewAction, adminSetCalendarAction, adminRollbackAction, adminTenantSettingsAction, adminTopUpAction, viewAsClient,
 } from "@/lib/actions";
 import { Badge, Notice, PageHead, Stat } from "@/components/ui";
 
@@ -123,6 +123,19 @@ export default async function ClientAdmin({ params, searchParams }: { params: Pr
           </div>
         </section>
       </div>
+
+      <section className="card stack">
+        <h2>{t("admin.doctors")}</h2>
+        <small className="muted">{t("admin.doctors.help")}</small>
+        {(await getDoctors(id)).map((d) => (
+          <form key={d.id} action={adminSetCalendarAction} className="row">
+            <input type="hidden" name="tenantId" value={id} /><input type="hidden" name="doctorId" value={d.id} /><input type="hidden" name="returnTo" value={returnTo} />
+            <span style={{ minWidth: 180 }}>{d.name}</span>
+            <input name="calendarId" defaultValue={d.googleCalendarId ?? ""} placeholder="clinic@group.calendar.google.com" style={{ flex: 1, minWidth: 220 }} dir="ltr" />
+            <button className="btn small" type="submit">{t("common.save")}</button>
+          </form>
+        ))}
+      </section>
 
       <section className="card stack">
         <h2>{t("credits.history")}</h2>

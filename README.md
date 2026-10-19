@@ -15,12 +15,14 @@ Implementation plan: see the project's "CallsDash Implementation Plan" doc.
 | ElevenLabs post-call webhook: signature check, idempotent charge, credit deduction | Working; payload field names to confirm on the first real call |
 | Supabase schema with row-level security (`supabase/migrations/0001_init.sql`) | Tested on an in-process Postgres: RLS isolation, 90-day purge, Arabic search |
 | Postgres data layer (`lib/data/pg.ts`), used when `DATABASE_URL` is set | Tested on Postgres: wallet, rollover, expiry, idempotent webhook, versions; the whole UI was clicked through on it |
+| Booking tools for the agent (`/api/agent-tools/*`): availability, book, find, cancel, reschedule; opening hours, double-booking guard, phone check, never books blind | Tested on Postgres with a fake calendar, including a simultaneous-booking race; see `docs/agent-tools.md` |
+| Google Calendar client (service account, free/busy, create, move, delete events) | Tested against a fake Google API only, **not** against a real calendar |
 | Supabase Auth sign-in (email + password; role and clinic from `profiles`) | Written, **not tested** against a real Supabase project |
 
 ## Not in phase 1 yet
 
 - Recording playback from Supabase Storage (signed links) and the "unanswered questions" list in production (both empty until built).
-- Google Calendar sync and the agent tools (`check_availability`, `book_appointment`, ...). The calendar page shows the CallsDash booking records.
+- WhatsApp confirmation after booking, `handoff_to_staff` and `take_message` tools, and an opening-hours editor (hours are a per-client database value, default Sat-Thu 08:00-21:00, Fri 16:00-21:00).
 - Pushing agent settings and knowledge to ElevenLabs. Saving creates a version and audit entry only.
 - WhatsApp, Instagram bridge and phone (phases as per plan), outbound reminders, online payment.
 

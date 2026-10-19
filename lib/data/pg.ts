@@ -6,6 +6,7 @@ import type {
   KnowledgeItem, LedgerEntry, Locale, Permissions, Tenant, UnansweredQuestion,
 } from "../types";
 import type { Data } from "./demo";
+import { SlotTakenError } from "../errors";
 
 /** Minimal query surface shared by `pg` (production) and PGlite (tests). */
 export type Q = <T = Record<string, unknown>>(sql: string, params?: unknown[]) => Promise<T[]>;
@@ -24,7 +25,12 @@ const tenantOf = (r: Row): Tenant => ({
   id: r.id, slug: r.slug, name: r.name, status: r.status, branding: jsonish(r.branding), plan: jsonish(r.plan),
   permissions: jsonish(r.permissions), allowedDomains: r.allowed_domains ?? [], zeroBalancePolicy: r.zero_balance_policy,
   lowBalanceThreshold: num(r.low_balance_threshold), retentionDays: r.retention_days, calendarConnected: r.calendar_connected,
-  channels: jsonish(r.channels), createdAt: iso(r.created_at),
+  channels: jsonish(r.channels), openingHours: jsonish(r.opening_hours), createdAt: iso(r.created_at),
+});
+const bookingOf = (r: Row): Booking => ({
+  id: r.id, tenantId: r.tenant_id, doctorId: r.doctor_id, patientName: r.patient_name, patientPhone: r.patient_phone,
+  service: r.service ?? "", startsAt: iso(r.starts_at), durationMin: r.duration_min, status: r.status,
+  conversationId: r.conversation_id ?? undefined, calendarEventId: r.calendar_event_id ?? undefined,
 });
 const batchOf = (r: Row): CreditBatch => ({
   id: r.id, tenantId: r.tenant_id, kind: r.kind, amount: num(r.amount), remaining: num(r.remaining),
@@ -116,11 +122,9 @@ export function createPgData(db: Db): Data {
         id: r.id, tenantId: r.tenant_id, createdAt: iso(r.created_at), author: r.author, summary: r.summary, settings: jsonish(r.settings) })),
     getDoctors: async (tenantId) =>
       (await q<Row>(`select * from doctors where tenant_id = $1 order by name`, [tenantId])).map((r): Doctor => ({
-        id: r.id, tenantId: r.tenant_id, name: r.name, specialty: r.specialty ?? "", color: r.color })),
+        id: r.id, tenantId: r.tenant_id, name: r.name, specialty: r.specialty ?? "", color: r.color, googleCalendarId: r.google_calendar_id ?? undefined })),
     getBookings: async (tenantId) =>
-      (await q<Row>(`select * from bookings where tenant_id = $1 order by starts_at`, [tenantId])).map((r): Booking => ({
-        id: r.id, tenantId: r.tenant_id, doctorId: r.doctor_id, patientName: r.patient_name, patientPhone: r.patient_phone,
-        service: r.service ?? "", startsAt: iso(r.starts_at), durationMin: r.duration_min, status: r.status, conversationId: r.conversation_id ?? undefined })),
+      (await q<Row>(`select * from bookings where tenant_id = $1 order by starts_at`, [tenantId])).map(bookingOf),
     getConversations: async (tenantId) =>
       (await q<Row>(`select * from conversations where tenant_id = $1 order by started_at desc limit 1000`, [tenantId])).map(convOf),
     getConversation: async (tenantId, id) =>
@@ -233,6 +237,44 @@ export function createPgData(db: Db): Data {
       const r = await run(`update bookings set status = $3 where tenant_id = $1 and id = $2 returning id`, [tenantId, bookingId, status]);
       if (!r[0]) throw new Error("booking not found");
       await audit(run, actor, `Booking ${bookingId} set to ${status}`, tenantId);
+    }),
+
+    createBooking: async (tenantId, b, actor) => db.tx(async (run) => {
+      try {
+        const r = await run<Row>(
+          `insert into bookings (tenant_id, doctor_id, patient_name, patient_phone, service, starts_at, duration_min, status, conversation_id, calendar_event_id)
+           values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) returning *`,
+          [tenantId, b.doctorId, b.patientName, b.patientPhone, b.service, b.startsAt, b.durationMin, b.status, b.conversationId ?? null, b.calendarEventId ?? null]);
+        await audit(run, actor, `Booking ${r[0].id} created`, tenantId);
+        return bookingOf(r[0]);
+      } catch (e) {
+        if ((e as { code?: string }).code === "23505") throw new SlotTakenError();
+        throw e;
+      }
+    }),
+
+    updateBooking: async (tenantId, bookingId, patch, actor) => db.tx(async (run) => {
+      try {
+        const r = await run<Row>(
+          `update bookings set starts_at = coalesce($3, starts_at), status = coalesce($4, status), calendar_event_id = coalesce($5, calendar_event_id)
+           where tenant_id = $1 and id = $2 returning *`,
+          [tenantId, bookingId, patch.startsAt ?? null, patch.status ?? null, patch.calendarEventId ?? null]);
+        if (!r[0]) throw new Error("booking not found");
+        await audit(run, actor, `Booking ${bookingId} updated`, tenantId);
+        return bookingOf(r[0]);
+      } catch (e) {
+        if ((e as { code?: string }).code === "23505") throw new SlotTakenError();
+        throw e;
+      }
+    }),
+
+    addAlert: async (tenantId, severity, message) => { await q(`insert into alerts (tenant_id, severity, message) values ($1,$2,$3)`, [tenantId, severity, message]); },
+
+    setDoctorCalendar: async (tenantId, doctorId, calendarId, actor) => db.tx(async (run) => {
+      const r = await run<Row>(`update doctors set google_calendar_id = $3 where tenant_id = $1 and id = $2 returning name`, [tenantId, doctorId, calendarId || null]);
+      if (!r[0]) throw new Error("doctor not found");
+      await run(`update tenants set calendar_connected = exists (select 1 from doctors where tenant_id = $1 and google_calendar_id is not null) where id = $1`, [tenantId]);
+      await audit(run, actor, `Calendar for ${r[0].name} ${calendarId ? "linked" : "unlinked"}`, tenantId);
     }),
 
     setPermissions: async (tenantId, p: Permissions, actor) => db.tx(async (run) => {
