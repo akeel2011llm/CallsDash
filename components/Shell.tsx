@@ -3,6 +3,7 @@ import { logout, exitViewAs } from "@/lib/actions";
 import { getT } from "@/lib/i18n";
 import { LocaleSwitch } from "./LocaleSwitch";
 import { NavLink } from "./NavLink";
+import { SubmitButton } from "@/components/SubmitButton";
 
 export interface NavItem {
   href: string;
@@ -37,14 +38,14 @@ export async function Shell({
         </nav>
         <div className="side-foot">
           <Suspense fallback={null}><LocaleSwitch locale={locale} /></Suspense>
-          <form action={logout}><button className="btn ghost" type="submit">{t("nav.signOut")}</button></form>
+          <form action={logout}><SubmitButton className="btn ghost" type="submit">{t("nav.signOut")}</SubmitButton></form>
         </div>
       </aside>
       <main className="main">
         {viewingAs && (
           <div className="banner">
             <span>{t("nav.viewingAs")}</span>
-            <form action={exitViewAs}><button className="btn small" type="submit">{t("nav.exitView")}</button></form>
+            <form action={exitViewAs}><SubmitButton className="btn small" type="submit">{t("nav.exitView")}</SubmitButton></form>
           </div>
         )}
         {children}

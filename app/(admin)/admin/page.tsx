@@ -4,12 +4,11 @@ import { fmtNum } from "@/lib/format";
 import { creditsOwed, getAlerts, getTopUpRequests, getWallet, listTenants } from "@/lib/data";
 import { viewAsClient } from "@/lib/actions";
 import { Badge, PageHead, Stat } from "@/components/ui";
+import { SubmitButton } from "@/components/SubmitButton";
 
 export default async function AdminHome() {
-  const { t, locale } = await getT();
-  const tenants = await listTenants();
-  const openAlerts = (await getAlerts()).filter((a) => !a.resolved);
-  const requests = await getTopUpRequests();
+  const [{ t, locale }, tenants, alerts, requests, owed] = await Promise.all([getT(), listTenants(), getAlerts(), getTopUpRequests(), creditsOwed()]);
+  const openAlerts = alerts.filter((a) => !a.resolved);
   const wallets = new Map(await Promise.all(tenants.map(async (c) => [c.id, await getWallet(c.id)] as const)));
   return (
     <>
@@ -17,7 +16,7 @@ export default async function AdminHome() {
       <div className="grid">
         <Stat label={t("admin.clientsLive")} value={`${tenants.filter((x) => x.status === "live").length} / ${tenants.length}`} />
         <Stat label={t("admin.openAlerts")} value={openAlerts.length} tone={openAlerts.length ? "warn" : undefined} />
-        <Stat label={t("admin.creditsOwed")} value={fmtNum(await creditsOwed(), locale, 0)} />
+        <Stat label={t("admin.creditsOwed")} value={fmtNum(owed, locale, 0)} />
         <Stat label={t("admin.topUpRequests")} value={requests.length} tone={requests.length ? "warn" : undefined} />
       </div>
       <div className="card table-wrap">
@@ -54,7 +53,7 @@ export default async function AdminHome() {
                     <Link className="btn small ghost" href={`/admin/clients/${c.id}`}>{t("admin.manage")}</Link>
                     <form action={viewAsClient}>
                       <input type="hidden" name="tenantId" value={c.id} />
-                      <button className="btn small" type="submit">{t("admin.viewAs")}</button>
+                      <SubmitButton className="btn small" type="submit">{t("admin.viewAs")}</SubmitButton>
                     </form>
                     </div>
                   </td>

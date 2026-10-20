@@ -6,7 +6,8 @@ import type {
   KnowledgeItem, LedgerEntry, Locale, Permissions, Tenant, UnansweredQuestion,
 } from "../types";
 import type { Data } from "./demo";
-import { SlotTakenError } from "../errors";
+import { DuplicateError, SlotTakenError } from "../errors";
+import { findDuplicate } from "../tenant-keys";
 
 /** Minimal query surface shared by `pg` (production) and PGlite (tests). */
 export type Q = <T = Record<string, unknown>>(sql: string, params?: unknown[]) => Promise<T[]>;
@@ -53,6 +54,11 @@ export function createPgData(db: Db): Data {
 
   async function audit(run: Q, actor: string, action: string, tenantId?: string) {
     await run(`insert into audit_log (tenant_id, actor, action) values ($1, $2, $3)`, [tenantId ?? null, actor, action]);
+  }
+
+  /** Serializes client create/rename/domain changes so two quick submits cannot both pass the duplicate check. */
+  async function lockTenantDirectory(run: Q) {
+    await run(`select pg_advisory_xact_lock(hashtext('callsdash_tenant_directory'))`);
   }
 
   async function lockTenant(run: Q, tenantId: string) {
@@ -146,7 +152,18 @@ export function createPgData(db: Db): Data {
       (await q<Row>(`select * from top_up_requests where status = 'open' order by at`)).map((r) => ({
         id: r.id, tenantId: r.tenant_id, at: iso(r.at), credits: r.credits, status: r.status as "open" | "done" })),
 
-    getWallet: async (tenantId) => db.tx(async (run) => walletOf(run, await lockTenant(run, tenantId))),
+    getWallet: async (tenantId) => {
+      // Read path without a transaction or row lock; only when credits have lapsed do we take the locked path that writes the expiry.
+      const [rows, batches] = await Promise.all([tenantsWhere("where id = $1", [tenantId]), loadBatches(q, tenantId)]);
+      const t = rows[0];
+      if (!t) throw new Error("unknown tenant");
+      const now = new Date();
+      if (sweepExpired(batches, now).expired === 0) {
+        const low = lowBalance(batches, t.plan, t.lowBalanceThreshold, now);
+        return { batches, balance: balance(batches, now), low: low.low, reference: low.reference };
+      }
+      return db.tx(async (run) => walletOf(run, await lockTenant(run, tenantId)));
+    },
 
     usageByChannel: async (tenantId, since) => {
       const out = { website: 0, whatsapp: 0, instagram: 0, phone: 0 };
@@ -283,7 +300,13 @@ export function createPgData(db: Db): Data {
     }),
 
     updateTenant: async (tenantId, patch, actor) => db.tx(async (run) => {
+      if (patch.allowedDomains) await lockTenantDirectory(run);
       const t = await lockTenant(run, tenantId);
+      if (patch.allowedDomains) {
+        const others = (await run<Row>(`select * from tenants where id <> $1`, [tenantId])).map(tenantOf);
+        const clash = findDuplicate(others, { domains: patch.allowedDomains });
+        if (clash) throw new DuplicateError(clash);
+      }
       await run(
         `update tenants set zero_balance_policy = $2, allowed_domains = $3, low_balance_threshold = $4, status = $5, branding = $6 where id = $1`,
         [tenantId, patch.zeroBalancePolicy ?? t.zeroBalancePolicy, patch.allowedDomains ?? t.allowedDomains, patch.lowBalanceThreshold ?? t.lowBalanceThreshold,
@@ -294,6 +317,9 @@ export function createPgData(db: Db): Data {
     resolveAlert: async (alertId) => { await q(`update alerts set resolved = true where id = $1`, [alertId]); },
 
     createTenant: async (p) => db.tx(async (run) => {
+      await lockTenantDirectory(run);
+      const clash = findDuplicate((await run<Row>(`select * from tenants`)).map(tenantOf), { name: p.name, domains: p.domain ? [p.domain] : [] });
+      if (clash) throw new DuplicateError(clash);
       const start = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1)).toISOString();
       const pkg = p.planType === "package";
       const plan = pkg
@@ -317,6 +343,14 @@ export function createPgData(db: Db): Data {
       }
       await audit(run, p.actor, "Created client from clinic template", t.id);
       return t;
+    }),
+
+    deleteTenant: async (tenantId, actor) => db.tx(async (run) => {
+      await lockTenantDirectory(run);
+      const r = await run<Row>(`select name from tenants where id = $1 for update`, [tenantId]);
+      if (!r[0]) return;
+      await run(`delete from tenants where id = $1`, [tenantId]); // every client table cascades
+      await audit(run, actor, `Deleted client "${r[0].name}"`);
     }),
 
     marginFor: async (tenantId, since) => {

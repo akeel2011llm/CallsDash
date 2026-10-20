@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createPgData, type Db, type Q } from "@/lib/data/pg";
+import { DuplicateError } from "@/lib/errors";
 import { makeDb } from "./helpers/pgdb";
 
 async function setup() {
@@ -68,5 +69,45 @@ describe("pg data layer", () => {
     expect(versions).toHaveLength(2);
     await data.rollbackAgent(t.id, versions[1].id, "admin");
     expect((await data.getAgent(t.id)).temperature).toBe(s.temperature);
+  });
+  it("refuses a second client with the same name or website, even when submitted twice at once", async () => {
+    const { data } = await setup();
+    const p = { nameAr: "", color: "#112233", planType: "package" as const, actor: "admin" };
+    const results = await Promise.allSettled([
+      data.createTenant({ ...p, name: "Twin Clinic", domain: "twin.example.bh" }),
+      data.createTenant({ ...p, name: "Twin Clinic", domain: "twin.example.bh" }),
+    ]);
+    expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+    expect(((results.find((r) => r.status === "rejected") as PromiseRejectedResult).reason as DuplicateError).field).toBe("name");
+    await expect(data.createTenant({ ...p, name: "  twin   CLINIC ", domain: "" })).rejects.toMatchObject({ field: "name" });
+    await expect(data.createTenant({ ...p, name: "Different", domain: "https://www.TWIN.example.bh/home" })).rejects.toMatchObject({ field: "domain" });
+    expect(await data.listTenants()).toHaveLength(1);
+    const other = await data.createTenant({ ...p, name: "Other Clinic", domain: "other.example.bh" });
+    await expect(data.updateTenant(other.id, { allowedDomains: ["twin.example.bh"] }, "admin")).rejects.toMatchObject({ field: "domain" });
+    await data.updateTenant(other.id, { allowedDomains: ["other.example.bh", "other2.example.bh"] }, "admin");
+  });
+
+  it("deletes a client with everything that belongs to it and keeps a trail", async () => {
+    const { data, pg } = await setup();
+    const t = await data.createTenant({ name: "Gone Clinic", nameAr: "", color: "#112233", domain: "gone.example.bh", planType: "package", actor: "admin" });
+    const keep = await data.createTenant({ name: "Stays", nameAr: "", color: "#112233", domain: "", planType: "payg", actor: "admin" });
+    await data.deleteTenant(t.id, "admin");
+    expect(await data.getTenant(t.id)).toBeUndefined();
+    for (const table of ["agents", "agent_versions", "credit_batches", "credit_ledger", "audit_log"])
+      expect((await pg.query(`select 1 from ${table} where tenant_id = $1`, [t.id])).rows).toHaveLength(0);
+    expect((await data.listTenants()).map((x) => x.id)).toEqual([keep.id]);
+    expect((await pg.query(`select action from audit_log where tenant_id is null`)).rows).toEqual([{ action: 'Deleted client "Gone Clinic"' }]);
+    await data.deleteTenant(t.id, "admin"); // already gone: no error
+    // the name and website can be used again
+    await data.createTenant({ name: "Gone Clinic", nameAr: "", color: "#112233", domain: "gone.example.bh", planType: "payg", actor: "admin" });
+  });
+
+  it("reads a wallet without writing, and still writes expiry when credits lapsed", async () => {
+    const { data, pg } = await setup();
+    const t = await data.createTenant({ name: "Wallet", nameAr: "", color: "#112233", domain: "", planType: "package", actor: "admin" });
+    expect((await data.getWallet(t.id)).balance).toBe(2500);
+    await pg.query(`update credit_batches set expires_at = now() - interval '1 day' where tenant_id = $1`, [t.id]);
+    expect((await data.getWallet(t.id)).balance).toBe(0);
+    expect((await pg.query(`select 1 from credit_ledger where tenant_id = $1 and kind = 'expiry'`, [t.id])).rows).toHaveLength(1);
   });
 });

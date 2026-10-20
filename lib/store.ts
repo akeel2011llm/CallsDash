@@ -1,6 +1,7 @@
 import "server-only";
 import { addTopUp, balance, creditsFor, deduct, lowBalance, renewPackage, round2, sweepExpired, addMonths } from "./credits";
-import { SlotTakenError } from "./errors";
+import { DuplicateError, SlotTakenError } from "./errors";
+import { findDuplicate } from "./tenant-keys";
 import { DEFAULT_OPENING_HOURS } from "./availability";
 import { seed, type DB, ELEVENLABS_USD_PER_MIN, ELEVENLABS_USD_PER_MSG } from "./seed";
 import type {
@@ -205,6 +206,10 @@ export function setPermissions(tenantId: string, p: Permissions, actor: string) 
 export function updateTenant(tenantId: string, patch: Partial<Pick<Tenant, "zeroBalancePolicy" | "status" | "allowedDomains" | "lowBalanceThreshold">> & { branding?: Partial<Tenant["branding"]> }, actor: string) {
   const t = getTenant(tenantId)!;
   const { branding, ...rest } = patch;
+  if (patch.allowedDomains) {
+    const clash = findDuplicate(db().tenants.filter((x) => x.id !== tenantId), { domains: patch.allowedDomains });
+    if (clash) throw new DuplicateError(clash);
+  }
   Object.assign(t, rest);
   if (branding) t.branding = { ...t.branding, ...branding };
   audit(actor, "Client settings changed", tenantId);
@@ -219,6 +224,8 @@ export function createTenant(p: {
   name: string; nameAr: string; color: string; domain: string; planType: "package" | "payg"; actor: string;
 }) {
   const d = db();
+  const clash = findDuplicate(d.tenants, { name: p.name, domains: p.domain ? [p.domain] : [] });
+  if (clash) throw new DuplicateError(clash);
   const tid = id("t");
   const start = new Date(Date.UTC(now().getUTCFullYear(), now().getUTCMonth(), 1)).toISOString();
   const pkg = p.planType === "package";
@@ -243,6 +250,19 @@ export function createTenant(p: {
   }
   audit(p.actor, "Created client from clinic template", tid);
   return tenant;
+}
+
+/** Permanently removes a client and everything that belongs to it. The audit trail keeps one entry without a client. */
+export function deleteTenant(tenantId: string, actor: string) {
+  const d = db();
+  const t = getTenant(tenantId);
+  if (!t) return;
+  d.tenants = d.tenants.filter((x) => x.id !== tenantId);
+  delete d.agents[tenantId];
+  const lists = d as unknown as Record<string, { tenantId?: string }[]>;
+  for (const k of ["agentVersions", "doctors", "bookings", "conversations", "knowledge", "unanswered", "batches", "ledger", "alerts", "audit", "topUpRequests"])
+    lists[k] = lists[k].filter((x) => x.tenantId !== tenantId);
+  audit(actor, `Deleted client "${t.name}"`);
 }
 
 export function marginFor(tenantId: string, since: Date) {

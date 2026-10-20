@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { createDemoData, type Data } from "./demo";
 import { createNodePgDb } from "./node-pg";
 import { createPgData } from "./pg";
@@ -17,22 +18,25 @@ export const usingDatabase = () => Boolean(process.env.DATABASE_URL);
 const call = <K extends keyof Data>(k: K) =>
   (async (...a: unknown[]) => ((await backend())[k] as (...x: unknown[]) => unknown)(...a)) as Data[K];
 
-export const listTenants = call("listTenants");
-export const getTenant = call("getTenant");
-export const getProfile = call("getProfile");
-export const getAgent = call("getAgent");
-export const getAgentVersions = call("getAgentVersions");
-export const getDoctors = call("getDoctors");
-export const getBookings = call("getBookings");
-export const getConversations = call("getConversations");
-export const getConversation = call("getConversation");
-export const getKnowledge = call("getKnowledge");
-export const getUnanswered = call("getUnanswered");
-export const getAlerts = call("getAlerts");
-export const getAudit = call("getAudit");
-export const getLedger = call("getLedger");
-export const getTopUpRequests = call("getTopUpRequests");
-export const getWallet = call("getWallet");
+/** Reads are memoized per request, so a layout and its page asking for the same thing hit the database once. */
+const read = <K extends keyof Data>(k: K) => cache(call(k)) as Data[K];
+
+export const listTenants = read("listTenants");
+export const getTenant = read("getTenant");
+export const getProfile = read("getProfile");
+export const getAgent = read("getAgent");
+export const getAgentVersions = read("getAgentVersions");
+export const getDoctors = read("getDoctors");
+export const getBookings = read("getBookings");
+export const getConversations = read("getConversations");
+export const getConversation = read("getConversation");
+export const getKnowledge = read("getKnowledge");
+export const getUnanswered = read("getUnanswered");
+export const getAlerts = read("getAlerts");
+export const getAudit = read("getAudit");
+export const getLedger = read("getLedger");
+export const getTopUpRequests = read("getTopUpRequests");
+export const getWallet = read("getWallet");
 export const usageByChannel = call("usageByChannel");
 export const audit = call("audit");
 export const recordConversation = call("recordConversation");
@@ -49,6 +53,7 @@ export const setPermissions = call("setPermissions");
 export const updateTenant = call("updateTenant");
 export const resolveAlert = call("resolveAlert");
 export const createTenant = call("createTenant");
+export const deleteTenant = call("deleteTenant");
 export const marginFor = call("marginFor");
 export const creditsOwed = call("creditsOwed");
 export const findTenantByAgent = call("findTenantByAgent");

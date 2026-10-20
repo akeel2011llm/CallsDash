@@ -4,6 +4,7 @@ import { getT } from "@/lib/i18n";
 import { fmtDateTime, fmtDuration } from "@/lib/format";
 import { getConversations } from "@/lib/data";
 import { Badge, PageHead } from "@/components/ui";
+import { SubmitButton } from "@/components/SubmitButton";
 
 type SP = { q?: string; channel?: string; outcome?: string; lang?: string };
 
@@ -37,7 +38,7 @@ export default async function ConversationsPage({ searchParams }: { searchParams
             <option value="">{t("common.all")}</option><option value="en">English</option><option value="ar">العربية</option>
           </select>
         </label>
-        <button className="btn" type="submit">{t("common.search")}</button>
+        <SubmitButton className="btn" type="submit">{t("common.search")}</SubmitButton>
       </form>
       <div className="card table-wrap">
         <table>

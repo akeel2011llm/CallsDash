@@ -152,3 +152,20 @@ pre { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; 
   nav { grid-auto-flow: column; overflow-x: auto; }
   .nav-link { white-space: nowrap; }
 }
+
+/* Click feedback: a button that is working shows a spinner and cannot be pressed again. */
+.btn.is-pending { opacity: .75; cursor: progress; }
+.spinner {
+  display: inline-block; inline-size: 1em; block-size: 1em; margin-inline-end: .5em; vertical-align: -.15em;
+  border: 2px solid currentColor; border-inline-end-color: transparent; border-radius: 50%;
+  animation: cd-spin .7s linear infinite;
+}
+@keyframes cd-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2s; } }
+
+/* Top-of-page progress for route changes (loading.tsx) */
+.page-loading { display: grid; gap: 12px; }
+.skeleton { border-radius: 10px; background: color-mix(in srgb, currentColor 10%, transparent); animation: cd-pulse 1.2s ease-in-out infinite; }
+@keyframes cd-pulse { 50% { opacity: .45; } }
+
+.danger-zone { border-color: var(--bad); }

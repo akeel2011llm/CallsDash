@@ -7,6 +7,8 @@ import { demoMode, requireAdmin, requireClient } from "./auth";
 import { safePath } from "./format";
 import { supabaseConfigured, supabaseServer } from "./supabase";
 import * as store from "./data";
+import { DuplicateError } from "./errors";
+import { nameKey } from "./tenant-keys";
 import type { AgentSettings, BookingStatus, Locale, Permissions } from "./types";
 
 const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
@@ -188,11 +190,16 @@ export async function adminTenantSettingsAction(f: FormData) {
   if (str(f, "displayName")) branding.displayName = str(f, "displayName").slice(0, 120);
   if (str(f, "displayNameAr")) branding.displayNameAr = str(f, "displayNameAr").slice(0, 120);
   if (hex.test(color)) branding.primaryColor = color;
-  await store.updateTenant(id, {
-    zeroBalancePolicy: str(f, "zeroBalancePolicy") === "overdraft" ? "overdraft" : "pause",
-    allowedDomains: str(f, "allowedDomains").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean),
-    branding,
-  }, actor);
+  try {
+    await store.updateTenant(id, {
+      zeroBalancePolicy: str(f, "zeroBalancePolicy") === "overdraft" ? "overdraft" : "pause",
+      allowedDomains: str(f, "allowedDomains").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean),
+      branding,
+    }, actor);
+  } catch (e) {
+    if (e instanceof DuplicateError) redirect(`/admin/clients/${id}?error=${e.field}`);
+    throw e;
+  }
   revalidatePath("/admin", "layout");
   back(f, `/admin/clients/${id}`);
 }
@@ -215,15 +222,36 @@ export async function adminRollbackAction(f: FormData) {
 
 export async function adminCreateTenantAction(f: FormData) {
   const { actor } = await requireAdmin();
-  const name = str(f, "name");
+  const name = str(f, "name").replace(/\s+/g, " ");
   if (!name) redirect("/admin/clients/new");
   const color = str(f, "color");
-  const t = await store.createTenant({
-    name: name.slice(0, 120), nameAr: str(f, "nameAr").slice(0, 120), color: hex.test(color) ? color : "#0e7c86",
-    domain: str(f, "domain").toLowerCase().slice(0, 200), planType: str(f, "planType") === "payg" ? "payg" : "package", actor,
-  });
+  let tenantId: string;
+  try {
+    tenantId = (await store.createTenant({
+      name: name.slice(0, 120), nameAr: str(f, "nameAr").slice(0, 120), color: hex.test(color) ? color : "#0e7c86",
+      domain: str(f, "domain").toLowerCase().slice(0, 200), planType: str(f, "planType") === "payg" ? "payg" : "package", actor,
+    })).id;
+  } catch (e) {
+    if (e instanceof DuplicateError) redirect(`/admin/clients/new?error=${e.field}`);
+    throw e;
+  }
   revalidatePath("/admin", "layout");
-  redirect(`/admin/clients/${t.id}?saved=1`);
+  redirect(`/admin/clients/${tenantId}?saved=1`);
+}
+
+/** Permanent. The admin must type the client's exact name; that is checked here, not only in the browser. */
+export async function adminDeleteTenantAction(f: FormData) {
+  const { actor } = await requireAdmin();
+  const id = str(f, "tenantId");
+  const tenant = await store.getTenant(id);
+  if (!tenant) redirect("/admin");
+  if (nameKey(str(f, "confirmName")) !== nameKey(tenant.name)) redirect(`/admin/clients/${id}?error=confirm`);
+  await store.deleteTenant(id, actor);
+  // If the admin was previewing this client, drop the preview so they land back on the admin side cleanly.
+  const jar = await cookies();
+  if (jar.get("cd_view")?.value === id) jar.delete("cd_view");
+  revalidatePath("/admin", "layout");
+  redirect("/admin?deleted=1");
 }
 
 export async function resolveAlertAction(f: FormData) {

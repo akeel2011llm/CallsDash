@@ -4,6 +4,7 @@ import { fmtDate, fmtDateTime, fmtNum } from "@/lib/format";
 import { getLedger, getWallet, usageByChannel } from "@/lib/data";
 import { requestTopUpAction } from "@/lib/actions";
 import { Badge, Notice, PageHead, Stat } from "@/components/ui";
+import { SubmitButton } from "@/components/SubmitButton";
 
 export default async function CreditsPage({ searchParams }: { searchParams: Promise<{ requested?: string }> }) {
   const { tenant } = await requireClient();
@@ -40,7 +41,7 @@ export default async function CreditsPage({ searchParams }: { searchParams: Prom
           <form action={requestTopUpAction} className="row">
             <input type="hidden" name="returnTo" value="/app/credits" />
             <input name="credits" type="number" min="1" step="1" defaultValue={500} style={{ maxWidth: 140 }} aria-label={t("common.credits")} />
-            <button className="btn" type="submit">{t("credits.request")}</button>
+            <SubmitButton className="btn" type="submit">{t("credits.request")}</SubmitButton>
           </form>
         </section>
         <section className="card stack">

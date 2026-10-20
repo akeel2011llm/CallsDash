@@ -3,6 +3,7 @@ import { getT } from "@/lib/i18n";
 import { getAgent } from "@/lib/data";
 import { saveAgentAction } from "@/lib/actions";
 import { Notice, PageHead } from "@/components/ui";
+import { SubmitButton } from "@/components/SubmitButton";
 
 export default async function AgentPage({ searchParams }: { searchParams: Promise<{ saved?: string }> }) {
   const { tenant } = await requireClient();
@@ -28,7 +29,7 @@ export default async function AgentPage({ searchParams }: { searchParams: Promis
             </label>
           ))}
         </fieldset>
-        <div><button className="btn" type="submit" disabled={lockPrompt}>{t("common.save")}</button></div>
+        <div><SubmitButton className="btn" type="submit" disabled={lockPrompt}>{t("common.save")}</SubmitButton></div>
       </form>
 
       <form action={saveAgentAction} className="card stack">
@@ -60,7 +61,7 @@ export default async function AgentPage({ searchParams }: { searchParams: Promis
             <small className="muted">{t("agent.arabicStyle.help")}</small>
           </label>
         </fieldset>
-        <div><button className="btn" type="submit" disabled={lockBeh}>{t("common.save")}</button></div>
+        <div><SubmitButton className="btn" type="submit" disabled={lockBeh}>{t("common.save")}</SubmitButton></div>
       </form>
     </>
   );

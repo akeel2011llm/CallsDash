@@ -1,12 +1,15 @@
 import { getT } from "@/lib/i18n";
 import { adminCreateTenantAction } from "@/lib/actions";
-import { PageHead } from "@/components/ui";
+import { Notice, PageHead } from "@/components/ui";
+import { SubmitButton } from "@/components/SubmitButton";
 
-export default async function NewClient() {
+export default async function NewClient({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
+  const { error } = await searchParams;
   const { t } = await getT();
   return (
     <>
       <PageHead title={t("admin.new.title")} />
+      {(error === "name" || error === "domain") && <Notice tone="warn">{t(`admin.err.${error}` as "admin.err.name")}</Notice>}
       <form action={adminCreateTenantAction} className="card stack" style={{ maxWidth: 560 }}>
         <p className="muted">{t("admin.new.help")}</p>
         <label>{t("admin.new.name")}<input name="name" required maxLength={120} /></label>
@@ -19,7 +22,7 @@ export default async function NewClient() {
             <option value="payg">Pay as you go (BHD 20 + BHD 0.11 per credit)</option>
           </select>
         </label>
-        <button className="btn" type="submit">{t("admin.new.create")}</button>
+        <SubmitButton className="btn" type="submit">{t("admin.new.create")}</SubmitButton>
       </form>
     </>
   );

@@ -3,6 +3,7 @@ import { getT } from "@/lib/i18n";
 import { getKnowledge, getUnanswered } from "@/lib/data";
 import { addKnowledgeAction, deleteKnowledgeAction, dismissUnansweredAction } from "@/lib/actions";
 import { Notice, PageHead } from "@/components/ui";
+import { SubmitButton } from "@/components/SubmitButton";
 
 export default async function KnowledgePage({ searchParams }: { searchParams: Promise<{ q?: string; saved?: string; deleted?: string }> }) {
   const { tenant } = await requireClient();
@@ -27,11 +28,11 @@ export default async function KnowledgePage({ searchParams }: { searchParams: Pr
                 <fieldset disabled={locked}>
                   <textarea name="answer" required maxLength={2000} placeholder={t("knowledge.answer")} />
                   <div className="row">
-                    <button className="btn small" type="submit">{t("knowledge.addToFaq")}</button>
+                    <SubmitButton className="btn small" type="submit">{t("knowledge.addToFaq")}</SubmitButton>
                   </div>
                 </fieldset>
               </form>
-              <form action={dismissUnansweredAction}><input type="hidden" name="id" value={u.id} /><button className="btn small ghost">{t("common.dismiss")}</button></form>
+              <form action={dismissUnansweredAction}><input type="hidden" name="id" value={u.id} /><SubmitButton className="btn small ghost">{t("common.dismiss")}</SubmitButton></form>
             </details>
           ))}
         </section>
@@ -45,7 +46,7 @@ export default async function KnowledgePage({ searchParams }: { searchParams: Pr
             <label>{t("common.language")}
               <select name="language"><option value="en">English</option><option value="ar">العربية</option></select>
             </label>
-            <div><button className="btn" type="submit">{t("common.add")}</button></div>
+            <div><SubmitButton className="btn" type="submit">{t("common.add")}</SubmitButton></div>
           </fieldset>
         </form>
       </section>
@@ -60,7 +61,7 @@ export default async function KnowledgePage({ searchParams }: { searchParams: Pr
             {!locked && (
               <form action={deleteKnowledgeAction}>
                 <input type="hidden" name="id" value={k.id} />
-                <button className="btn small danger">{t("common.delete")}</button>
+                <SubmitButton className="btn small danger">{t("common.delete")}</SubmitButton>
               </form>
             )}
           </div>

@@ -4,6 +4,7 @@ import { getAgent } from "@/lib/data";
 import { saveAgentAction } from "@/lib/actions";
 import { VOICES } from "@/lib/voices";
 import { Notice, PageHead } from "@/components/ui";
+import { SubmitButton } from "@/components/SubmitButton";
 
 export default async function VoicePage({ searchParams }: { searchParams: Promise<{ saved?: string }> }) {
   const { tenant } = await requireClient();
@@ -33,7 +34,7 @@ export default async function VoicePage({ searchParams }: { searchParams: Promis
             </section>
           ))}
         </fieldset>
-        <div><button className="btn" type="submit" disabled={locked}>{t("common.save")}</button></div>
+        <div><SubmitButton className="btn" type="submit" disabled={locked}>{t("common.save")}</SubmitButton></div>
       </form>
     </>
   );
