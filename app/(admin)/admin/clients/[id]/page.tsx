@@ -32,6 +32,7 @@ export default async function ClientAdmin({ params, searchParams }: { params: Pr
         actions={
           <>
             <Link className="btn ghost" href="/admin">{t("common.back")}</Link>
+            <Link className="btn ghost" href={`/admin/clients/${id}/branding`}>{t("brand.open")}</Link>
             <form action={viewAsClient}><input type="hidden" name="tenantId" value={id} /><SubmitButton className="btn">{t("admin.viewAs")}</SubmitButton></form>
           </>
         }
@@ -88,6 +89,7 @@ export default async function ClientAdmin({ params, searchParams }: { params: Pr
             <label>{t("admin.displayName")}<input name="displayName" defaultValue={tenant.branding.displayName} /></label>
             <label>{t("admin.displayNameAr")}<input name="displayNameAr" defaultValue={tenant.branding.displayNameAr} dir="rtl" /></label>
             <label>{t("admin.color")}<input type="color" name="primaryColor" defaultValue={tenant.branding.primaryColor} /></label>
+            <small><Link href={`/admin/clients/${id}/branding`}>{t("brand.open")}</Link></small>
             <label>{t("admin.allowedDomains")}<input name="allowedDomains" defaultValue={tenant.allowedDomains.join(", ")} /></label>
             <label>{t("admin.policy")}
               <select name="zeroBalancePolicy" defaultValue={tenant.zeroBalancePolicy}>

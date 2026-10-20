@@ -4,7 +4,9 @@ import { requireClient } from "@/lib/auth";
 import { getT } from "@/lib/i18n";
 import { fmtDate, fmtDateTime, fmtDuration, fmtNum } from "@/lib/format";
 import { getConversation } from "@/lib/data";
-import { Badge, Notice, PageHead } from "@/components/ui";
+import { reviewConversationAction } from "@/lib/actions";
+import { SubmitButton } from "@/components/SubmitButton";
+import { Badge, Flag, Notice, PageHead } from "@/components/ui";
 
 export default async function ConversationPage({ params }: { params: Promise<{ id: string }> }) {
   const { tenant } = await requireClient();
@@ -16,6 +18,22 @@ export default async function ConversationPage({ params }: { params: Promise<{ i
   return (
     <>
       <PageHead title={t("conversations.title")} actions={<Link className="btn ghost" href="/app/conversations">{t("common.back")}</Link>} />
+      {c.flags.length > 0 && (
+        <section className="card attn-item" style={{ gap: ".6rem" }}>
+          <div className="row" style={{ justifyContent: "space-between" }}>
+            <span className="row">
+              {c.flags.map((f) => <Flag key={f} kind={f}>{t(`flag.${f}` as "flag.lead")}</Flag>)}
+              <small className="muted">{c.flags.map((f) => t(`flag.${f}.help` as "flag.lead.help")).join(" ")}</small>
+            </span>
+            <form action={reviewConversationAction}>
+              <input type="hidden" name="id" value={c.id} />
+              <input type="hidden" name="reviewed" value={c.reviewed ? "0" : "1"} />
+              <input type="hidden" name="returnTo" value={`/app/conversations/${c.id}`} />
+              <SubmitButton className="btn small" type="submit">{c.reviewed ? t("attn.reopen") : t("attn.markReviewed")}</SubmitButton>
+            </form>
+          </div>
+        </section>
+      )}
       <section className="card stack">
         <div className="row">
           <Badge>{t(`channel.${c.channel}` as "channel.website")}</Badge>

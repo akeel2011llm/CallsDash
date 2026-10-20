@@ -3,10 +3,11 @@ import { requireClient } from "@/lib/auth";
 import { getT } from "@/lib/i18n";
 import { fmtDateTime, fmtDuration } from "@/lib/format";
 import { getConversations } from "@/lib/data";
-import { Badge, PageHead } from "@/components/ui";
+import { Badge, Flag, PageHead } from "@/components/ui";
+import { FLAG_KINDS } from "@/lib/flags";
 import { SubmitButton } from "@/components/SubmitButton";
 
-type SP = { q?: string; channel?: string; outcome?: string; lang?: string };
+type SP = { q?: string; channel?: string; outcome?: string; lang?: string; flag?: string };
 
 export default async function ConversationsPage({ searchParams }: { searchParams: Promise<SP> }) {
   const { tenant } = await requireClient();
@@ -14,7 +15,7 @@ export default async function ConversationsPage({ searchParams }: { searchParams
   const { t, locale } = await getT();
   const q = (sp.q ?? "").trim().toLowerCase();
   const rows = (await getConversations(tenant.id)).filter((c) =>
-    (!sp.channel || c.channel === sp.channel) && (!sp.outcome || c.outcome === sp.outcome) && (!sp.lang || c.language === sp.lang) &&
+    (!sp.channel || c.channel === sp.channel) && (!sp.outcome || c.outcome === sp.outcome) && (!sp.lang || c.language === sp.lang) && (!sp.flag || c.flags.includes(sp.flag as never)) &&
     (!q || c.summary.toLowerCase().includes(q) || c.transcript.some((l) => l.text.toLowerCase().includes(q))));
   return (
     <>
@@ -38,6 +39,12 @@ export default async function ConversationsPage({ searchParams }: { searchParams
             <option value="">{t("common.all")}</option><option value="en">English</option><option value="ar">العربية</option>
           </select>
         </label>
+        <label>{t("flag.filter")}
+          <select name="flag" defaultValue={sp.flag ?? ""}>
+            <option value="">{t("common.all")}</option>
+            {FLAG_KINDS.map((k) => <option key={k} value={k}>{t(`flag.${k}` as "flag.lead")}</option>)}
+          </select>
+        </label>
         <SubmitButton className="btn" type="submit">{t("common.search")}</SubmitButton>
       </form>
       <div className="card table-wrap">
@@ -50,7 +57,7 @@ export default async function ConversationsPage({ searchParams }: { searchParams
                 <td>{fmtDateTime(c.startedAt, locale)}</td>
                 <td>{t(`channel.${c.channel}` as "channel.website")}</td>
                 <td><Badge tone={c.outcome === "booked" ? "ok" : c.outcome === "handed_off" ? "warn" : "neutral"}>{t(`outcome.${c.outcome}` as "outcome.booked")}</Badge></td>
-                <td dir={c.language === "ar" ? "rtl" : "ltr"}><Link href={`/app/conversations/${c.id}`}>{c.summary}</Link></td>
+                <td dir={c.language === "ar" ? "rtl" : "ltr"}>{c.flags.length > 0 && <span className="row" style={{ marginBlockEnd: 4 }}>{c.flags.map((f) => <Flag key={f} kind={f}>{t(`flag.${f}` as "flag.lead")}</Flag>)}</span>}<Link href={`/app/conversations/${c.id}`}>{c.summary}</Link></td>
                 <td>{c.mode === "voice" ? fmtDuration(c.durationSec) : `${c.messages} ${t("conversations.messages")}`}</td>
               </tr>
             ))}

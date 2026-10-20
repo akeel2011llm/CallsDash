@@ -72,13 +72,47 @@ export interface Permissions {
   editKnowledge: boolean;
 }
 
+export type SidebarStyle = "light" | "dark" | "brand";
+export type RadiusStyle = "sharp" | "soft" | "round";
+export type FontStyle = "modern" | "classic" | "friendly";
+
+/**
+ * How a client's portal looks and what it says. Everything is optional beyond the name and colour;
+ * an empty string means "not set" (that is how a field is cleared).
+ */
 export interface Branding {
   displayName: string;
   displayNameAr: string;
   primaryColor: string;
+  accentColor?: string;
+  /** A small image stored inline as a data: URL (PNG, JPEG, WebP or SVG, at most 150 KB). */
   logoUrl?: string;
+  sidebar?: SidebarStyle;
+  radius?: RadiusStyle;
+  font?: FontStyle;
+  welcome?: string;
+  welcomeAr?: string;
+  /** Shown under the sign-in form on the client's own login page. */
+  tagline?: string;
+  taglineAr?: string;
+  supportPhone?: string;
+  supportEmail?: string;
+  supportWhatsapp?: string;
+  /** Printed at the bottom of reports. */
+  reportFooter?: string;
+  hidePoweredBy?: boolean;
   domain?: string;
 }
+
+export type FlagKind = "emergency" | "complaint" | "lead";
+export interface FlagRule {
+  enabled: boolean;
+  /** Extra words and phrases (any language) on top of the built-in ones. */
+  keywords: string[];
+  /** Also put an urgent entry in the Messages inbox when a call is flagged. */
+  notifyStaff: boolean;
+}
+export type AlertRules = Record<FlagKind, FlagRule>;
 
 export interface PromptSections {
   identity: string;
@@ -117,6 +151,7 @@ export interface Tenant {
   branding: Branding;
   /** One or more packages / pay-as-you-go plans. All of their credits go into one shared wallet. */
   plans: Plan[];
+  alertRules: AlertRules;
   permissions: Permissions;
   allowedDomains: string[];
   zeroBalancePolicy: ZeroBalancePolicy;
@@ -175,6 +210,10 @@ export interface Conversation {
   creditsCharged: number;
   costUsd: number;
   elevenLabsConversationId?: string;
+  /** Why this conversation needs a person to look at it, found by the alert rules when it was recorded. */
+  flags: FlagKind[];
+  /** A person has looked at the flags. */
+  reviewed: boolean;
 }
 
 export interface KnowledgeItem {

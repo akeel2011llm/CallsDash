@@ -9,6 +9,7 @@ import type {
 import type { Data } from "./demo";
 import { DuplicateError, SlotTakenError } from "../errors";
 import { findDuplicate, nameKey } from "../tenant-keys";
+import { detectFlags, normalizeRules } from "../flags";
 
 /** Minimal query surface shared by `pg` (production) and PGlite (tests). */
 export type Q = <T = Record<string, unknown>>(sql: string, params?: unknown[]) => Promise<T[]>;
@@ -24,7 +25,7 @@ const num = (v: unknown) => Number(v);
 const jsonish = <T>(v: unknown): T => (typeof v === "string" ? JSON.parse(v) : (v as T));
 
 const tenantOf = (r: Row): Tenant => ({
-  id: r.id, slug: r.slug, name: r.name, status: r.status, branding: jsonish(r.branding), plans: normalizePlans(jsonish(r.plan)),
+  id: r.id, slug: r.slug, name: r.name, status: r.status, branding: jsonish(r.branding), plans: normalizePlans(jsonish(r.plan)), alertRules: normalizeRules(r.alert_rules == null ? undefined : jsonish(r.alert_rules)),
   permissions: jsonish(r.permissions), allowedDomains: r.allowed_domains ?? [], zeroBalancePolicy: r.zero_balance_policy,
   lowBalanceThreshold: num(r.low_balance_threshold), retentionDays: r.retention_days, calendarConnected: r.calendar_connected,
   channels: jsonish(r.channels), openingHours: jsonish(r.opening_hours), createdAt: iso(r.created_at),
@@ -51,6 +52,7 @@ const convOf = (r: Row): Conversation => ({
   durationSec: r.duration_sec, messages: r.messages, outcome: r.outcome, summary: r.summary, sentiment: r.sentiment,
   transcript: jsonish(r.transcript), recordingUrl: undefined, // signed URLs for `recording_path` are issued by the storage layer
   creditsCharged: num(r.credits_charged), costUsd: num(r.cost_usd), elevenLabsConversationId: r.elevenlabs_conversation_id ?? undefined,
+  flags: (r.flags ?? []) as Conversation["flags"], reviewed: Boolean(r.reviewed),
 });
 const ledgerOf = (r: Row): LedgerEntry => ({
   id: r.id, tenantId: r.tenant_id, at: iso(r.at), kind: r.kind, credits: num(r.credits), channel: r.channel ?? undefined,
@@ -83,6 +85,10 @@ export const SCHEMA_ADDITIONS = [
      handled_at timestamptz)`,
   `create index if not exists staff_requests_tenant on staff_requests (tenant_id, status, created_at desc)`,
   `alter table staff_requests enable row level security`,
+  `alter table tenants add column if not exists alert_rules jsonb`,
+  `alter table conversations add column if not exists flags text[] not null default '{}'`,
+  `alter table conversations add column if not exists reviewed boolean not null default false`,
+  `create index if not exists conversations_flagged on conversations (tenant_id, started_at desc) where cardinality(flags) > 0`,
 ];
 
 export function createPgData(db: Db): Data {
@@ -95,7 +101,10 @@ export function createPgData(db: Db): Data {
     for (const sql of SCHEMA_ADDITIONS) await q(sql);
   })().catch((e) => { schemaReady = undefined; throw e; }));
   const tx: Db["tx"] = async (fn) => { await ensureSchema(); return db.tx(fn); };
-  const tenantsWhere = async (where: string, params: unknown[]) => (await q<Row>(`select * from tenants ${where}`, params)).map(tenantOf);
+  const tenantsWhere = async (where: string, params: unknown[]) => {
+    await ensureSchema(); // new columns must exist before `select *` can return them
+    return (await q<Row>(`select * from tenants ${where}`, params)).map(tenantOf);
+  };
 
   async function audit(run: Q, actor: string, action: string, tenantId?: string) {
     await run(`insert into audit_log (tenant_id, actor, action) values ($1, $2, $3)`, [tenantId ?? null, actor, action]);
@@ -180,9 +189,9 @@ export function createPgData(db: Db): Data {
     getBookings: async (tenantId) =>
       (await q<Row>(`select * from bookings where tenant_id = $1 order by starts_at`, [tenantId])).map(bookingOf),
     getConversations: async (tenantId) =>
-      (await q<Row>(`select * from conversations where tenant_id = $1 order by started_at desc limit 1000`, [tenantId])).map(convOf),
+      (await ensureSchema(), await q<Row>(`select * from conversations where tenant_id = $1 order by started_at desc limit 1000`, [tenantId])).map(convOf),
     getConversation: async (tenantId, id) =>
-      (await q<Row>(`select * from conversations where tenant_id = $1 and id = $2`, [tenantId, id])).map(convOf)[0],
+      (await ensureSchema(), await q<Row>(`select * from conversations where tenant_id = $1 and id = $2`, [tenantId, id])).map(convOf)[0],
     getKnowledge: async (tenantId) =>
       (await q<Row>(`select * from knowledge_items where tenant_id = $1 order by question`, [tenantId])).map((r): KnowledgeItem => ({
         id: r.id, tenantId: r.tenant_id, question: r.question, answer: r.answer, language: r.language })),
@@ -225,13 +234,14 @@ export function createPgData(db: Db): Data {
     recordConversation: async (tenantId, conv) => tx(async (run) => {
       const t = await lockTenant(run, tenantId); // serialises charges per tenant
       const credits = creditsFor(conv);
+      const flags = detectFlags(conv, t.alertRules);
       const costUsd = round2(conv.mode === "voice" ? (conv.durationSec / 60) * ELEVENLABS_USD_PER_MIN : conv.messages * ELEVENLABS_USD_PER_MSG);
       const ins = await run<Row>(
-        `insert into conversations (tenant_id, elevenlabs_conversation_id, channel, mode, language, started_at, duration_sec, messages, outcome, sentiment, summary, transcript, credits_charged, cost_usd)
-         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+        `insert into conversations (tenant_id, elevenlabs_conversation_id, channel, mode, language, started_at, duration_sec, messages, outcome, sentiment, summary, transcript, credits_charged, cost_usd, flags)
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
          on conflict (elevenlabs_conversation_id) do nothing returning *`,
         [tenantId, conv.elevenLabsConversationId ?? null, conv.channel, conv.mode, conv.language, conv.startedAt, conv.durationSec, conv.messages,
-         conv.outcome, conv.sentiment, conv.summary, JSON.stringify(conv.transcript), credits, costUsd]);
+         conv.outcome, conv.sentiment, conv.summary, JSON.stringify(conv.transcript), credits, costUsd, flags]);
       if (!ins[0]) {
         const existing = await run<Row>(`select * from conversations where elevenlabs_conversation_id = $1`, [conv.elevenLabsConversationId]);
         return { conversation: convOf(existing[0]), shortfall: 0, duplicate: true };
@@ -246,6 +256,9 @@ export function createPgData(db: Db): Data {
         const open = await run(`select 1 from alerts where tenant_id = $1 and not resolved and message like 'Low credit%'`, [tenantId]);
         if (open.length === 0) await run(`insert into alerts (tenant_id, severity, message) values ($1,'warning',$2)`, [tenantId, `Low credit balance: ${low.balance} credits left.`]);
       }
+      if (t.alertRules.emergency.notifyStaff && flags.includes("emergency"))
+        await run(`insert into staff_requests (tenant_id, kind, name, phone, text, urgent, language, conversation_id) values ($1,'handoff','','',$2,true,$3,$4)`,
+          [tenantId, `Call flagged as an emergency: ${conv.summary}`, conv.language, ins[0].id]);
       return { conversation: convOf(ins[0]), shortfall: res.shortfall, duplicate: false };
     }),
 
@@ -296,6 +309,16 @@ export function createPgData(db: Db): Data {
     setStaffRequestStatus: async (tenantId, requestId, status, actor) => tx(async (run) => {
       const rows = await run(`update staff_requests set status = $3, handled_at = case when $3 = 'done' then now() else null end where tenant_id = $1 and id = $2 returning id`, [tenantId, requestId, status]);
       if (rows[0]) await audit(run, actor, status === "done" ? "Marked a message as handled" : "Reopened a message", tenantId);
+    }),
+
+    setAlertRules: async (tenantId, rules, actor) => tx(async (run) => {
+      await run(`update tenants set alert_rules = $2 where id = $1`, [tenantId, JSON.stringify(rules)]);
+      await audit(run, actor, "Alert rules changed", tenantId);
+    }),
+
+    setConversationReviewed: async (tenantId, conversationId, reviewed, actor) => tx(async (run) => {
+      const rows = await run(`update conversations set reviewed = $3 where tenant_id = $1 and id = $2 returning id`, [tenantId, conversationId, reviewed]);
+      if (rows[0]) await audit(run, actor, reviewed ? "Reviewed a flagged conversation" : "Reopened a flagged conversation", tenantId);
     }),
 
     setOpeningHours: async (tenantId, hours, actor) => tx(async (run) => {

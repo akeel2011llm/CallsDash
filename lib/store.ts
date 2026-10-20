@@ -1,5 +1,6 @@
 import "server-only";
 import { addTopUp, balance, creditsFor, deduct, lowBalance, renewPackage, revenuePerCredit, round2, sweepExpired, addMonths, topUpKind } from "./credits";
+import { detectFlags, DEFAULT_RULES } from "./flags";
 import { PLAN_PRESETS, firstPackage, type PlanInput } from "./plans";
 import { DuplicateError, SlotTakenError } from "./errors";
 import { findDuplicate, nameKey } from "./tenant-keys";
@@ -63,6 +64,18 @@ export function setStaffRequestStatus(tenantId: string, requestId: string, statu
   audit(actor, status === "done" ? "Marked a message as handled" : "Reopened a message", tenantId);
 }
 
+export function setAlertRules(tenantId: string, rules: Tenant["alertRules"], actor: string) {
+  getTenant(tenantId)!.alertRules = rules;
+  audit(actor, "Alert rules changed", tenantId);
+}
+
+export function setConversationReviewed(tenantId: string, conversationId: string, reviewed: boolean, actor: string) {
+  const c = db().conversations.find((x) => x.tenantId === tenantId && x.id === conversationId);
+  if (!c) return;
+  c.reviewed = reviewed;
+  audit(actor, reviewed ? "Reviewed a flagged conversation" : "Reopened a flagged conversation", tenantId);
+}
+
 export function setOpeningHours(tenantId: string, hours: Tenant["openingHours"], actor: string) {
   getTenant(tenantId)!.openingHours = hours;
   audit(actor, "Opening hours changed", tenantId);
@@ -93,7 +106,7 @@ export function audit(actor: string, action: string, tenantId?: string) {
 }
 
 /** Credits for one finished conversation, deducted from the wallet. Returns whether the wallet ran dry. */
-export function recordConversation(tenantId: string, conv: Omit<Conversation, "id" | "tenantId" | "creditsCharged" | "costUsd">) {
+export function recordConversation(tenantId: string, conv: Omit<Conversation, "id" | "tenantId" | "creditsCharged" | "costUsd" | "flags" | "reviewed">) {
   const d = db();
   const t = getTenant(tenantId);
   if (!t) throw new Error("unknown tenant");
@@ -105,11 +118,14 @@ export function recordConversation(tenantId: string, conv: Omit<Conversation, "i
   const mine = d.batches.filter((b) => b.tenantId === tenantId);
   const res = deduct(mine, credits, now());
   d.batches = [...d.batches.filter((b) => b.tenantId !== tenantId), ...res.batches];
+  const flags = detectFlags(conv, t.alertRules);
   const full: Conversation = {
-    ...conv, id: id("c"), tenantId, creditsCharged: credits,
+    ...conv, id: id("c"), tenantId, creditsCharged: credits, flags, reviewed: false,
     costUsd: round2(conv.mode === "voice" ? (conv.durationSec / 60) * ELEVENLABS_USD_PER_MIN : conv.messages * ELEVENLABS_USD_PER_MSG),
   };
   d.conversations.unshift(full);
+  if (t.alertRules.emergency.notifyStaff && flags.includes("emergency"))
+    addStaffRequest(tenantId, { kind: "handoff", name: "", phone: "", text: `Call flagged as an emergency: ${conv.summary}`, urgent: true, language: conv.language, conversationId: full.id });
   d.ledger.push({ id: id("l"), tenantId, at: conv.startedAt, kind: "usage", credits: -credits, channel: conv.channel, conversationId: full.id });
   const after = getWallet(tenantId);
   if (res.shortfall > 0 || after.low) {
@@ -288,7 +304,7 @@ export function createTenant(p: {
     plans: [{ ...chosen, contractRef: (p.plan as { contractRef?: string } | undefined)?.contractRef || undefined, id: "plan-1", active: true, periodStart: start }],
     permissions: { editPrompt: true, editVoice: true, editBehaviour: true, editKnowledge: true },
     allowedDomains: p.domain ? [p.domain] : [], zeroBalancePolicy: "pause", lowBalanceThreshold: 0.15, retentionDays: 90,
-    calendarConnected: false, openingHours: DEFAULT_OPENING_HOURS, channels: { website: "pending", whatsapp: "off", instagram: "off", phone: "off" },
+    alertRules: structuredClone(DEFAULT_RULES), calendarConnected: false, openingHours: DEFAULT_OPENING_HOURS, channels: { website: "pending", whatsapp: "off", instagram: "off", phone: "off" },
     createdAt: now().toISOString(),
   };
   d.tenants.push(tenant);

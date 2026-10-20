@@ -152,4 +152,28 @@ describe("pg data layer", () => {
     const r = await data.renewTenantPackage(t.id, "admin");
     expect(r.lapsed + r.carried).toBe(2500); // old batch without a plan id was adopted by the first package
   });
+  it("flags conversations by the client's alert rules and raises an urgent request for emergencies", async () => {
+    const { data } = await setup();
+    const t = await data.createTenant({ name: "Flags", nameAr: "", color: "#112233", domain: "", planType: "package", actor: "admin" });
+    expect(t.alertRules.emergency).toMatchObject({ enabled: true, notifyStaff: true });
+    const base = { channel: "phone", mode: "voice", language: "en", outcome: "answered", startedAt: new Date().toISOString(), durationSec: 60, messages: 0, sentiment: "neutral" } as const;
+    const line = (text: string) => [{ role: "patient" as const, text, atSec: 1 }];
+    const a = await data.recordConversation(t.id, { ...base, summary: "Caller reported chest pain", transcript: line("chest pain"), elevenLabsConversationId: "f1" });
+    const b = await data.recordConversation(t.id, { ...base, summary: "Pricing question", transcript: line("how much is whitening"), elevenLabsConversationId: "f2" });
+    const c = await data.recordConversation(t.id, { ...base, summary: "Opening hours", transcript: line("when do you open"), elevenLabsConversationId: "f3" });
+    expect(a.conversation.flags).toEqual(["emergency"]);
+    expect(b.conversation.flags).toEqual(["lead"]);
+    expect(c.conversation.flags).toEqual([]);
+    const inbox = await data.getStaffRequests(t.id);
+    expect(inbox).toHaveLength(1);
+    expect(inbox[0]).toMatchObject({ kind: "handoff", urgent: true, conversationId: a.conversation.id });
+    // a webhook retry does not raise it twice
+    await data.recordConversation(t.id, { ...base, summary: "Caller reported chest pain", transcript: line("chest pain"), elevenLabsConversationId: "f1" });
+    expect(await data.getStaffRequests(t.id)).toHaveLength(1);
+
+    await data.setConversationReviewed(t.id, a.conversation.id, true, "staff");
+    expect((await data.getConversation(t.id, a.conversation.id))!.reviewed).toBe(true);
+    await data.setAlertRules(t.id, { ...t.alertRules, lead: { enabled: false, keywords: [], notifyStaff: false } }, "staff");
+    expect((await data.getTenant(t.id))!.alertRules.lead.enabled).toBe(false);
+  });
 });
