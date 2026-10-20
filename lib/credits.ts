@@ -29,11 +29,11 @@ export function balance(batches: CreditBatch[], now: Date): number {
 
 const rank = (b: CreditBatch) => (b.kind === "rollover" ? 0 : b.kind === "package" ? 1 : 2);
 
-/** Spend order: rollover first, then this month's package credits, then top-ups oldest first. */
+/** Spend order: rollover first, then package credits, then top-ups; within each group the credits that expire soonest go first. */
 export function spendOrder(batches: CreditBatch[], now: Date): CreditBatch[] {
   return batches
     .filter((b) => isActive(b, now))
-    .sort((a, b) => rank(a) - rank(b) || a.purchasedAt.localeCompare(b.purchasedAt));
+    .sort((a, b) => rank(a) - rank(b) || a.expiresAt.localeCompare(b.expiresAt) || a.purchasedAt.localeCompare(b.purchasedAt));
 }
 
 export interface Allocation {
@@ -100,18 +100,21 @@ export function sweepExpired(batches: CreditBatch[], now: Date): { batches: Cred
  */
 export function renewPackage(
   batches: CreditBatch[],
-  p: { tenantId: string; plan: Plan; periodStart: string; ids: { rollover: string; package: string } },
+  p: { tenantId: string; plan: Plan; periodStart: string; ids: { rollover: string; package: string }; /** Defaults to true; pass false for every package except the first. */ adoptUnowned?: boolean },
 ): { batches: CreditBatch[]; carried: number; lapsed: number } {
+  // Only this package's own batches are touched, so renewing one package never disturbs another.
+  // Batches that predate multi-package support carry no plan id; they belong to the client's first package.
+  const owns = (b: CreditBatch) => b.planId === p.plan.id || (!b.planId && p.adoptUnowned !== false);
   const periodEnd = addMonths(p.periodStart, 1);
   const cap = round2(p.plan.includedCredits * p.plan.rolloverCap);
   const prevPackage = batches
-    .filter((b) => b.kind === "package" && b.tenantId === p.tenantId)
+    .filter((b) => b.kind === "package" && b.tenantId === p.tenantId && owns(b))
     .sort((a, b) => b.purchasedAt.localeCompare(a.purchasedAt))[0];
   const carried = prevPackage ? round2(Math.min(prevPackage.remaining, cap)) : 0;
 
   let lapsed = 0;
   const next = batches.map((b) => {
-    if ((b.kind === "package" || b.kind === "rollover") && b.remaining > 0) {
+    if ((b.kind === "package" || b.kind === "rollover") && b.remaining > 0 && owns(b)) {
       // the carried part of the previous package batch moves to the new rollover batch; the rest lapses
       lapsed = round2(lapsed + b.remaining - (b.id === prevPackage?.id ? carried : 0));
       return { ...b, remaining: 0 };
@@ -124,6 +127,7 @@ export function renewPackage(
       id: p.ids.rollover,
       tenantId: p.tenantId,
       kind: "rollover",
+      planId: p.plan.id,
       amount: carried,
       remaining: carried,
       purchasedAt: p.periodStart,
@@ -135,6 +139,7 @@ export function renewPackage(
     id: p.ids.package,
     tenantId: p.tenantId,
     kind: "package",
+    planId: p.plan.id,
     amount: p.plan.includedCredits,
     remaining: p.plan.includedCredits,
     purchasedAt: p.periodStart,
@@ -144,10 +149,25 @@ export function renewPackage(
   return { batches: next, carried, lapsed };
 }
 
-export function lowBalance(batches: CreditBatch[], plan: Plan, threshold: number, now: Date) {
+export const activePlans = (plans: Plan[]) => plans.filter((p) => p.active);
+export const activePackages = (plans: Plan[]) => activePlans(plans).filter((p) => p.type === "package");
+
+/** Top-ups of a client with any live package are plain top-ups; only a pure pay-as-you-go client buys "payg" credits. */
+export const topUpKind = (plans: Plan[]): "topup" | "payg" => (activePackages(plans).length > 0 ? "topup" : "payg");
+
+/** What one credit earns on average: all live package fees over all included credits, else the pay-as-you-go price. */
+export function revenuePerCredit(plans: Plan[]): number {
+  const pk = activePackages(plans).filter((p) => p.includedCredits > 0);
+  if (pk.length > 0) return pk.reduce((s, p) => s + p.monthlyPriceBhd, 0) / pk.reduce((s, p) => s + p.includedCredits, 0);
+  return activePlans(plans)[0]?.pricePerCreditBhd ?? plans[0]?.pricePerCreditBhd ?? 0;
+}
+
+/** Low balance is measured against everything the client's live packages include (or, for pay as you go, their biggest top-up). */
+export function lowBalance(batches: CreditBatch[], plans: Plan[], threshold: number, now: Date) {
   const bal = balance(batches, now);
   const topups = batches.filter((b) => (b.kind === "topup" || b.kind === "payg") && isActive(b, now));
-  const reference = plan.type === "package" ? plan.includedCredits : Math.max(0, ...topups.map((b) => b.amount));
+  const pk = activePackages(plans);
+  const reference = pk.length > 0 ? round2(pk.reduce((s, p) => s + p.includedCredits, 0)) : Math.max(0, ...topups.map((b) => b.amount));
   return { low: reference > 0 ? bal <= reference * threshold : bal <= 0, balance: bal, reference };
 }
 

@@ -110,4 +110,46 @@ describe("pg data layer", () => {
     expect((await data.getWallet(t.id)).balance).toBe(0);
     expect((await pg.query(`select 1 from credit_ledger where tenant_id = $1 and kind = 'expiry'`, [t.id])).rows).toHaveLength(1);
   });
+  it("keeps a catalogue and lets one client hold several packages in one wallet", async () => {
+    const { data, pg } = await setup();
+    const cat = await data.listPackages();
+    expect(cat.map((c) => c.name)).toEqual(["Clinic package", "Extra credits bundle", "Pay as you go"]);
+    await expect(data.savePackage({ name: " clinic  PACKAGE", nameAr: "", description: "", type: "package", includedCredits: 1, monthlyPriceBhd: 1, pricePerCreditBhd: 1, rolloverCap: 0 }, "admin")).rejects.toMatchObject({ field: "name" });
+    const custom = await data.savePackage({ name: "Premium", nameAr: "", description: "", type: "package", includedCredits: 5000, monthlyPriceBhd: 350, pricePerCreditBhd: 0.07, rolloverCap: 0.5 }, "admin");
+    await data.archivePackage(custom.id, true, "admin");
+    expect((await data.listPackages()).find((c) => c.id === custom.id)!.archived).toBe(true);
+
+    const clinic = cat[0], addon = cat[1];
+    const t = await data.createTenant({ name: "Two Packs", nameAr: "", color: "#112233", domain: "", planType: "package", actor: "admin", plan: { ...clinic, packageId: clinic.id, contractRef: "C-17" } });
+    expect(t.plans).toHaveLength(1);
+    expect(t.plans[0]).toMatchObject({ name: "Clinic package", contractRef: "C-17", packageId: clinic.id, active: true });
+    const added = await data.addPlan(t.id, { ...addon, monthlyPriceBhd: 70, packageId: addon.id }, "admin");
+    const w = await data.getWallet(t.id);
+    expect(w.balance).toBe(3500);
+    expect(w.reference).toBe(3500);
+    expect((await data.getTenant(t.id))!.plans.map((p) => p.monthlyPriceBhd)).toEqual([199, 70]);
+
+    await pg.query(`update credit_batches set remaining = 100 where tenant_id = $1 and plan_id = $2`, [t.id, added.id]);
+    await data.renewTenantPackage(t.id, "admin", added.id);
+    const after = await data.getWallet(t.id);
+    const live = after.batches.filter((b) => b.remaining > 0);
+    expect(live.filter((b) => b.planId === "plan-1" && b.kind === "package")).toHaveLength(1); // first package untouched
+    expect(live.find((b) => b.kind === "rollover")).toMatchObject({ planId: added.id, remaining: 100 });
+    expect(after.balance).toBe(2500 + 1000 + 100);
+
+    expect(await data.endPlan(t.id, added.id, "admin")).toBe(true);
+    expect(await data.endPlan(t.id, "plan-1", "admin")).toBe(false); // the last active plan stays
+    expect((await data.getWallet(t.id)).reference).toBe(2500);
+  });
+
+  it("reads a client stored with the old single-plan format", async () => {
+    const { data, pg } = await setup();
+    const t = await data.createTenant({ name: "Legacy", nameAr: "", color: "#112233", domain: "", planType: "package", actor: "admin" });
+    await pg.query(`update tenants set plan = $2::jsonb where id = $1`, [t.id, JSON.stringify({ type: "package", name: "Clinic package", includedCredits: 2500, monthlyPriceBhd: 199, pricePerCreditBhd: 0.08, rolloverCap: 0.5, periodStart: "2026-10-01T00:00:00.000Z" })]);
+    await pg.query(`update credit_batches set plan_id = null where tenant_id = $1`, [t.id]);
+    const got = (await data.getTenant(t.id))!;
+    expect(got.plans).toMatchObject([{ id: "plan-1", active: true }]);
+    const r = await data.renewTenantPackage(t.id, "admin");
+    expect(r.lapsed + r.carried).toBe(2500); // old batch without a plan id was adopted by the first package
+  });
 });

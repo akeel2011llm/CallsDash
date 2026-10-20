@@ -1,7 +1,8 @@
 import "server-only";
-import { addTopUp, balance, creditsFor, deduct, lowBalance, renewPackage, round2, sweepExpired, addMonths } from "./credits";
+import { addTopUp, balance, creditsFor, deduct, lowBalance, renewPackage, revenuePerCredit, round2, sweepExpired, addMonths, topUpKind } from "./credits";
+import { PLAN_PRESETS, firstPackage, type PlanInput } from "./plans";
 import { DuplicateError, SlotTakenError } from "./errors";
-import { findDuplicate } from "./tenant-keys";
+import { findDuplicate, nameKey } from "./tenant-keys";
 import { DEFAULT_OPENING_HOURS } from "./availability";
 import { seed, type DB, ELEVENLABS_USD_PER_MIN, ELEVENLABS_USD_PER_MSG } from "./seed";
 import type {
@@ -55,7 +56,7 @@ export function getWallet(tenantId: string) {
   const t = getTenant(tenantId)!;
   const batches = db().batches.filter((b) => b.tenantId === tenantId);
   const n = now();
-  const low = lowBalance(batches, t.plan, t.lowBalanceThreshold, n);
+  const low = lowBalance(batches, t.plans, t.lowBalanceThreshold, n);
   return { batches, balance: balance(batches, n), low: low.low, reference: low.reference };
 }
 
@@ -99,7 +100,7 @@ export function recordConversation(tenantId: string, conv: Omit<Conversation, "i
 export function topUp(tenantId: string, credits: number, actor: string, note = "Top-up") {
   const d = db();
   const t = getTenant(tenantId)!;
-  d.batches = addTopUp(d.batches, { id: id("cb"), tenantId, amount: credits, now: now(), kind: t.plan.type === "payg" ? "payg" : "topup", note });
+  d.batches = addTopUp(d.batches, { id: id("cb"), tenantId, amount: credits, now: now(), kind: topUpKind(t.plans), note });
   d.ledger.push({ id: id("l"), tenantId, at: now().toISOString(), kind: "topup", credits, note });
   d.topUpRequests.filter((r) => r.tenantId === tenantId && r.status === "open").forEach((r) => (r.status = "done"));
   d.alerts.filter((a) => a.tenantId === tenantId && a.message.startsWith("Low credit")).forEach((a) => (a.resolved = true));
@@ -111,23 +112,49 @@ export function requestTopUp(tenantId: string, credits: number, actor: string) {
   audit(actor, `Requested a top-up of ${credits} credits`, tenantId);
 }
 
-/** Start the next package period (admin button here; a monthly cron in production). */
-export function renewTenantPackage(tenantId: string, actor: string) {
+/** Start the next period of one package (admin button here; a monthly cron in production). Other packages are untouched. */
+export function renewTenantPackage(tenantId: string, actor: string, planId?: string) {
   const d = db();
   const t = getTenant(tenantId)!;
-  if (t.plan.type !== "package") throw new Error("not a package plan");
-  const periodStart = addMonths(t.plan.periodStart, 1);
+  const plan = t.plans.find((p) => p.active && p.type === "package" && (!planId || p.id === planId));
+  if (!plan) throw new Error("not a package plan");
+  const periodStart = addMonths(plan.periodStart, 1);
   const res = renewPackage(d.batches.filter((b) => b.tenantId === tenantId), {
-    tenantId, plan: t.plan, periodStart, ids: { rollover: id("cb"), package: id("cb") },
+    tenantId, plan, periodStart, ids: { rollover: id("cb"), package: id("cb") }, adoptUnowned: firstPackage(t.plans)?.id === plan.id,
   });
   d.batches = [...d.batches.filter((b) => b.tenantId !== tenantId), ...res.batches];
-  t.plan.periodStart = periodStart;
+  plan.periodStart = periodStart;
   const at = now().toISOString();
-  if (res.lapsed > 0) d.ledger.push({ id: id("l"), tenantId, at, kind: "expiry", credits: -res.lapsed, note: "Unused package credits lapsed" });
-  if (res.carried > 0) d.ledger.push({ id: id("l"), tenantId, at, kind: "rollover", credits: res.carried, note: "Rollover from previous month" });
-  d.ledger.push({ id: id("l"), tenantId, at, kind: "package_renewal", credits: t.plan.includedCredits, note: t.plan.name });
-  audit(actor, `Renewed package: ${res.carried} credits rolled over, ${res.lapsed} lapsed`, tenantId);
+  if (res.lapsed > 0) d.ledger.push({ id: id("l"), tenantId, at, kind: "expiry", credits: -res.lapsed, note: `Unused credits lapsed (${plan.name})` });
+  if (res.carried > 0) d.ledger.push({ id: id("l"), tenantId, at, kind: "rollover", credits: res.carried, note: `Rollover from previous month (${plan.name})` });
+  d.ledger.push({ id: id("l"), tenantId, at, kind: "package_renewal", credits: plan.includedCredits, note: plan.name });
+  audit(actor, `Renewed ${plan.name}: ${res.carried} credits rolled over, ${res.lapsed} lapsed`, tenantId);
   return res;
+}
+
+/** Adds another plan to a client. A package starts today with its included credits; they join the shared wallet. */
+export function addPlan(tenantId: string, input: PlanInput & { packageId?: string; contractRef?: string }, actor: string) {
+  const d = db();
+  const t = getTenant(tenantId)!;
+  const start = now().toISOString();
+  const plan = { ...input, contractRef: input.contractRef || undefined, id: id("plan"), active: true, periodStart: start };
+  t.plans.push(plan);
+  if (plan.type === "package") {
+    d.batches.push({ id: id("cb"), tenantId, kind: "package", planId: plan.id, amount: plan.includedCredits, remaining: plan.includedCredits, purchasedAt: start, expiresAt: addMonths(start, 1), note: plan.name });
+    d.ledger.push({ id: id("l"), tenantId, at: start, kind: "package_renewal", credits: plan.includedCredits, note: plan.name });
+  }
+  audit(actor, `Added plan ${plan.name}`, tenantId);
+  return plan;
+}
+
+/** Stops a plan from renewing. Credits already paid for stay usable until they expire. At least one plan must remain active. */
+export function endPlan(tenantId: string, planId: string, actor: string) {
+  const t = getTenant(tenantId)!;
+  const plan = t.plans.find((p) => p.id === planId && p.active);
+  if (!plan || t.plans.filter((p) => p.active).length < 2) return false;
+  plan.active = false;
+  audit(actor, `Ended plan ${plan.name}`, tenantId);
+  return true;
 }
 
 export function saveAgent(tenantId: string, settings: AgentSettings, actor: string, summary: string) {
@@ -222,20 +249,21 @@ export function resolveAlert(alertId: string) {
 
 export function createTenant(p: {
   name: string; nameAr: string; color: string; domain: string; planType: "package" | "payg"; actor: string;
+  /** Terms chosen from the catalogue; when absent the default package for `planType` is used. */
+  plan?: PlanInput & { packageId?: string; contractRef?: string };
 }) {
   const d = db();
   const clash = findDuplicate(d.tenants, { name: p.name, domains: p.domain ? [p.domain] : [] });
   if (clash) throw new DuplicateError(clash);
   const tid = id("t");
   const start = new Date(Date.UTC(now().getUTCFullYear(), now().getUTCMonth(), 1)).toISOString();
-  const pkg = p.planType === "package";
+  const chosen = p.plan ?? (p.planType === "package" ? PLAN_PRESETS.clinic : PLAN_PRESETS.payg);
+  const pkg = chosen.type === "package";
   const tenant: Tenant = {
     id: tid, slug: p.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || tid,
     name: p.name, status: "live",
     branding: { displayName: p.name, displayNameAr: p.nameAr || p.name, primaryColor: p.color, domain: p.domain || undefined },
-    plan: pkg
-      ? { type: "package", name: "Clinic package", includedCredits: 2500, monthlyPriceBhd: 199, pricePerCreditBhd: 0.08, rolloverCap: 0.5, periodStart: start }
-      : { type: "payg", name: "Pay as you go", includedCredits: 0, monthlyPriceBhd: 20, pricePerCreditBhd: 0.11, rolloverCap: 0, periodStart: start },
+    plans: [{ ...chosen, contractRef: (p.plan as { contractRef?: string } | undefined)?.contractRef || undefined, id: "plan-1", active: true, periodStart: start }],
     permissions: { editPrompt: true, editVoice: true, editBehaviour: true, editKnowledge: true },
     allowedDomains: p.domain ? [p.domain] : [], zeroBalancePolicy: "pause", lowBalanceThreshold: 0.15, retentionDays: 90,
     calendarConnected: false, openingHours: DEFAULT_OPENING_HOURS, channels: { website: "pending", whatsapp: "off", instagram: "off", phone: "off" },
@@ -245,8 +273,8 @@ export function createTenant(p: {
   const template = d.agents.t_alnoor;
   d.agents[tid] = { ...structuredClone(template), elevenLabsAgentId: "", prompt: { ...template.prompt, identity: `You are the virtual receptionist of ${p.name}. Be warm, calm and concise.` } };
   if (pkg) {
-    d.batches.push({ id: id("cb"), tenantId: tid, kind: "package", amount: 2500, remaining: 2500, purchasedAt: start, expiresAt: addMonths(start, 1), note: "Clinic package" });
-    d.ledger.push({ id: id("l"), tenantId: tid, at: now().toISOString(), kind: "package_renewal", credits: 2500, note: "Clinic package" });
+    d.batches.push({ id: id("cb"), tenantId: tid, kind: "package", planId: "plan-1", amount: chosen.includedCredits, remaining: chosen.includedCredits, purchasedAt: start, expiresAt: addMonths(start, 1), note: chosen.name });
+    d.ledger.push({ id: id("l"), tenantId: tid, at: now().toISOString(), kind: "package_renewal", credits: chosen.includedCredits, note: chosen.name });
   }
   audit(p.actor, "Created client from clinic template", tid);
   return tenant;
@@ -265,12 +293,34 @@ export function deleteTenant(tenantId: string, actor: string) {
   audit(actor, `Deleted client "${t.name}"`);
 }
 
+export const listPackages = () => db().packages;
+
+/** Creates (no id) or updates a catalogue package. Names are unique. Existing clients keep the terms they signed. */
+export function savePackage(input: PlanInput & { id?: string; nameAr: string; description: string }, actor: string) {
+  const d = db();
+  if (d.packages.some((x) => x.id !== input.id && nameKey(x.name) === nameKey(input.name))) throw new DuplicateError("name");
+  const { id: pid, ...rest } = input;
+  const existing = pid ? d.packages.find((x) => x.id === pid) : undefined;
+  if (existing) Object.assign(existing, rest);
+  const pkg = existing ?? { ...rest, id: id("pkg"), archived: false };
+  if (!existing) d.packages.push(pkg);
+  audit(actor, `${existing ? "Updated" : "Created"} package "${pkg.name}"`);
+  return pkg;
+}
+
+export function archivePackage(packageId: string, archived: boolean, actor: string) {
+  const pkg = db().packages.find((x) => x.id === packageId);
+  if (!pkg) return;
+  pkg.archived = archived;
+  audit(actor, `${archived ? "Archived" : "Restored"} package "${pkg.name}"`);
+}
+
 export function marginFor(tenantId: string, since: Date) {
   const t = getTenant(tenantId)!;
   const convs = getConversations(tenantId).filter((c) => new Date(c.startedAt) >= since);
   const credits = round2(convs.reduce((s, c) => s + c.creditsCharged, 0));
   const costBhd = round2(convs.reduce((s, c) => s + c.costUsd, 0) * 0.377);
-  const perCredit = t.plan.type === "package" && t.plan.includedCredits > 0 ? t.plan.monthlyPriceBhd / t.plan.includedCredits : t.plan.pricePerCreditBhd;
+  const perCredit = revenuePerCredit(t.plans);
   const revenueBhd = round2(credits * perCredit);
   return { conversations: convs.length, credits, costBhd, revenueBhd, marginBhd: round2(revenueBhd - costBhd) };
 }
