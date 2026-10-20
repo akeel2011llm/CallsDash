@@ -4,7 +4,8 @@ import { requireAdmin } from "@/lib/auth";
 import { getT } from "@/lib/i18n";
 import { getTenant } from "@/lib/data";
 import { adminBrandingAction } from "@/lib/actions";
-import { FONT_STYLES, RADIUS_STYLES, SIDEBAR_STYLES, isHex } from "@/lib/theme";
+import { publicBranding } from "@/lib/brand-image";
+import { FONT_STYLES, PATTERN_STYLES, RADIUS_STYLES, SIDEBAR_STYLES, isHex, patternOf } from "@/lib/theme";
 import { Notice, PageHead } from "@/components/ui";
 import { SubmitButton } from "@/components/SubmitButton";
 import { BrandingPreview } from "@/components/BrandingPreview";
@@ -49,6 +50,11 @@ export default async function BrandingPage({ params, searchParams }: { params: P
               <small className="muted">{t("brand.logo.help")}</small>
             </label>
             {b.logoUrl && <label className="inline"><input type="checkbox" name="removeLogo" />{t("brand.logo.remove")}</label>}
+            <label>{t("brand.cover")}
+              <input type="file" name="cover" accept="image/png,image/jpeg,image/webp,image/svg+xml" />
+              <small className="muted">{t("brand.cover.help")}</small>
+            </label>
+            {b.coverUrl && <label className="inline"><input type="checkbox" name="removeCover" />{t("brand.cover.remove")}</label>}
           </section>
 
           <section className="card stack">
@@ -63,6 +69,7 @@ export default async function BrandingPage({ params, searchParams }: { params: P
             <h2>{t("brand.layout")}</h2>
             <div className="stack"><strong>{t("brand.sidebar")}</strong>{choices("sidebar", SIDEBAR_STYLES, b.sidebar ?? "light", (k) => t(`brand.sidebar.${k}` as "brand.sidebar.light"))}</div>
             <div className="stack"><strong>{t("brand.radius")}</strong>{choices("radius", RADIUS_STYLES, b.radius ?? "soft", (k) => t(`brand.radius.${k}` as "brand.radius.soft"))}</div>
+            <div className="stack"><strong>{t("brand.pattern")}</strong>{choices("pattern", PATTERN_STYLES, patternOf(b), (k) => t(`brand.pattern.${k}` as "brand.pattern.waves"))}</div>
             <div className="stack"><strong>{t("brand.font")}</strong>{choices("font", FONT_STYLES, b.font ?? "modern", (k) => t(`brand.font.${k}` as "brand.font.modern"))}</div>
           </section>
 
@@ -92,7 +99,7 @@ export default async function BrandingPage({ params, searchParams }: { params: P
 
         <aside className="sticky card stack">
           <h2>{t("brand.preview")}</h2>
-          <BrandingPreview formId="brand-form" initial={b} words={{ title: t("home.greeting"), body: t("brand.sample.body"), nav: t("brand.sample.nav"), stat: t("home.conversations") }} />
+          <BrandingPreview formId="brand-form" initial={publicBranding(tenant)} words={{ title: t("home.greeting"), body: t("brand.sample.body"), nav: t("brand.sample.nav"), stat: t("home.conversations") }} />
         </aside>
       </div>
     </>

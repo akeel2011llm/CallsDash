@@ -72,3 +72,5 @@ The page's domain must be in the client's allowed domains (admin > client > bran
 ## Webhook
 
 Point the ElevenLabs post-call webhook to `https://YOUR-HOST/api/webhooks/elevenlabs` and set `ELEVENLABS_WEBHOOK_SECRET`. Requests without a valid `ElevenLabs-Signature` are rejected.
+
+Using your own domain (www.callsdash.com), sign-in routing and the installable app: see [docs/domain.md](docs/domain.md).

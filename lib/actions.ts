@@ -12,7 +12,7 @@ import { nameKey } from "./tenant-keys";
 import { cleanOpeningHours } from "./availability";
 import { cleanCatalogInput, type PlanInput } from "./plans";
 import { FLAG_KINDS, normalizeRules } from "./flags";
-import { FONT_STYLES, RADIUS_STYLES, SIDEBAR_STYLES, isHex, isLogoUrl, logoDataUrl } from "./theme";
+import { FONT_STYLES, PATTERN_STYLES, RADIUS_STYLES, SIDEBAR_STYLES, coverDataUrl, isCoverUrl, isHex, isLogoUrl, logoDataUrl } from "./theme";
 import type { AgentSettings, Branding, BookingStatus, Locale, Permissions } from "./types";
 
 const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
@@ -332,6 +332,8 @@ export async function adminBrandingAction(f: FormData) {
   if (SIDEBAR_STYLES.includes(sidebar as never)) b.sidebar = sidebar as Branding["sidebar"];
   if (RADIUS_STYLES.includes(radius as never)) b.radius = radius as Branding["radius"];
   if (FONT_STYLES.includes(font as never)) b.font = font as Branding["font"];
+  const pattern = str(f, "pattern");
+  if (PATTERN_STYLES.includes(pattern as never)) b.pattern = pattern as Branding["pattern"];
 
   let logoError = false;
   const file = f.get("logo");
@@ -339,6 +341,13 @@ export async function adminBrandingAction(f: FormData) {
   else if (file instanceof File && file.size > 0) {
     const url = await logoDataUrl(file);
     if (url && isLogoUrl(url)) b.logoUrl = url;
+    else logoError = true;
+  }
+  const cover = f.get("cover");
+  if (f.get("removeCover") === "on") b.coverUrl = "";
+  else if (cover instanceof File && cover.size > 0) {
+    const url = await coverDataUrl(cover);
+    if (url && isCoverUrl(url)) b.coverUrl = url;
     else logoError = true;
   }
   await store.updateTenant(id, { branding: b }, actor);

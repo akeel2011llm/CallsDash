@@ -8,6 +8,9 @@ import { flagRank, needsAttention } from "@/lib/flags";
 import { Badge, Flag, Notice, PageHead, Stat } from "@/components/ui";
 import { DailyBars, HBars, SERIES, SegmentBar } from "@/components/charts";
 import { Icon } from "@/components/icons";
+import { ReceptionArt } from "@/components/art";
+import { publicBranding } from "@/lib/brand-image";
+import { patternOf } from "@/lib/theme";
 
 const CHANNELS = ["website", "whatsapp", "instagram", "phone"] as const;
 
@@ -21,12 +24,14 @@ export default async function Home() {
   const trend = dailyCounts(convs, 14, now);
   const upcoming = bookings.filter((b) => new Date(b.startsAt).getTime() > now && b.status !== "cancelled").sort((a, b) => a.startsAt.localeCompare(b.startsAt));
   const attention = convs.filter(needsAttention).sort((a, b) => flagRank[a.flags.slice().sort((x, y) => flagRank[x] - flagRank[y])[0]] - flagRank[b.flags.slice().sort((x, y) => flagRank[x] - flagRank[y])[0]] || b.startedAt.localeCompare(a.startedAt));
+  const brand = publicBranding(tenant);
   const name = locale === "ar" ? tenant.branding.displayNameAr : tenant.branding.displayName;
   const welcome = (locale === "ar" ? tenant.branding.welcomeAr : tenant.branding.welcome) || "";
   const delta = prevWeek.total > 0 ? Math.round(((week.total - prevWeek.total) / prevWeek.total) * 100) : null;
   return (
     <>
-      <section className="hero">
+      <section className="hero" data-pattern={patternOf(brand) === "none" ? undefined : patternOf(brand)} data-cover={brand.coverUrl ? "" : undefined} style={brand.coverUrl ? ({ "--cover": `url("${brand.coverUrl}")` } as React.CSSProperties) : undefined}>
+        {!brand.coverUrl && <ReceptionArt className="art" />}
         <div>
           <h1>{t("home.greeting")}, {name}</h1>
           {welcome && <p>{welcome}</p>}
@@ -91,7 +96,7 @@ export default async function Home() {
             <Link href="/app/conversations">{t("home.viewAll")}</Link>
           </div>
           <div className="table-wrap">
-            <table>
+            <table className="cards">
               <tbody>
                 {convs.slice(0, 6).map((c) => (
                   <tr key={c.id}>

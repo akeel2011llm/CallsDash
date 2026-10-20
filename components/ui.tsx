@@ -1,5 +1,6 @@
 import { Icon } from "./icons";
 import { Sparkline } from "./charts";
+import { EmptyArt } from "./art";
 
 export function Stat({ label, value, hint, tone, icon, trend, delta }: {
   label: string; value: React.ReactNode; hint?: string; tone?: "warn" | "ok" | "bad"; icon?: string; trend?: number[]; delta?: { text: string; up: boolean };
@@ -43,4 +44,14 @@ const FLAG_ICON = { emergency: "siren", complaint: "alert", lead: "target" } as 
 /** An icon and a word, never colour alone. */
 export function Flag({ kind, children }: { kind: "emergency" | "complaint" | "lead"; children: React.ReactNode }) {
   return <span className={`flag ${kind}`}><Icon name={FLAG_ICON[kind]} size={14} />{children}</span>;
+}
+
+/** A friendly empty state: a small illustration and one line. */
+export function Empty({ children, kind = "check" }: { children: React.ReactNode; kind?: "check" | "inbox" }) {
+  return (
+    <div className="empty">
+      <EmptyArt kind={kind} />
+      <p>{children}</p>
+    </div>
+  );
 }

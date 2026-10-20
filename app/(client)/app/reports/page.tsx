@@ -8,6 +8,7 @@ import { FLAG_KINDS } from "@/lib/flags";
 import { Flag, PageHead, Stat } from "@/components/ui";
 import { DailyBars, HBars, SERIES, SegmentBar } from "@/components/charts";
 import { Icon } from "@/components/icons";
+import { publicBranding } from "@/lib/brand-image";
 import { PrintButton } from "@/components/PrintButton";
 
 const CHANNELS = ["website", "whatsapp", "instagram", "phone"] as const;
@@ -22,6 +23,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
   const convs = lastDays(await getConversations(tenant.id), days, now);
   const s = summarize(convs);
   const perDay = dailyCounts(convs, days, now);
+  const brand = publicBranding(tenant);
   const name = locale === "ar" ? tenant.branding.displayNameAr : tenant.branding.displayName;
   const from = perDay[0].key, to = perDay[perDay.length - 1].key;
   return (
@@ -40,7 +42,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
         }
       />
       <div className="print-head">
-        {tenant.branding.logoUrl && <img src={tenant.branding.logoUrl} alt="" />}
+        {brand.logoUrl && <img src={brand.logoUrl} alt="" />}
         <div>
           <strong>{name}</strong>
           <div>{t("reports.title")} · {t("reports.period")}: {from} → {to}</div>

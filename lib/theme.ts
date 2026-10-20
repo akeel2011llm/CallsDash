@@ -1,4 +1,4 @@
-import type { Branding, FontStyle, RadiusStyle, SidebarStyle } from "./types";
+import type { Branding, FontStyle, PatternStyle, RadiusStyle, SidebarStyle } from "./types";
 
 const HEX = /^#[0-9a-fA-F]{6}$/;
 export const isHex = (v: unknown): v is string => typeof v === "string" && HEX.test(v);
@@ -6,6 +6,8 @@ export const isHex = (v: unknown): v is string => typeof v === "string" && HEX.t
 export const SIDEBAR_STYLES: SidebarStyle[] = ["light", "dark", "brand"];
 export const RADIUS_STYLES: RadiusStyle[] = ["sharp", "soft", "round"];
 export const FONT_STYLES: FontStyle[] = ["modern", "classic", "friendly"];
+export const PATTERN_STYLES: PatternStyle[] = ["waves", "dots", "mesh", "none"];
+export const patternOf = (b: Pick<Branding, "pattern">): PatternStyle => (PATTERN_STYLES.includes(b.pattern as PatternStyle) ? (b.pattern as PatternStyle) : "waves");
 
 const RADIUS: Record<RadiusStyle, string> = { sharp: "4px", soft: "10px", round: "18px" };
 
@@ -49,9 +51,15 @@ export const sidebarOf = (b: Pick<Branding, "sidebar">): SidebarStyle => (SIDEBA
 
 /** Accepts a small raster or SVG image and returns it as a data: URL, or null when it is not acceptable. */
 export const LOGO_MAX_BYTES = 150 * 1024;
-const LOGO_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/svg+xml"]);
-export async function logoDataUrl(file: File): Promise<string | null> {
-  if (!LOGO_TYPES.has(file.type) || file.size === 0 || file.size > LOGO_MAX_BYTES) return null;
+export const COVER_MAX_BYTES = 300 * 1024;
+const IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/svg+xml"]);
+export async function imageDataUrl(file: File, maxBytes: number): Promise<string | null> {
+  if (!IMAGE_TYPES.has(file.type) || file.size === 0 || file.size > maxBytes) return null;
   return `data:${file.type};base64,${Buffer.from(await file.arrayBuffer()).toString("base64")}`;
 }
-export const isLogoUrl = (v: unknown): v is string => typeof v === "string" && /^data:image\/(png|jpeg|webp|svg\+xml);base64,[A-Za-z0-9+/=]+$/.test(v) && v.length < LOGO_MAX_BYTES * 1.4;
+export const logoDataUrl = (file: File) => imageDataUrl(file, LOGO_MAX_BYTES);
+export const coverDataUrl = (file: File) => imageDataUrl(file, COVER_MAX_BYTES);
+const isImageUrl = (v: unknown, maxBytes: number): v is string =>
+  typeof v === "string" && /^data:image\/(png|jpeg|webp|svg\+xml);base64,[A-Za-z0-9+/=]+$/.test(v) && v.length < maxBytes * 1.4;
+export const isLogoUrl = (v: unknown): v is string => isImageUrl(v, LOGO_MAX_BYTES);
+export const isCoverUrl = (v: unknown): v is string => isImageUrl(v, COVER_MAX_BYTES);
