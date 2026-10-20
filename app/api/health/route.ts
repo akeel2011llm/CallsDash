@@ -18,6 +18,7 @@ export async function GET() {
     databaseUrl: usingDatabase(),
   };
   if (usingDatabase()) {
+    out.connectionString = describeUrl(process.env.DATABASE_URL!);
     try {
       const q = createNodePgDb(process.env.DATABASE_URL!).q;
       await q("select 1");
@@ -31,4 +32,26 @@ export async function GET() {
     }
   }
   return NextResponse.json(out);
+}
+
+/** Shape of the connection string, to spot common typos. Never returns the host, user or password themselves. */
+function describeUrl(raw: string) {
+  const info: Record<string, unknown> = { atSigns: (raw.match(/@/g) ?? []).length };
+  try {
+    const u = new URL(raw);
+    const pw = decodeURIComponent(u.password);
+    Object.assign(info, {
+      parsed: true,
+      protocol: u.protocol,
+      hostKind: u.hostname.endsWith(".pooler.supabase.com") ? "pooler" : /^db\..+\.supabase\.co$/.test(u.hostname) ? "direct" : "other",
+      port: u.port || "default",
+      userHasProjectRef: decodeURIComponent(u.username).startsWith("postgres."),
+      passwordSet: pw.length > 0,
+      passwordHasBrackets: /^\[|\]$/.test(pw),
+      passwordIsPlaceholder: /YOUR-PASSWORD/i.test(pw),
+    });
+  } catch {
+    info.parsed = false; // usually an unencoded symbol in the password
+  }
+  return info;
 }
