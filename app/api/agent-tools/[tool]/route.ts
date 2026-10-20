@@ -50,6 +50,16 @@ export async function POST(req: Request, ctx: { params: Promise<{ tool: string }
         return ok(await svc.cancelAppointment(tenant.id, { bookingId: str(body.booking_id), patientPhone: str(body.patient_phone) }));
       case "reschedule_appointment":
         return ok(await svc.rescheduleAppointment(tenant.id, { bookingId: str(body.booking_id), patientPhone: str(body.patient_phone), newStartsAt: str(body.new_starts_at) }));
+      case "take_message":
+        return ok(await svc.takeMessage(tenant.id, {
+          name: str(body.patient_name), phone: str(body.patient_phone), message: str(body.message),
+          language: str(body.language), conversationId: str(body.conversation_id) || undefined,
+        }));
+      case "handoff_to_staff":
+        return ok(await svc.handoffToStaff(tenant.id, {
+          name: str(body.patient_name), phone: str(body.patient_phone), reason: str(body.reason), urgent: body.urgent === true || body.urgent === "true",
+          language: str(body.language), conversationId: str(body.conversation_id) || undefined,
+        }));
       default:
         return NextResponse.json({ error: "unknown tool" }, { status: 404 });
     }

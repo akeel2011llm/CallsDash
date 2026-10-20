@@ -11,6 +11,53 @@ export const DEFAULT_OPENING_HOURS: OpeningHours = {
   "4": [["08:00", "21:00"]], "5": [["16:00", "21:00"]], "6": [["08:00", "21:00"]],
 };
 
+const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+/**
+ * Validates opening hours typed in the dashboard: up to two intervals per weekday, "HH:MM", opening before closing,
+ * no overlap. Returns the cleaned hours, or null when anything is malformed. A missing or empty day means closed.
+ */
+export function cleanOpeningHours(input: Record<string, [string, string][] | undefined>): OpeningHours | null {
+  const out: OpeningHours = {};
+  for (let d = 0; d < 7; d++) {
+    const list = (input[String(d)] ?? []).filter(([a, b]) => a || b);
+    if (list.length > 2) return null;
+    let prevEnd = -1;
+    const day: [string, string][] = [];
+    for (const [a, b] of [...list].sort((x, y) => x[0].localeCompare(y[0]))) {
+      if (!TIME.test(a) || !TIME.test(b) || hm(a) >= hm(b) || hm(a) < prevEnd) return null;
+      prevEnd = hm(b);
+      day.push([a, b]);
+    }
+    out[String(d)] = day;
+  }
+  return out;
+}
+
+const localParts = (ms: number) => {
+  const l = new Date(ms + LOCAL_OFFSET_MIN * 60_000);
+  return { weekday: l.getUTCDay(), minutes: l.getUTCHours() * 60 + l.getUTCMinutes() };
+};
+
+export function isOpenAt(hours: OpeningHours, ms: number): boolean {
+  const { weekday, minutes } = localParts(ms);
+  return (hours[String(weekday)] ?? []).some(([a, b]) => minutes >= hm(a) && minutes < hm(b));
+}
+
+/** The next time the clinic opens after `ms` (within a week), as an ISO instant, or null if it never opens. */
+export function nextOpening(hours: OpeningHours, ms: number): string | null {
+  const localMidnight = Math.floor((ms + LOCAL_OFFSET_MIN * 60_000) / DAY_MS) * DAY_MS - LOCAL_OFFSET_MIN * 60_000;
+  for (let i = 0; i < 8; i++) {
+    const day = localMidnight + i * DAY_MS;
+    const weekday = new Date(day + LOCAL_OFFSET_MIN * 60_000).getUTCDay();
+    for (const [a] of [...(hours[String(weekday)] ?? [])].sort()) {
+      const t = day + hm(a) * 60_000;
+      if (t > ms) return new Date(t).toISOString();
+    }
+  }
+  return null;
+}
+
 export interface Busy { start: number; end: number } // epoch ms
 
 const hm = (s: string) => {

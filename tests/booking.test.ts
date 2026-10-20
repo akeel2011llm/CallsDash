@@ -128,4 +128,34 @@ describe("google calendar client", () => {
     const cal = createGoogleCalendar({ client_email: "s", private_key: privateKey.export({ type: "pkcs8", format: "pem" }).toString() }, fake);
     await expect(cal.busy("c", "a", "b")).rejects.toThrow(/not shared/);
   });
+
+  it("takes messages and hand-offs into the staff inbox, and tells the agent what to promise", async () => {
+    const { svc, t, data } = await setup();
+    await expect(svc.takeMessage(t.id, { name: "Sara", phone: "123", message: "Call me" })).rejects.toMatchObject({ code: "missing_details" });
+    await expect(svc.takeMessage(t.id, { name: "", phone, message: "Call me" })).rejects.toMatchObject({ code: "missing_details" });
+    const m = await svc.takeMessage(t.id, { name: "Sara", phone, message: "Please call about my invoice", language: "ar", conversationId: "conv_1" });
+    expect(m.requestId).toBeTruthy();
+    const closed = await svc.handoffToStaff(t.id, { name: "Hessa", phone, reason: "Chest pain", urgent: true }); // NOW is Wednesday 03:00 local: closed
+    expect(closed).toMatchObject({ open: false, transferred: false });
+    expect(closed.message).toContain("closed");
+    const openSvc = createBookingService(data, null, () => new Date("2026-10-21T07:00:00Z"));
+    expect(await openSvc.handoffToStaff(t.id, { name: "Hessa", phone, reason: "Test results" })).toMatchObject({ open: true });
+    const inbox = await data.getStaffRequests(t.id);
+    expect(inbox).toHaveLength(3);
+    expect(inbox.find((r) => r.kind === "message")).toMatchObject({ name: "Sara", language: "ar", conversationId: "conv_1", status: "open", urgent: false });
+    expect(inbox.find((r) => r.urgent)).toMatchObject({ kind: "handoff", text: "Chest pain" });
+    await data.setStaffRequestStatus(t.id, m.requestId, "done", "staff");
+    expect((await data.getStaffRequests(t.id)).find((r) => r.id === m.requestId)).toMatchObject({ status: "done" });
+    const other = await data.createTenant({ name: "Elsewhere", nameAr: "", color: "#112233", domain: "", planType: "payg", actor: "x" });
+    await data.setStaffRequestStatus(other.id, inbox[0].id, "done", "staff"); // another clinic cannot touch it
+    expect((await data.getStaffRequests(t.id)).filter((r) => r.status === "open")).toHaveLength(2);
+  });
+
+  it("saves opening hours, which change what is offered", async () => {
+    const { svc, t, data, doc } = await setup();
+    await data.setOpeningHours(t.id, { "0": [], "1": [], "2": [], "3": [["10:00", "11:00"]], "4": [], "5": [], "6": [] }, "staff");
+    expect((await data.getTenant(t.id))!.openingHours["3"]).toEqual([["10:00", "11:00"]]);
+    const slots = (await svc.checkAvailability(t.id, { doctorId: doc, days: 1 })).slots.map((s) => s.start);
+    expect(slots).toEqual(["2026-10-21T07:00:00.000Z", "2026-10-21T07:30:00.000Z"]);
+  });
 });

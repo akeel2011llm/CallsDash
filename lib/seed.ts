@@ -19,6 +19,7 @@ export interface DB {
   ledger: LedgerEntry[];
   alerts: Alert[];
   audit: import("./types").AuditEntry[];
+  staffRequests: import("./types").StaffRequest[];
   packages: import("./types").CatalogPackage[];
   topUpRequests: { id: string; tenantId: string; at: string; credits: number; status: "open" | "done" }[];
   seq: number;
@@ -281,6 +282,10 @@ export function seed(): DB {
     agentVersions: [{ id: "v1", tenantId: "t_alnoor", createdAt: iso(nowMs - 30 * DAY), author: "AqeelLLM", summary: "Initial clinic template", settings: structuredClone(settings) }],
     audit: [{ id: "au1", tenantId: "t_alnoor", at: iso(nowMs - 30 * DAY), actor: "AqeelLLM", action: "Created client from clinic template" }],
     topUpRequests: [],
+    staffRequests: [
+      { id: "sr1", tenantId: "t_alnoor", kind: "handoff", name: "Hessa Al Mannai", phone: "+97336001122", text: "Wants to speak to the doctor about test results.", urgent: true, language: "ar", status: "open", createdAt: iso(nowMs - 3 * 3_600_000) },
+      { id: "sr2", tenantId: "t_alnoor", kind: "message", name: "Omar Yusuf", phone: "+97339887766", text: "Please call back about the invoice for last week's visit.", urgent: false, language: "en", status: "open", createdAt: iso(nowMs - 26 * 3_600_000) },
+    ],
     packages: DEFAULT_CATALOGUE.map((p, i) => ({ ...p, id: `pkg_${i + 1}`, archived: false })),
     seq: 1000,
   };

@@ -49,6 +49,22 @@ export interface CatalogPackage {
   archived: boolean;
 }
 
+/** A message left for staff, or a request for a person to call the patient back (the agent could not or should not handle it). */
+export interface StaffRequest {
+  id: string;
+  tenantId: string;
+  kind: "message" | "handoff";
+  name: string;
+  phone: string;
+  text: string;
+  urgent: boolean;
+  language: Locale;
+  conversationId?: string;
+  status: "open" | "done";
+  createdAt: string;
+  handledAt?: string;
+}
+
 export interface Permissions {
   editPrompt: boolean;
   editVoice: boolean;
