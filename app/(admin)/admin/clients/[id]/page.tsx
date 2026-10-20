@@ -2,9 +2,12 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getT } from "@/lib/i18n";
 import { fmtDate, fmtDateTime, fmtNum } from "@/lib/format";
-import { getAgent, getAgentVersions, getDoctors, getAudit, getLedger, getTenant, getWallet } from "@/lib/data";
+import { addMonths } from "@/lib/credits";
+import { planNames } from "@/lib/plans";
+import { PlanPicker } from "@/components/PlanPicker";
+import { getAgent, getAgentVersions, getDoctors, getAudit, getLedger, getTenant, getWallet, listPackages } from "@/lib/data";
 import {
-  adminPermissionsAction, adminRenewAction, adminSetCalendarAction, adminRollbackAction, adminTenantSettingsAction, adminTopUpAction, adminDeleteTenantAction, viewAsClient,
+  adminPermissionsAction, adminRenewAction, adminSetCalendarAction, adminRollbackAction, adminTenantSettingsAction, adminTopUpAction, adminDeleteTenantAction, adminAddPlanAction, adminEndPlanAction, viewAsClient,
 } from "@/lib/actions";
 import { Badge, Notice, PageHead, Stat } from "@/components/ui";
 import { SubmitButton } from "@/components/SubmitButton";
@@ -14,8 +17,8 @@ export default async function ClientAdmin({ params, searchParams }: { params: Pr
   const { saved, error } = await searchParams;
   const tenant = await getTenant(id);
   if (!tenant) notFound();
-  const [{ t, locale }, w, agent, versions, doctors, ledger, audit] = await Promise.all([
-    getT(), getWallet(id), getAgent(id), getAgentVersions(id), getDoctors(id), getLedger(id), getAudit(id),
+  const [{ t, locale }, w, agent, versions, doctors, ledger, audit, catalogue] = await Promise.all([
+    getT(), getWallet(id), getAgent(id), getAgentVersions(id), getDoctors(id), getLedger(id), getAudit(id), listPackages(),
   ]);
   const returnTo = `/admin/clients/${id}`;
   const perms = [
@@ -33,10 +36,10 @@ export default async function ClientAdmin({ params, searchParams }: { params: Pr
           </>
         }
       />
-      {(error === "name" || error === "domain" || error === "confirm") && <Notice tone="warn">{t(`admin.err.${error}` as "admin.err.name")}</Notice>}
+      {(error === "name" || error === "domain" || error === "confirm" || error === "plan" || error === "lastPlan") && <Notice tone="warn">{t(`admin.err.${error}` as "admin.err.name")}</Notice>}
       {saved && <Notice tone="ok">{t("agent.saved").split(".")[0]}.</Notice>}
       <div className="grid">
-        <Stat label={t("admin.balance")} value={fmtNum(w.balance, locale, 1)} tone={w.low ? "warn" : undefined} hint={tenant.plan.name} />
+        <Stat label={t("admin.balance")} value={fmtNum(w.balance, locale, 1)} tone={w.low ? "warn" : undefined} hint={planNames(tenant.plans)} />
         <Stat label={t("common.status")} value={t(`status.${tenant.status}` as "status.live")} />
         <Stat label="Agent id" value={<code>{agent.elevenLabsAgentId || "–"}</code>} />
       </div>
@@ -65,13 +68,6 @@ export default async function ClientAdmin({ params, searchParams }: { params: Pr
             <SubmitButton className="btn" type="submit">{t("admin.grant")}</SubmitButton>
           </form>
           <small className="muted">{t("admin.grantHelp")}</small>
-          {tenant.plan.type === "package" && (
-            <form action={adminRenewAction} className="stack">
-              <input type="hidden" name="tenantId" value={id} /><input type="hidden" name="returnTo" value={returnTo} />
-              <SubmitButton className="btn ghost" type="submit">{t("admin.renew")}</SubmitButton>
-              <small className="muted">{t("admin.renewHelp")}</small>
-            </form>
-          )}
         </section>
 
         <section className="card">
@@ -169,6 +165,56 @@ export default async function ClientAdmin({ params, searchParams }: { params: Pr
             </tbody>
           </table>
         </div>
+      </section>
+
+      <section className="card stack">
+        <h2>{t("plans.title")}</h2>
+        <p className="muted">{t("plans.help")}</p>
+        <div className="table-wrap">
+          <table>
+            <tbody>
+              {tenant.plans.map((p) => (
+                <tr key={p.id} style={p.active ? undefined : { opacity: 0.6 }}>
+                  <td>
+                    <strong>{p.name}</strong> <Badge tone={p.active ? "ok" : "neutral"}>{p.active ? t("plans.active") : t("plans.ended")}</Badge>
+                    <br /><small className="muted">
+                      {p.type === "package" ? `${fmtNum(p.includedCredits, locale, 0)} ${t("packages.creditsWord")} · ` : ""}
+                      BHD {fmtNum(p.monthlyPriceBhd, locale, 0)} {t("packages.perMonth")}
+                      {p.contractRef ? ` · ${p.contractRef}` : ""}
+                    </small>
+                  </td>
+                  <td>{p.active && p.type === "package" ? `${t("plans.since")} ${fmtDate(addMonths(p.periodStart, 1), locale)}` : ""}</td>
+                  <td>
+                    {p.active && (
+                      <div className="row">
+                        {p.type === "package" && (
+                          <form action={adminRenewAction}>
+                            <input type="hidden" name="tenantId" value={id} /><input type="hidden" name="planId" value={p.id} /><input type="hidden" name="returnTo" value={returnTo} />
+                            <SubmitButton className="btn small ghost" type="submit">{t("plans.renew")}</SubmitButton>
+                          </form>
+                        )}
+                        {tenant.plans.filter((x) => x.active).length > 1 && (
+                          <form action={adminEndPlanAction}>
+                            <input type="hidden" name="tenantId" value={id} /><input type="hidden" name="planId" value={p.id} /><input type="hidden" name="returnTo" value={returnTo} />
+                            <SubmitButton className="btn small danger" type="submit">{t("plans.end")}</SubmitButton>
+                          </form>
+                        )}
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <small className="muted">{t("admin.renewHelp")}</small>
+        {catalogue.some((p) => !p.archived) ? (
+          <form action={adminAddPlanAction} className="stack">
+            <input type="hidden" name="tenantId" value={id} /><input type="hidden" name="returnTo" value={returnTo} />
+            <PlanPicker packages={catalogue} locale={locale} t={t} />
+            <div><SubmitButton className="btn" type="submit">{t("plans.add")}</SubmitButton></div>
+          </form>
+        ) : <Notice>{t("plans.none")}</Notice>}
       </section>
 
       <section className="card stack danger-zone">

@@ -15,9 +15,17 @@ export interface CreditBatch {
   purchasedAt: string; // ISO
   expiresAt: string; // ISO
   note?: string;
+  /** The package this batch belongs to (package and rollover batches). Empty on top-ups and on batches created before multi-package support. */
+  planId?: string;
 }
 
 export interface Plan {
+  id: string;
+  /** Ended plans no longer renew or count towards billing; credits already paid for stay usable until they expire. */
+  active: boolean;
+  /** Catalogue package this plan was assigned from, and the signed contract it belongs to. Terms below are a copy: later catalogue edits never change a signed client. */
+  packageId?: string;
+  contractRef?: string;
   type: "package" | "payg";
   name: string;
   includedCredits: number; // package only
@@ -25,6 +33,20 @@ export interface Plan {
   pricePerCreditBhd: number; // top-up price (PAYG: the prepaid credit price)
   rolloverCap: number; // fraction of included credits that may roll over (0.5)
   periodStart: string; // ISO start of the current package period
+}
+
+/** A package AqeelLLM offers. Assigning one to a client copies its terms into the client's plans. */
+export interface CatalogPackage {
+  id: string;
+  name: string;
+  nameAr: string;
+  description: string;
+  type: "package" | "payg";
+  includedCredits: number;
+  monthlyPriceBhd: number;
+  pricePerCreditBhd: number;
+  rolloverCap: number;
+  archived: boolean;
 }
 
 export interface Permissions {
@@ -77,7 +99,8 @@ export interface Tenant {
   name: string;
   status: "live" | "error" | "suspended";
   branding: Branding;
-  plan: Plan;
+  /** One or more packages / pay-as-you-go plans. All of their credits go into one shared wallet. */
+  plans: Plan[];
   permissions: Permissions;
   allowedDomains: string[];
   zeroBalancePolicy: ZeroBalancePolicy;

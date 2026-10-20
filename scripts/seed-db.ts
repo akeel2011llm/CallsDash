@@ -21,7 +21,7 @@ async function main() {
       await c.query(
         `insert into tenants (id, slug, name, status, branding, plan, permissions, allowed_domains, zero_balance_policy, low_balance_threshold, retention_days, calendar_connected, channels, created_at)
          values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
-        [id(t.id), t.slug, t.name, t.status, t.branding, t.plan, t.permissions, t.allowedDomains, t.zeroBalancePolicy, t.lowBalanceThreshold, t.retentionDays, t.calendarConnected, t.channels, t.createdAt]);
+        [id(t.id), t.slug, t.name, t.status, t.branding, JSON.stringify(t.plans), t.permissions, t.allowedDomains, t.zeroBalancePolicy, t.lowBalanceThreshold, t.retentionDays, t.calendarConnected, t.channels, t.createdAt]);
       const a = d.agents[t.id];
       await c.query(`insert into agents (tenant_id, elevenlabs_agent_id, settings) values ($1,$2,$3)`, [id(t.id), a.elevenLabsAgentId, a]);
     }

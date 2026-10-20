@@ -39,6 +39,7 @@ npm test                     # credits wallet and webhook tests
 
 1. Create a Supabase project, run `supabase/migrations/0001_init.sql` in the SQL editor.
    Optional, after any accidental duplicate client is deleted: run `supabase/migrations/0002_unique_client_name.sql` (database-level guard against two clients with the same name; the app already blocks duplicate names and websites).
+   Package catalogue and several plans per client need one extra column and table; the app creates them itself on start (`supabase/migrations/0003_packages.sql` has the same statements if you prefer to run them by hand).
 2. Set `DATABASE_URL`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` and remove `DEMO_MODE`.
 3. Create your admin user in Supabase Auth, then link it:
    ```sql

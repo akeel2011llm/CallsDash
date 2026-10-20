@@ -21,6 +21,19 @@ export default async function CreditsPage({ searchParams }: { searchParams: Prom
       <div className="grid">
         <Stat label={t("credits.balance")} value={fmtNum(w.balance, locale, 1)} tone={w.low ? "warn" : undefined} hint={t("credits.explain")} />
       </div>
+      {tenant.plans.filter((p) => p.active).length > 1 && (
+        <section className="card stack">
+          <h2>{t("credits.plans")}</h2>
+          <ul>
+            {tenant.plans.filter((p) => p.active).map((p) => (
+              <li key={p.id}>
+                <strong>{p.name}</strong>
+                {p.type === "package" ? `: ${fmtNum(p.includedCredits, locale, 0)} ${t("packages.creditsWord")}` : ""}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       <div className="grid two">
         <section className="card stack">
           <h2>{t("credits.batches")}</h2>
@@ -30,7 +43,7 @@ export default async function CreditsPage({ searchParams }: { searchParams: Prom
               <tbody>
                 {w.batches.filter((b) => b.remaining > 0 && new Date(b.expiresAt) > new Date()).sort((a, b) => a.expiresAt.localeCompare(b.expiresAt)).map((b) => (
                   <tr key={b.id}>
-                    <td>{t(`kind.${b.kind}` as "kind.topup")}</td>
+                    <td>{t(`kind.${b.kind}` as "kind.topup")}{b.note && (b.kind === "package" || b.kind === "rollover") ? <><br /><small className="muted">{b.note}</small></> : null}</td>
                     <td>{fmtNum(b.remaining, locale, 1)} / {fmtNum(b.amount, locale, 0)}</td>
                     <td>{fmtDate(b.expiresAt, locale)}</td>
                   </tr>

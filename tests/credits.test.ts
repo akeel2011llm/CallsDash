@@ -7,11 +7,15 @@ import {
   deduct,
   lowBalance,
   renewPackage,
+  revenuePerCredit,
   sweepExpired,
+  topUpKind,
 } from "@/lib/credits";
 import type { CreditBatch, Plan } from "@/lib/types";
 
 const plan: Plan = {
+  id: "plan-1",
+  active: true,
   type: "package",
   name: "Clinic package",
   includedCredits: 2500,
@@ -128,8 +132,42 @@ describe("expiry and low balance", () => {
 
   it("flags low balance at 15% of the included credits", () => {
     const r = renewPackage([], { tenantId: T, plan, periodStart: "2026-10-01T00:00:00.000Z", ids: { rollover: "ro", package: "pk" } });
-    expect(lowBalance(r.batches, plan, 0.15, now).low).toBe(false);
+    expect(lowBalance(r.batches, [plan], 0.15, now).low).toBe(false);
     const spent = deduct(r.batches, 2150, now).batches; // 350 left = 14%
-    expect(lowBalance(spent, plan, 0.15, now).low).toBe(true);
+    expect(lowBalance(spent, [plan], 0.15, now).low).toBe(true);
+  });
+
+  describe("several packages on one client", () => {
+    const addon: Plan = { ...plan, id: "plan-2", name: "Extra bundle", includedCredits: 1000, monthlyPriceBhd: 80 };
+    const start = "2026-10-01T00:00:00.000Z";
+    const both = () => {
+      const a = renewPackage([], { tenantId: T, plan, periodStart: start, ids: { rollover: "ro1", package: "pk1" }, adoptUnowned: true });
+      return renewPackage(a.batches, { tenantId: T, plan: addon, periodStart: "2026-10-10T00:00:00.000Z", ids: { rollover: "ro2", package: "pk2" }, adoptUnowned: false }).batches;
+    };
+
+    it("pools the credits of every package", () => expect(balance(both(), now)).toBe(3500));
+
+    it("renewing one package leaves the other untouched and rolls over per package cap", () => {
+      const spent = deduct(both(), 3000, now).batches; // oldest-expiring package (plan-1) first: 2500 used, then 500 from the add-on
+      expect(spent.find((b) => b.id === "pk1")!.remaining).toBe(0);
+      expect(spent.find((b) => b.id === "pk2")!.remaining).toBe(500);
+      const r = renewPackage(spent, { tenantId: T, plan: addon, periodStart: "2026-11-10T00:00:00.000Z", ids: { rollover: "ro3", package: "pk3" }, adoptUnowned: false });
+      expect(r.carried).toBe(500); // capped at 50% of 1,000
+      expect(r.batches.find((b) => b.id === "pk1")!.remaining).toBe(0);
+      expect(r.batches.find((b) => b.id === "ro3")).toMatchObject({ planId: "plan-2", remaining: 500 });
+    });
+
+    it("measures low balance against all live packages, ignoring ended ones", () => {
+      const b = both();
+      expect(lowBalance(b, [plan, addon], 0.15, now).reference).toBe(3500);
+      expect(lowBalance(b, [plan, { ...addon, active: false }], 0.15, now).reference).toBe(2500);
+    });
+
+    it("blends the revenue per credit", () => {
+      expect(revenuePerCredit([plan, addon])).toBeCloseTo((199 + 80) / 3500, 6);
+      expect(revenuePerCredit([plan, { ...addon, active: false }])).toBeCloseTo(199 / 2500, 6);
+      expect(topUpKind([plan])).toBe("topup");
+      expect(topUpKind([{ ...plan, type: "payg", active: true }])).toBe("payg");
+    });
   });
 });

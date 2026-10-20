@@ -4,6 +4,7 @@ import type {
 } from "./types";
 import { addMonths, creditsFor, round2 } from "./credits";
 import { DEFAULT_OPENING_HOURS } from "./availability";
+import { DEFAULT_CATALOGUE } from "./plans";
 
 export interface DB {
   tenants: Tenant[];
@@ -18,6 +19,7 @@ export interface DB {
   ledger: LedgerEntry[];
   alerts: Alert[];
   audit: import("./types").AuditEntry[];
+  packages: import("./types").CatalogPackage[];
   topUpRequests: { id: string; tenantId: string; at: string; credits: number; status: "open" | "done" }[];
   seq: number;
 }
@@ -134,7 +136,7 @@ export function seed(): DB {
     {
       id: "t_alnoor", slug: "al-noor", name: "Al Noor Medical Center", status: "live",
       branding: { displayName: "Al Noor Medical Center", displayNameAr: "مركز النور الطبي", primaryColor: "#0e7c86", domain: "alnoor.example.bh" },
-      plan: { type: "package", name: "Clinic package", includedCredits: 2500, monthlyPriceBhd: 199, pricePerCreditBhd: 0.08, rolloverCap: 0.5, periodStart: monthStart },
+      plans: [{ id: "plan-1", active: true, type: "package", name: "Clinic package", includedCredits: 2500, monthlyPriceBhd: 199, pricePerCreditBhd: 0.08, rolloverCap: 0.5, periodStart: monthStart }],
       permissions: { editPrompt: true, editVoice: true, editBehaviour: true, editKnowledge: true },
       allowedDomains: ["alnoor.example.bh", "localhost"], zeroBalancePolicy: "pause", lowBalanceThreshold: 0.15,
       retentionDays: 90, calendarConnected: true, openingHours: DEFAULT_OPENING_HOURS,
@@ -144,7 +146,7 @@ export function seed(): DB {
     {
       id: "t_smile", slug: "smile-dental", name: "Smile Dental Clinic", status: "live",
       branding: { displayName: "Smile Dental", displayNameAr: "عيادة الابتسامة", primaryColor: "#7c3aed", domain: "smile.example.bh" },
-      plan: { type: "payg", name: "Pay as you go", includedCredits: 0, monthlyPriceBhd: 20, pricePerCreditBhd: 0.11, rolloverCap: 0, periodStart: monthStart },
+      plans: [{ id: "plan-1", active: true, type: "payg", name: "Pay as you go", includedCredits: 0, monthlyPriceBhd: 20, pricePerCreditBhd: 0.11, rolloverCap: 0, periodStart: monthStart }],
       permissions: { editPrompt: false, editVoice: true, editBehaviour: true, editKnowledge: true },
       allowedDomains: ["smile.example.bh", "localhost"], zeroBalancePolicy: "overdraft", lowBalanceThreshold: 0.15,
       retentionDays: 90, calendarConnected: false, openingHours: DEFAULT_OPENING_HOURS,
@@ -154,7 +156,7 @@ export function seed(): DB {
     {
       id: "t_physio", slug: "gulf-physio", name: "Gulf Physio Center", status: "error",
       branding: { displayName: "Gulf Physio", displayNameAr: "الخليج للعلاج الطبيعي", primaryColor: "#c2410c", domain: "physio.example.bh" },
-      plan: { type: "package", name: "Clinic package", includedCredits: 2500, monthlyPriceBhd: 199, pricePerCreditBhd: 0.08, rolloverCap: 0.5, periodStart: monthStart },
+      plans: [{ id: "plan-1", active: true, type: "package", name: "Clinic package", includedCredits: 2500, monthlyPriceBhd: 199, pricePerCreditBhd: 0.08, rolloverCap: 0.5, periodStart: monthStart }],
       permissions: { editPrompt: true, editVoice: true, editBehaviour: true, editKnowledge: true },
       allowedDomains: ["physio.example.bh"], zeroBalancePolicy: "pause", lowBalanceThreshold: 0.15,
       retentionDays: 90, calendarConnected: true, openingHours: DEFAULT_OPENING_HOURS,
@@ -279,6 +281,7 @@ export function seed(): DB {
     agentVersions: [{ id: "v1", tenantId: "t_alnoor", createdAt: iso(nowMs - 30 * DAY), author: "AqeelLLM", summary: "Initial clinic template", settings: structuredClone(settings) }],
     audit: [{ id: "au1", tenantId: "t_alnoor", at: iso(nowMs - 30 * DAY), actor: "AqeelLLM", action: "Created client from clinic template" }],
     topUpRequests: [],
+    packages: DEFAULT_CATALOGUE.map((p, i) => ({ ...p, id: `pkg_${i + 1}`, archived: false })),
     seq: 1000,
   };
 }

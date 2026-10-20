@@ -9,6 +9,7 @@ import { supabaseConfigured, supabaseServer } from "./supabase";
 import * as store from "./data";
 import { DuplicateError } from "./errors";
 import { nameKey } from "./tenant-keys";
+import { cleanCatalogInput, type PlanInput } from "./plans";
 import type { AgentSettings, BookingStatus, Locale, Permissions } from "./types";
 
 const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
@@ -162,9 +163,72 @@ export async function adminTopUpAction(f: FormData) {
 export async function adminRenewAction(f: FormData) {
   const { actor } = await requireAdmin();
   const id = str(f, "tenantId");
-  if ((await store.getTenant(id))?.plan.type === "package") await store.renewTenantPackage(id, actor);
+  const tenant = await store.getTenant(id);
+  const planId = str(f, "planId");
+  if (tenant?.plans.some((p) => p.active && p.type === "package" && (!planId || p.id === planId))) await store.renewTenantPackage(id, actor, planId || undefined);
   revalidatePath("/admin", "layout");
   back(f, `/admin/clients/${id}`);
+}
+
+/**
+ * Terms of a catalogue package, optionally with a client-specific price from their signed contract.
+ * The plan keeps a copy, so later catalogue edits never change a client's contract.
+ */
+async function planFromForm(f: FormData): Promise<(PlanInput & { packageId?: string; contractRef?: string }) | null> {
+  const pkg = (await store.listPackages()).find((p) => p.id === str(f, "packageId") && !p.archived);
+  if (!pkg) return null;
+  const fee = str(f, "monthlyPriceBhd"), per = str(f, "pricePerCreditBhd");
+  const terms = cleanCatalogInput({
+    ...pkg, monthlyPriceBhd: fee !== "" ? Number(fee) : pkg.monthlyPriceBhd, pricePerCreditBhd: per !== "" ? Number(per) : pkg.pricePerCreditBhd,
+  });
+  if (!terms) return null;
+  const { nameAr: _a, description: _d, ...plan } = terms; // eslint-disable-line @typescript-eslint/no-unused-vars
+  return { ...plan, packageId: pkg.id, contractRef: str(f, "contractRef").slice(0, 120) || undefined };
+}
+
+export async function adminAddPlanAction(f: FormData) {
+  const { actor } = await requireAdmin();
+  const id = str(f, "tenantId");
+  const plan = await planFromForm(f);
+  if (!plan || !(await store.getTenant(id))) redirect(`/admin/clients/${id}?error=plan`);
+  await store.addPlan(id, plan, actor);
+  revalidatePath("/admin", "layout");
+  back(f, `/admin/clients/${id}`);
+}
+
+export async function adminEndPlanAction(f: FormData) {
+  const { actor } = await requireAdmin();
+  const id = str(f, "tenantId");
+  const ended = await store.endPlan(id, str(f, "planId"), actor);
+  revalidatePath("/admin", "layout");
+  if (!ended) redirect(`/admin/clients/${id}?error=lastPlan`);
+  back(f, `/admin/clients/${id}`);
+}
+
+export async function adminSavePackageAction(f: FormData) {
+  const { actor } = await requireAdmin();
+  const pid = str(f, "id");
+  const input = cleanCatalogInput({
+    type: str(f, "type") === "payg" ? "payg" : "package", name: str(f, "name"), nameAr: str(f, "nameAr"), description: str(f, "description"),
+    includedCredits: Number(str(f, "includedCredits")), monthlyPriceBhd: Number(str(f, "monthlyPriceBhd")),
+    pricePerCreditBhd: Number(str(f, "pricePerCreditBhd")), rolloverCap: Number(str(f, "rolloverPercent") || 0) / 100,
+  });
+  if (!input) redirect("/admin/packages?error=invalid");
+  try {
+    await store.savePackage({ ...input, id: pid || undefined }, actor);
+  } catch (e) {
+    if (e instanceof DuplicateError) redirect("/admin/packages?error=name");
+    throw e;
+  }
+  revalidatePath("/admin", "layout");
+  redirect("/admin/packages?saved=1");
+}
+
+export async function adminArchivePackageAction(f: FormData) {
+  const { actor } = await requireAdmin();
+  await store.archivePackage(str(f, "id"), str(f, "archived") === "1", actor);
+  revalidatePath("/admin", "layout");
+  redirect("/admin/packages?saved=1");
 }
 
 export async function adminPermissionsAction(f: FormData) {
@@ -225,11 +289,13 @@ export async function adminCreateTenantAction(f: FormData) {
   const name = str(f, "name").replace(/\s+/g, " ");
   if (!name) redirect("/admin/clients/new");
   const color = str(f, "color");
+  const plan = (await planFromForm(f)) ?? undefined;
+  if (!plan) redirect("/admin/clients/new?error=plan");
   let tenantId: string;
   try {
     tenantId = (await store.createTenant({
       name: name.slice(0, 120), nameAr: str(f, "nameAr").slice(0, 120), color: hex.test(color) ? color : "#0e7c86",
-      domain: str(f, "domain").toLowerCase().slice(0, 200), planType: str(f, "planType") === "payg" ? "payg" : "package", actor,
+      domain: str(f, "domain").toLowerCase().slice(0, 200), planType: plan.type, plan, actor,
     })).id;
   } catch (e) {
     if (e instanceof DuplicateError) redirect(`/admin/clients/new?error=${e.field}`);

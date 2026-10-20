@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getT } from "@/lib/i18n";
 import { fmtNum } from "@/lib/format";
+import { planNames } from "@/lib/plans";
 import { creditsOwed, getAlerts, getTopUpRequests, getWallet, listTenants } from "@/lib/data";
 import { viewAsClient } from "@/lib/actions";
 import { Badge, PageHead, Stat } from "@/components/ui";
@@ -35,7 +36,7 @@ export default async function AdminHome() {
                 <tr key={c.id}>
                   <td><Link href={`/admin/clients/${c.id}`}>{locale === "ar" ? c.branding.displayNameAr : c.name}</Link></td>
                   <td><Badge tone={c.status === "live" ? "ok" : c.status === "error" ? "bad" : "neutral"}>{t(`status.${c.status}` as "status.live")}</Badge></td>
-                  <td>{c.plan.name}</td>
+                  <td>{planNames(c.plans)}</td>
                   <td>
                     {fmtNum(w.balance, locale, 1)} {w.low && <Badge tone="warn">!</Badge>} {asked && <Badge tone="info">{t("admin.topUpRequests")}</Badge>}
                   </td>
