@@ -1,8 +1,10 @@
 import { timingSafeEqual } from "node:crypto";
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { createBookingService, ToolError } from "@/lib/booking";
 import { getData } from "@/lib/data";
 import { googleCalendarFromEnv } from "@/lib/google-calendar";
+import { elevenLabsFromEnv } from "@/lib/elevenlabs-api";
+import { sendBookingConfirmation } from "@/lib/whatsapp";
 
 export const dynamic = "force-dynamic";
 
@@ -39,11 +41,23 @@ export async function POST(req: Request, ctx: { params: Promise<{ tool: string }
           doctorId: str(body.doctor_id) || undefined, fromDate: str(body.from_date) || undefined,
           days: Number(body.days) || undefined, locale: body.language === "ar" ? "ar" : "en",
         }));
-      case "book_appointment":
-        return ok(await svc.bookAppointment(tenant.id, {
+      case "book_appointment": {
+        const booked = await svc.bookAppointment(tenant.id, {
           doctorId: str(body.doctor_id), startsAt: str(body.starts_at), patientName: str(body.patient_name),
           patientPhone: str(body.patient_phone), service: str(body.service) || undefined, conversationId: str(body.conversation_id) || undefined,
-        }));
+        });
+        // The confirmation goes out after the agent has its answer, and a failure only leaves a note: it never undoes the booking.
+        const api = elevenLabsFromEnv();
+        if (api) after(async () => {
+          const r = await sendBookingConfirmation({ api, data }, tenant.id, { patientName: str(body.patient_name), patientPhone: str(body.patient_phone), doctorName: booked.doctor, startsAt: booked.start });
+          if (r.status === "sent") await data.audit("agent", `WhatsApp confirmation sent to ${str(body.patient_name)}`, tenant.id);
+          if (r.status === "failed") {
+            await data.audit("agent", `WhatsApp confirmation failed: ${r.error.slice(0, 160)}`, tenant.id);
+            await data.addAlert(tenant.id, "warning", `A booking confirmation could not be sent on WhatsApp (${r.error.slice(0, 120)}). Check the template in WhatsApp Manager.`);
+          }
+        });
+        return ok(booked);
+      }
       case "find_patient_booking":
         return ok(await svc.findPatientBookings(tenant.id, { patientPhone: str(body.patient_phone) }));
       case "cancel_appointment":

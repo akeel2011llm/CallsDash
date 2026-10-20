@@ -65,7 +65,7 @@
       if (!cfg.agentId) { show([text("Demo: the ElevenLabs agent is not connected yet.")]); return; }
       var loader = el("script", { src: "https://unpkg.com/@elevenlabs/convai-widget-embed", async: "", type: "text/javascript" });
       document.head.appendChild(loader);
-      document.body.appendChild(el("elevenlabs-convai", { "agent-id": cfg.agentId }));
+      document.body.appendChild(el("elevenlabs-convai", { "agent-id": cfg.agentId, "dynamic-variables": JSON.stringify(cfg.dynamicVariables || {}) }));
     }
 
     function consentCard() {

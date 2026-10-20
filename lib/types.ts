@@ -166,6 +166,77 @@ export interface Tenant {
   /** Local (Bahrain) opening intervals per weekday, keys "0" (Sunday) to "6" (Saturday), as ["HH:MM", "HH:MM"]. */
   openingHours: Record<string, [string, string][]>;
   channels: Record<Channel, "connected" | "pending" | "off">;
+  /** Progress through the admin setup wizard and the checklist items an admin ticked by hand. */
+  onboarding: Onboarding;
+  /** Per-channel settings that are not secret (account ids, template names). Secrets live in `TenantSecrets`. */
+  integrations: Integrations;
+  createdAt: string;
+}
+
+export interface Integrations {
+  elevenlabs?: { kbDocId?: string; syncedAt?: string; error?: string };
+  whatsapp?: { phoneNumberId?: string; displayNumber?: string; confirmTemplate?: string; confirmTemplateLang?: string };
+  /** `accountId` is the Instagram business account id Meta sends in webhooks; `inboundUrl` is the custom channel address copied from ElevenLabs. */
+  instagram?: { accountId?: string; username?: string; inboundUrl?: string };
+  phone?: { number?: string; provider?: "twilio" | "sip" | "other" };
+}
+
+/** Tokens and shared secrets for a client's channels. Stored apart from the tenant row, never shown again after saving. */
+export interface TenantSecrets {
+  /** Instagram messaging access token (Meta). */
+  instagramToken?: string;
+  /** ElevenLabs custom channel: the secret we send with each inbound message. */
+  instagramInboundSecret?: string;
+  /** ElevenLabs custom channel: the secret that signs replies to our reply webhook. */
+  instagramReplySecret?: string;
+}
+
+/** Remembers which ElevenLabs conversation a person on a chat channel is in, so a chat continues instead of restarting. */
+export interface ChatSession {
+  tenantId: string;
+  channel: Channel;
+  /** The person's id on that channel (Instagram-scoped id). */
+  externalId: string;
+  conversationId: string;
+  lastAt: string;
+}
+
+/** What the admin has confirmed by hand during setup; everything else on the checklist is worked out from the data. */
+export interface Onboarding {
+  /** Checklist items an admin marked as done (for things CallsDash cannot see, such as "hours confirmed with the clinic"). */
+  done: string[];
+  /** The last website scan, kept so the admin can review it before anything is applied. */
+  scan?: SiteScan;
+}
+
+/** What a website scan found. Nothing here is applied to the client until the admin accepts it. */
+export interface SiteScan {
+  url: string;
+  at: string;
+  title: string;
+  description: string;
+  phones: string[];
+  emails: string[];
+  languages: Locale[];
+  headings: string[];
+  /** Readable page text, trimmed, ready to become knowledge items. */
+  text: string;
+}
+
+export type Role = "admin" | "manager" | "receptionist";
+
+/** A person who can sign in. The password itself lives only in Supabase Auth. */
+export interface Profile {
+  id: string;
+  /** Null for admins. */
+  tenantId: string | null;
+  role: Role;
+  fullName: string;
+  email: string;
+  /** A disabled person is refused at the next request even if their sign-in session is still valid. */
+  disabled: boolean;
+  /** Set when an admin gave a temporary password: the person must choose their own before doing anything else. */
+  mustChangePassword: boolean;
   createdAt: string;
 }
 
@@ -273,5 +344,5 @@ export interface Voice {
 }
 
 export type Session =
-  | { role: "admin"; viewAsTenantId?: string }
-  | { role: "client"; tenantId: string };
+  | { role: "admin"; viewAsTenantId?: string; userId?: string; mustChangePassword?: boolean }
+  | { role: "client"; tenantId: string; userId?: string; staffRole?: "manager" | "receptionist"; mustChangePassword?: boolean };

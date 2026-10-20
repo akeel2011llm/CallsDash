@@ -8,7 +8,7 @@ import { publicBranding } from "@/lib/brand-image";
 export const dynamic = "force-dynamic";
 
 export default async function ClientLayout({ children }: { children: React.ReactNode }) {
-  const { tenant, viewingAsAdmin } = await requireClient();
+  const { tenant, viewingAsAdmin, staffRole } = await requireClient();
   const { t, locale } = await getT();
   const [w, requests, convs] = await Promise.all([getWallet(tenant.id), getStaffRequests(tenant.id), getConversations(tenant.id)]);
   const attention = convs.filter(needsAttention).length;
@@ -32,6 +32,7 @@ export default async function ClientLayout({ children }: { children: React.React
         { href: "/app/voice", label: t("nav.voice"), icon: "mic" },
         { href: "/app/website", label: t("nav.website"), icon: "globe" },
         { href: "/app/credits", label: t("nav.credits"), icon: "wallet", badge: w.low ? "!" : undefined, group: t("nav.g.account") },
+        ...(staffRole === "manager" ? [{ href: "/app/team", label: t("nav.team"), icon: "users" }] : []),
       ]}
     >
       {children}

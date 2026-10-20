@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Suspense } from "react";
 import { logout, exitViewAs } from "@/lib/actions";
 import { getT } from "@/lib/i18n";
@@ -73,6 +74,7 @@ export async function Shell({
           )}
           <InstallPrompt label={t("pwa.install")} iosHint={t("pwa.iosHint")} />
           <Suspense fallback={null}><LocaleSwitch locale={locale} /></Suspense>
+          <Link className="btn ghost" href="/account"><Icon name="user" size={18} />{t("nav.account")}</Link>
           <form action={logout}><SubmitButton className="btn ghost" type="submit"><Icon name="logout" size={18} />{t("nav.signOut")}</SubmitButton></form>
           {!branding?.hidePoweredBy && <div className="powered">Powered by CallsDash</div>}
         </div>

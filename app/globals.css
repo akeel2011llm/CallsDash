@@ -431,3 +431,30 @@ pre { background: var(--surface-2); border: 1px solid var(--line); border-radius
 }
 @media (display-mode: standalone) { body { overscroll-behavior-y: none; } }
 @media print { .topbar, .tabbar, .backdrop { display: none !important; } .shell { padding: 0; } }
+
+/* ---------- accounts, credentials, setup ---------- */
+.auth-page { min-block-size: 100dvh; display: grid; place-items: center; padding: 1.5rem 1rem; background: var(--bg); }
+.auth-page .card { inline-size: min(460px, 100%); padding: 1.6rem; box-shadow: var(--shadow-lg); }
+.cred { display: grid; gap: .6rem; padding: .9rem 1rem; border: 1px solid color-mix(in srgb, var(--ok) 45%, var(--line)); border-radius: var(--radius); background: color-mix(in srgb, var(--ok) 7%, var(--surface)); }
+.cred dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: .25rem 1rem; margin: 0; }
+.cred dt { color: var(--muted); font-size: .85rem; }
+.cred dd { margin: 0; overflow-wrap: anywhere; }
+.cred code { font-size: 1.05rem; font-weight: 700; letter-spacing: .02em; }
+.progress { block-size: 8px; border-radius: 999px; background: var(--line); overflow: hidden; }
+.progress > span { display: block; block-size: 100%; background: var(--brand); border-radius: inherit; transition: inline-size .3s; }
+.checklist { display: grid; gap: .5rem; margin: 0; padding: 0; list-style: none; }
+.checklist li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: .75rem; align-items: center; padding: .65rem .8rem; border: 1px solid var(--line); border-radius: calc(var(--radius) - 2px); background: var(--surface-2); }
+.checklist .mark { inline-size: 26px; block-size: 26px; border-radius: 50%; display: grid; place-items: center; border: 2px solid var(--line); color: transparent; }
+.checklist li.done .mark { background: var(--ok); border-color: var(--ok); color: #fff; }
+.checklist li.done .title { color: var(--muted); }
+.checklist .title { font-weight: 600; }
+.checklist small { display: block; color: var(--muted); }
+.scan-grid { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: .35rem 1rem; margin: 0; }
+.scan-grid dt { color: var(--muted); font-size: .85rem; }
+.scan-grid dd { margin: 0; overflow-wrap: anywhere; }
+.scan-text { max-block-size: 9rem; overflow: auto; padding: .6rem .75rem; border: 1px solid var(--line); border-radius: calc(var(--radius) - 2px); background: var(--surface-2); font-size: .88rem; white-space: pre-wrap; }
+@media (max-width: 640px) {
+  .checklist li { grid-template-columns: auto minmax(0, 1fr); }
+  .checklist li > :last-child { grid-column: 1 / -1; }
+  .cred dl { grid-template-columns: minmax(0, 1fr); }
+}

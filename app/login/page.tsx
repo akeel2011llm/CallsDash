@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { demoMode, getSession } from "@/lib/auth";
 import { login, loginWithPassword } from "@/lib/actions";
@@ -71,6 +72,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
               <label>{t("login.email")}<input name="email" type="email" autoComplete="username" inputMode="email" autoCapitalize="none" required /></label>
               <label>{t("login.password")}<input name="password" type="password" autoComplete="current-password" required /></label>
               <SubmitButton className="btn" type="submit">{t("login.submit")}</SubmitButton>
+              <small><Link href="/login/forgot">{t("login.forgot")}</Link></small>
               <small className="muted">{t("login.help")}</small>
             </form>
           ) : (
