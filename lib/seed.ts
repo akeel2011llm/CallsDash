@@ -21,6 +21,7 @@ export interface DB {
   alerts: Alert[];
   audit: import("./types").AuditEntry[];
   staffRequests: import("./types").StaffRequest[];
+  profiles: import("./types").Profile[];
   packages: import("./types").CatalogPackage[];
   topUpRequests: { id: string; tenantId: string; at: string; credits: number; status: "open" | "done" }[];
   seq: number;
@@ -143,6 +144,7 @@ export function seed(): DB {
       allowedDomains: ["alnoor.example.bh", "localhost"], zeroBalancePolicy: "pause", lowBalanceThreshold: 0.15,
       retentionDays: 90, calendarConnected: true, openingHours: DEFAULT_OPENING_HOURS,
       channels: { website: "connected", whatsapp: "connected", instagram: "pending", phone: "off" },
+      onboarding: { done: ["hours"] },
       createdAt: iso(nowMs - 40 * DAY),
     },
     {
@@ -153,6 +155,7 @@ export function seed(): DB {
       allowedDomains: ["smile.example.bh", "localhost"], zeroBalancePolicy: "overdraft", lowBalanceThreshold: 0.15,
       retentionDays: 90, calendarConnected: false, openingHours: DEFAULT_OPENING_HOURS,
       channels: { website: "connected", whatsapp: "pending", instagram: "off", phone: "off" },
+      onboarding: { done: [] },
       createdAt: iso(nowMs - 12 * DAY),
     },
     {
@@ -163,6 +166,7 @@ export function seed(): DB {
       allowedDomains: ["physio.example.bh"], zeroBalancePolicy: "pause", lowBalanceThreshold: 0.15,
       retentionDays: 90, calendarConnected: true, openingHours: DEFAULT_OPENING_HOURS,
       channels: { website: "connected", whatsapp: "connected", instagram: "off", phone: "off" },
+      onboarding: { done: ["hours"] },
       createdAt: iso(nowMs - 25 * DAY),
     },
   ];
@@ -301,6 +305,11 @@ export function seed(): DB {
     agentVersions: [{ id: "v1", tenantId: "t_alnoor", createdAt: iso(nowMs - 30 * DAY), author: "AqeelLLM", summary: "Initial clinic template", settings: structuredClone(settings) }],
     audit: [{ id: "au1", tenantId: "t_alnoor", at: iso(nowMs - 30 * DAY), actor: "AqeelLLM", action: "Created client from clinic template" }],
     topUpRequests: [],
+    profiles: [
+      { id: "u_manager_alnoor", tenantId: "t_alnoor", role: "manager", fullName: "Sara Al Khalifa", email: "sara@alnoor.example.bh", disabled: false, mustChangePassword: false, createdAt: iso(nowMs - 38 * DAY) },
+      { id: "u_recep_alnoor", tenantId: "t_alnoor", role: "receptionist", fullName: "Mariam Hassan", email: "mariam@alnoor.example.bh", disabled: false, mustChangePassword: false, createdAt: iso(nowMs - 20 * DAY) },
+      { id: "u_manager_smile", tenantId: "t_smile", role: "manager", fullName: "Dr. Yusuf Ebrahim", email: "yusuf@smile.example.bh", disabled: false, mustChangePassword: true, createdAt: iso(nowMs - 11 * DAY) },
+    ],
     staffRequests: [
       { id: "sr1", tenantId: "t_alnoor", kind: "handoff", name: "Hessa Al Mannai", phone: "+97336001122", text: "Wants to speak to the doctor about test results.", urgent: true, language: "ar", status: "open", createdAt: iso(nowMs - 3 * 3_600_000) },
       { id: "sr2", tenantId: "t_alnoor", kind: "message", name: "Omar Yusuf", phone: "+97339887766", text: "Please call back about the invoice for last week's visit.", urgent: false, language: "en", status: "open", createdAt: iso(nowMs - 26 * 3_600_000) },

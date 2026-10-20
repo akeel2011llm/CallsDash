@@ -390,7 +390,7 @@ export async function adminCreateTenantAction(f: FormData) {
     throw e;
   }
   revalidatePath("/admin", "layout");
-  redirect(`/admin/clients/${tenantId}?saved=1`);
+  redirect(`/admin/clients/${tenantId}/setup`);
 }
 
 /** Permanent. The admin must type the client's exact name; that is checked here, not only in the browser. */

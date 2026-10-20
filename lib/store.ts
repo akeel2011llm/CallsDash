@@ -7,7 +7,7 @@ import { findDuplicate, nameKey } from "./tenant-keys";
 import { DEFAULT_OPENING_HOURS } from "./availability";
 import { seed, type DB, ELEVENLABS_USD_PER_MIN, ELEVENLABS_USD_PER_MSG } from "./seed";
 import type {
-  AgentSettings, Booking, BookingStatus, Channel, Conversation, Locale, Permissions, StaffRequest, Tenant,
+  AgentSettings, Booking, BookingStatus, Channel, Conversation, Locale, Permissions, Profile, StaffRequest, Tenant,
 } from "./types";
 
 /**
@@ -31,8 +31,39 @@ function sweep(tenantId: string) {
 }
 
 export const listTenants = () => db().tenants;
-/** Demo mode has no user profiles; sign-in is the demo cookie. */
-export const getProfile = (_userId: string): { role: "admin" | "manager" | "receptionist"; tenantId: string | null } | undefined => undefined;
+/** Demo sign-in is a cookie, so these profiles only fill the Users pages with something to look at. */
+export const getProfile = (userId: string): Profile | undefined => db().profiles.find((p) => p.id === userId);
+export const listProfiles = (tenantId?: string): Profile[] =>
+  db().profiles.filter((p) => !tenantId || p.tenantId === tenantId).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+
+/** Adds a person. Emails are unique across the whole system, whatever the capitalisation. */
+export function saveProfile(p: Profile, actor: string) {
+  const d = db();
+  if (d.profiles.some((x) => x.id !== p.id && x.email.toLowerCase() === p.email.toLowerCase())) throw new DuplicateError("email");
+  const i = d.profiles.findIndex((x) => x.id === p.id);
+  if (i >= 0) d.profiles[i] = p; else d.profiles.push(p);
+  audit(actor, `User ${i >= 0 ? "updated" : "created"}: ${p.email} (${p.role})`, p.tenantId ?? undefined);
+}
+
+export function patchProfile(userId: string, patch: Partial<Pick<Profile, "role" | "fullName" | "disabled" | "mustChangePassword">>, actor: string, note: string) {
+  const p = db().profiles.find((x) => x.id === userId);
+  if (!p) return;
+  Object.assign(p, patch);
+  audit(actor, `${note}: ${p.email}`, p.tenantId ?? undefined);
+}
+
+export function removeProfile(userId: string, actor: string) {
+  const d = db();
+  const p = d.profiles.find((x) => x.id === userId);
+  if (!p) return;
+  d.profiles = d.profiles.filter((x) => x.id !== userId);
+  audit(actor, `User deleted: ${p.email}`, p.tenantId ?? undefined);
+}
+
+export function setOnboarding(tenantId: string, onboarding: Tenant["onboarding"], actor: string, note?: string) {
+  getTenant(tenantId)!.onboarding = onboarding;
+  if (note) audit(actor, note, tenantId);
+}
 export const getTenant = (tenantId: string) => db().tenants.find((t) => t.id === tenantId);
 export const getAgent = (tenantId: string) => db().agents[tenantId];
 export const getAgentVersions = (tenantId: string) =>
@@ -304,7 +335,7 @@ export function createTenant(p: {
     plans: [{ ...chosen, contractRef: (p.plan as { contractRef?: string } | undefined)?.contractRef || undefined, id: "plan-1", active: true, periodStart: start }],
     permissions: { editPrompt: true, editVoice: true, editBehaviour: true, editKnowledge: true },
     allowedDomains: p.domain ? [p.domain] : [], zeroBalancePolicy: "pause", lowBalanceThreshold: 0.15, retentionDays: 90,
-    alertRules: structuredClone(DEFAULT_RULES), calendarConnected: false, openingHours: DEFAULT_OPENING_HOURS, channels: { website: "pending", whatsapp: "off", instagram: "off", phone: "off" },
+    alertRules: structuredClone(DEFAULT_RULES), calendarConnected: false, openingHours: DEFAULT_OPENING_HOURS, channels: { website: "pending", whatsapp: "off", instagram: "off", phone: "off" }, onboarding: { done: [] },
     createdAt: now().toISOString(),
   };
   d.tenants.push(tenant);
@@ -326,7 +357,7 @@ export function deleteTenant(tenantId: string, actor: string) {
   d.tenants = d.tenants.filter((x) => x.id !== tenantId);
   delete d.agents[tenantId];
   const lists = d as unknown as Record<string, { tenantId?: string }[]>;
-  for (const k of ["agentVersions", "doctors", "bookings", "conversations", "knowledge", "unanswered", "batches", "ledger", "alerts", "audit", "topUpRequests", "staffRequests"])
+  for (const k of ["agentVersions", "doctors", "bookings", "conversations", "knowledge", "unanswered", "batches", "ledger", "alerts", "audit", "topUpRequests", "staffRequests", "profiles"])
     lists[k] = lists[k].filter((x) => x.tenantId !== tenantId);
   audit(actor, `Deleted client "${t.name}"`);
 }

@@ -4,7 +4,7 @@ import { DEFAULT_CATALOGUE, PLAN_PRESETS, firstPackage, normalizePlans, type Pla
 import { ELEVENLABS_USD_PER_MIN, ELEVENLABS_USD_PER_MSG, USD_TO_BHD, agent as defaultAgent } from "../seed";
 import type {
   AgentSettings, AgentVersion, Alert, AuditEntry, Booking, BookingStatus, Conversation, CreditBatch, Doctor,
-  CatalogPackage, KnowledgeItem, LedgerEntry, Locale, Permissions, StaffRequest, Tenant, UnansweredQuestion,
+  CatalogPackage, KnowledgeItem, LedgerEntry, Locale, Permissions, Profile, StaffRequest, Tenant, UnansweredQuestion,
 } from "../types";
 import type { Data } from "./demo";
 import { DuplicateError, SlotTakenError } from "../errors";
@@ -28,7 +28,8 @@ const tenantOf = (r: Row): Tenant => ({
   id: r.id, slug: r.slug, name: r.name, status: r.status, branding: jsonish(r.branding), plans: normalizePlans(jsonish(r.plan)), alertRules: normalizeRules(r.alert_rules == null ? undefined : jsonish(r.alert_rules)),
   permissions: jsonish(r.permissions), allowedDomains: r.allowed_domains ?? [], zeroBalancePolicy: r.zero_balance_policy,
   lowBalanceThreshold: num(r.low_balance_threshold), retentionDays: r.retention_days, calendarConnected: r.calendar_connected,
-  channels: jsonish(r.channels), openingHours: jsonish(r.opening_hours), createdAt: iso(r.created_at),
+  channels: jsonish(r.channels), openingHours: jsonish(r.opening_hours),
+  onboarding: ((o) => ({ ...o, done: o.done ?? [] }))(r.onboarding == null ? {} : jsonish<Partial<Tenant["onboarding"]>>(r.onboarding)), createdAt: iso(r.created_at),
 });
 const bookingOf = (r: Row): Booking => ({
   id: r.id, tenantId: r.tenant_id, doctorId: r.doctor_id, patientName: r.patient_name, patientPhone: r.patient_phone,
@@ -42,6 +43,10 @@ const batchOf = (r: Row): CreditBatch => ({
 const packageOf = (r: Row): CatalogPackage => ({
   id: r.id, name: r.name, nameAr: r.name_ar ?? "", description: r.description ?? "", type: r.type, includedCredits: r.included_credits,
   monthlyPriceBhd: num(r.monthly_price_bhd), pricePerCreditBhd: num(r.price_per_credit_bhd), rolloverCap: num(r.rollover_cap), archived: r.archived,
+});
+const profileOf = (r: Row): Profile => ({
+  id: r.id, tenantId: r.tenant_id ?? null, role: r.role, fullName: r.full_name ?? "", email: r.email ?? "",
+  disabled: Boolean(r.disabled), mustChangePassword: Boolean(r.must_change_password), createdAt: iso(r.created_at),
 });
 const staffRequestOf = (r: Row): StaffRequest => ({
   id: r.id, tenantId: r.tenant_id, kind: r.kind, name: r.name, phone: r.phone, text: r.text, urgent: r.urgent, language: r.language,
@@ -88,6 +93,13 @@ export const SCHEMA_ADDITIONS = [
   `alter table tenants add column if not exists alert_rules jsonb`,
   `alter table conversations add column if not exists flags text[] not null default '{}'`,
   `alter table conversations add column if not exists reviewed boolean not null default false`,
+  `alter table profiles add column if not exists email text not null default ''`,
+  `alter table profiles add column if not exists disabled boolean not null default false`,
+  `alter table profiles add column if not exists must_change_password boolean not null default false`,
+  `alter table profiles add column if not exists created_at timestamptz not null default now()`,
+  `create unique index if not exists profiles_email_unique on profiles (lower(email)) where email <> ''`,
+  `update profiles p set email = u.email from auth.users u where u.id = p.id and p.email = '' and u.email is not null`,
+  `alter table tenants add column if not exists onboarding jsonb not null default '{}'`,
   `create index if not exists conversations_flagged on conversations (tenant_id, started_at desc) where cardinality(flags) > 0`,
 ];
 
@@ -172,9 +184,45 @@ export function createPgData(db: Db): Data {
     listTenants: async () => tenantsWhere("order by created_at", []),
     getTenant: async (id) => (await tenantsWhere("where id = $1", [id]))[0],
     getProfile: async (userId) => {
-      const r = await q<Row>(`select role, tenant_id from profiles where id = $1`, [userId]);
-      return r[0] ? { role: r[0].role, tenantId: r[0].tenant_id ?? null } : undefined;
+      await ensureSchema(); // the sign-in check reads the new columns
+      const r = await q<Row>(`select * from profiles where id = $1`, [userId]);
+      return r[0] ? profileOf(r[0]) : undefined;
     },
+    listProfiles: async (tenantId) => {
+      await ensureSchema();
+      const r = tenantId
+        ? await q<Row>(`select * from profiles where tenant_id = $1 order by created_at`, [tenantId])
+        : await q<Row>(`select * from profiles order by created_at`);
+      return r.map(profileOf);
+    },
+    // The auth user is created first (by the caller), so its id is what this row is keyed on.
+    saveProfile: async (p, actor) => tx(async (run) => {
+      const dup = await run<Row>(`select id from profiles where lower(email) = lower($1) and id <> $2`, [p.email, p.id]);
+      if (dup[0]) throw new DuplicateError("email");
+      const existed = (await run<Row>(`select 1 from profiles where id = $1`, [p.id])).length > 0;
+      await run(
+        `insert into profiles (id, tenant_id, role, full_name, email, disabled, must_change_password) values ($1,$2,$3,$4,$5,$6,$7)
+         on conflict (id) do update set tenant_id = $2, role = $3, full_name = $4, email = $5, disabled = $6, must_change_password = $7`,
+        [p.id, p.tenantId, p.role, p.fullName, p.email, p.disabled, p.mustChangePassword]);
+      await audit(run, actor, `User ${existed ? "updated" : "created"}: ${p.email} (${p.role})`, p.tenantId ?? undefined);
+    }),
+    patchProfile: async (userId, patch, actor, note) => tx(async (run) => {
+      const r = await run<Row>(`select * from profiles where id = $1 for update`, [userId]);
+      if (!r[0]) return;
+      const cur = profileOf(r[0]);
+      const next = { ...cur, ...patch };
+      await run(`update profiles set role = $2, full_name = $3, disabled = $4, must_change_password = $5 where id = $1`,
+        [userId, next.role, next.fullName, next.disabled, next.mustChangePassword]);
+      await audit(run, actor, `${note}: ${cur.email}`, cur.tenantId ?? undefined);
+    }),
+    removeProfile: async (userId, actor) => tx(async (run) => {
+      const r = await run<Row>(`delete from profiles where id = $1 returning email, tenant_id`, [userId]);
+      if (r[0]) await audit(run, actor, `User deleted: ${r[0].email}`, r[0].tenant_id ?? undefined);
+    }),
+    setOnboarding: async (tenantId, onboarding, actor, note) => tx(async (run) => {
+      await run(`update tenants set onboarding = $2 where id = $1`, [tenantId, JSON.stringify(onboarding)]);
+      if (note) await audit(run, actor, note, tenantId);
+    }),
     getAgent: async (tenantId) => {
       const r = await q<Row>(`select settings, elevenlabs_agent_id from agents where tenant_id = $1`, [tenantId]);
       if (!r[0]) throw new Error("agent not found");

@@ -14,6 +14,7 @@ export default async function NewClient({ searchParams }: { searchParams: Promis
       {(error === "name" || error === "domain" || error === "plan") && <Notice tone="warn">{t(`admin.err.${error}` as "admin.err.name")}</Notice>}
       <form action={adminCreateTenantAction} className="card stack" style={{ maxWidth: 560 }}>
         <p className="muted">{t("admin.new.help")}</p>
+        <small className="muted">{t("admin.new.next")}</small>
         <label>{t("admin.new.name")}<input name="name" required maxLength={120} /></label>
         <label>{t("admin.displayNameAr")}<input name="nameAr" maxLength={120} dir="rtl" /></label>
         <label>{t("admin.new.domain")}<input name="domain" placeholder="clinic.example.bh" maxLength={200} /></label>

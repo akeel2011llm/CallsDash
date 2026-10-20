@@ -166,6 +166,47 @@ export interface Tenant {
   /** Local (Bahrain) opening intervals per weekday, keys "0" (Sunday) to "6" (Saturday), as ["HH:MM", "HH:MM"]. */
   openingHours: Record<string, [string, string][]>;
   channels: Record<Channel, "connected" | "pending" | "off">;
+  /** Progress through the admin setup wizard and the checklist items an admin ticked by hand. */
+  onboarding: Onboarding;
+  createdAt: string;
+}
+
+/** What the admin has confirmed by hand during setup; everything else on the checklist is worked out from the data. */
+export interface Onboarding {
+  /** Checklist items an admin marked as done (for things CallsDash cannot see, such as "hours confirmed with the clinic"). */
+  done: string[];
+  /** The last website scan, kept so the admin can review it before anything is applied. */
+  scan?: SiteScan;
+}
+
+/** What a website scan found. Nothing here is applied to the client until the admin accepts it. */
+export interface SiteScan {
+  url: string;
+  at: string;
+  title: string;
+  description: string;
+  phones: string[];
+  emails: string[];
+  languages: Locale[];
+  headings: string[];
+  /** Readable page text, trimmed, ready to become knowledge items. */
+  text: string;
+}
+
+export type Role = "admin" | "manager" | "receptionist";
+
+/** A person who can sign in. The password itself lives only in Supabase Auth. */
+export interface Profile {
+  id: string;
+  /** Null for admins. */
+  tenantId: string | null;
+  role: Role;
+  fullName: string;
+  email: string;
+  /** A disabled person is refused at the next request even if their sign-in session is still valid. */
+  disabled: boolean;
+  /** Set when an admin gave a temporary password: the person must choose their own before doing anything else. */
+  mustChangePassword: boolean;
   createdAt: string;
 }
 
@@ -273,5 +314,5 @@ export interface Voice {
 }
 
 export type Session =
-  | { role: "admin"; viewAsTenantId?: string }
-  | { role: "client"; tenantId: string };
+  | { role: "admin"; viewAsTenantId?: string; userId?: string; mustChangePassword?: boolean }
+  | { role: "client"; tenantId: string; userId?: string; staffRole?: "manager" | "receptionist"; mustChangePassword?: boolean };

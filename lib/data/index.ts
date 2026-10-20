@@ -24,6 +24,7 @@ const read = <K extends keyof Data>(k: K) => cache(call(k)) as Data[K];
 export const listTenants = read("listTenants");
 export const getTenant = read("getTenant");
 export const getProfile = read("getProfile");
+export const listProfiles = read("listProfiles");
 export const getAgent = read("getAgent");
 export const getAgentVersions = read("getAgentVersions");
 export const getDoctors = read("getDoctors");
@@ -72,5 +73,9 @@ export const createBooking = call("createBooking");
 export const updateBooking = call("updateBooking");
 export const addAlert = call("addAlert");
 export const setDoctorCalendar = call("setDoctorCalendar");
+export const saveProfile = call("saveProfile");
+export const patchProfile = call("patchProfile");
+export const removeProfile = call("removeProfile");
+export const setOnboarding = call("setOnboarding");
 
 export const getData = backend;

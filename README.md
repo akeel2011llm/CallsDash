@@ -19,6 +19,8 @@ Implementation plan: see the project's "CallsDash Implementation Plan" doc.
 | Google Calendar client (service account, free/busy, create, move, delete events) | Tested against a fake Google API only, **not** against a real calendar |
 | Supabase Auth sign-in (email + password; role and clinic from `profiles`) | Written, **not tested** against a real Supabase project |
 
+| Users and credentials (admin Users page, client Team page, forgot password, forced password change), setup checklist and website scan per client | Rules tested on Postgres with a fake Supabase Auth; real user creation needs `SUPABASE_SERVICE_ROLE_KEY` (see below) |
+
 ## Not in phase 1 yet
 
 - Recording playback from Supabase Storage (signed links) and the "unanswered questions" list in production (both empty until built).
@@ -46,7 +48,8 @@ npm test                     # credits wallet and webhook tests
    insert into profiles (id, role) values ('<auth user uuid>', 'admin');
    ```
    Clinic staff: `insert into profiles (id, tenant_id, role) values ('<uuid>', '<tenant uuid>', 'manager');`
-4. Optional sample data: `DATABASE_URL=... npx tsx scripts/seed-db.ts`.
+4. To create and manage people from the admin portal (Users page), set `SUPABASE_SERVICE_ROLE_KEY` (Supabase, Settings, API Keys, the secret key; server only, never `NEXT_PUBLIC_`). Without it the Users pages open but say the key is missing. For "Forgot password" emails, add `https://<your domain>/auth/callback` to Supabase, Authentication, URL Configuration, Redirect URLs. Profile columns for this (`email`, `disabled`, `must_change_password`) are added by the app on start; `0004_users_onboarding.sql` has the same statements.
+5. Optional sample data: `DATABASE_URL=... npx tsx scripts/seed-db.ts`.
 
 Local Postgres without Supabase: `npx tsx scripts/pglite-server.mts` starts an in-process Postgres on port 5433 with the migration applied (`PG_POOL_MAX=1` for the app, it accepts one connection).
 

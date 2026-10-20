@@ -3,6 +3,8 @@ import { requireClient } from "@/lib/auth";
 import { getT } from "@/lib/i18n";
 import { fmtDateTime, fmtNum } from "@/lib/format";
 import { getBookings, getConversations, getWallet } from "@/lib/data";
+import { checklistFor } from "@/lib/setup-facts";
+import type { Key } from "@/lib/i18n";
 import { dailyCounts, lastDays, summarize } from "@/lib/stats";
 import { flagRank, needsAttention } from "@/lib/flags";
 import { Badge, Flag, Notice, PageHead, Stat } from "@/components/ui";
@@ -15,8 +17,10 @@ import { patternOf } from "@/lib/theme";
 const CHANNELS = ["website", "whatsapp", "instagram", "phone"] as const;
 
 export default async function Home() {
-  const { tenant } = await requireClient();
-  const [{ t, locale }, w, convs, bookings] = await Promise.all([getT(), getWallet(tenant.id), getConversations(tenant.id), getBookings(tenant.id)]);
+  const { tenant, staffRole } = await requireClient();
+  const [{ t, locale }, w, convs, bookings, checklist] = await Promise.all([getT(), getWallet(tenant.id), getConversations(tenant.id), getBookings(tenant.id), checklistFor(tenant)]);
+  const todo = staffRole === "manager" ? checklist.filter((i) => i.forClient && !i.done) : [];
+  const todoHref: Record<string, string> = { knowledge: "/app/knowledge", hours: "/app/calendar", calendar: "/app/calendar", test: "/app/website" };
   const now = Date.now();
   const week = summarize(lastDays(convs, 7, now));
   const prevWeek = summarize(lastDays(convs, 14, now).filter((c) => !lastDays(convs, 7, now).includes(c)));
@@ -38,6 +42,21 @@ export default async function Home() {
         </div>
         <Link className="btn" href="/app/reports"><Icon name="chart" size={18} />{t("nav.reports")}</Link>
       </section>
+      {todo.length > 0 && (
+        <section className="card stack">
+          <h2>{t("home.start.title")}</h2>
+          <p className="muted">{t("home.start.help")}</p>
+          <ul className="checklist">
+            {todo.map((i) => (
+              <li key={i.id}>
+                <span className="mark" aria-hidden><Icon name="tick" size={16} /></span>
+                <div><span className="title">{t(`setup.item.${i.id}` as Key)}</span><small>{t(`setup.item.${i.id}.hint` as Key)}</small></div>
+                <Link className="btn small ghost" href={todoHref[i.id] ?? "/app"}>{t("setup.open")}</Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       {w.low && <Notice tone="warn">{t("home.lowBalance")} <Link href="/app/credits">{t("credits.request")}</Link></Notice>}
       <div className="grid">
         <Stat icon="chat" label={t("home.conversations")} value={week.total} trend={trend.slice(-7).map((d) => d.value)}
