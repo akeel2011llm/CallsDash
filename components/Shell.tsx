@@ -7,6 +7,8 @@ import { LocaleSwitch } from "./LocaleSwitch";
 import { NavLink } from "./NavLink";
 import { Icon } from "./icons";
 import { SubmitButton } from "@/components/SubmitButton";
+import { InstallPrompt } from "./InstallPrompt";
+import { ShellFrame } from "./ShellFrame";
 
 export interface NavItem {
   href: string;
@@ -16,6 +18,10 @@ export interface NavItem {
   badge?: string | number;
   /** A small heading shown above this item. */
   group?: string;
+  /** Also shown in the bottom bar on phones (the first four marked, or the first four items). */
+  tab?: boolean;
+  /** A shorter name for the bottom bar. */
+  short?: string;
 }
 
 export async function Shell({
@@ -26,12 +32,21 @@ export async function Shell({
   const { t, locale } = await getT();
   const vars = branding ? themeVars(branding) : undefined;
   const support = branding?.supportPhone || branding?.supportEmail;
+  const tabs = (nav.some((n) => n.tab) ? nav.filter((n) => n.tab) : nav).slice(0, 4);
+  const logo = branding?.logoUrl ? <img src={branding.logoUrl} alt="" /> : title.trim().charAt(0);
   return (
-    <div className="shell" style={vars as React.CSSProperties | undefined}>
+    <ShellFrame
+      style={vars as React.CSSProperties | undefined}
+      title={title}
+      logo={logo}
+      tabs={tabs.map((n) => ({ ...n, label: n.short ?? n.label }))}
+      menuLabel={t("nav.menu")}
+      moreLabel={t("nav.more")}
+      sidebar={(
       <aside className="sidebar" data-style={branding ? sidebarOf(branding) : "dark"}>
         <div className="brand">
           <span className="logo" aria-hidden>
-            {branding?.logoUrl ? <img src={branding.logoUrl} alt="" /> : title.trim().charAt(0)}
+            {logo}
           </span>
           <div>
             <strong>{title}</strong>
@@ -56,11 +71,14 @@ export async function Shell({
               {branding?.supportEmail && <div dir="ltr">{branding.supportEmail}</div>}
             </div>
           )}
+          <InstallPrompt label={t("pwa.install")} iosHint={t("pwa.iosHint")} />
           <Suspense fallback={null}><LocaleSwitch locale={locale} /></Suspense>
           <form action={logout}><SubmitButton className="btn ghost" type="submit"><Icon name="logout" size={18} />{t("nav.signOut")}</SubmitButton></form>
           {!branding?.hidePoweredBy && <div className="powered">Powered by CallsDash</div>}
         </div>
       </aside>
+      )}
+    >
       <main className="main">
         {viewingAs && (
           <div className="banner">
@@ -70,6 +88,6 @@ export async function Shell({
         )}
         {children}
       </main>
-    </div>
+    </ShellFrame>
   );
 }

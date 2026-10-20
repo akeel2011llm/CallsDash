@@ -5,7 +5,7 @@ import { fmtDateTime } from "@/lib/format";
 import { getConversations } from "@/lib/data";
 import { setAlertRulesAction, reviewConversationAction } from "@/lib/actions";
 import { BUILT_IN_KEYWORDS, FLAG_KINDS, flagRank } from "@/lib/flags";
-import { Flag, Notice, PageHead } from "@/components/ui";
+import { Empty, Flag, Notice, PageHead } from "@/components/ui";
 import { SubmitButton } from "@/components/SubmitButton";
 import type { FlagKind } from "@/lib/types";
 
@@ -49,7 +49,7 @@ export default async function AttentionPage({ searchParams }: { searchParams: Pr
         </nav>
       </div>
       {sp.rules === "saved" && <Notice tone="ok">{t("attn.saved")}</Notice>}
-      {rows.length === 0 ? <Notice tone="ok">{t("attn.none")}</Notice> : (
+      {rows.length === 0 ? <Empty>{t("attn.none")}</Empty> : (
         <div className="attn">
           {rows.map((c) => {
             const top = c.flags.slice().sort((a, b) => flagRank[a] - flagRank[b])[0];

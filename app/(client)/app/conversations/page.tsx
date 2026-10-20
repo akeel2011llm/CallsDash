@@ -48,7 +48,7 @@ export default async function ConversationsPage({ searchParams }: { searchParams
         <SubmitButton className="btn" type="submit">{t("common.search")}</SubmitButton>
       </form>
       <div className="card table-wrap">
-        <table>
+        <table className="cards">
           <thead><tr><th>{t("common.date")}</th><th>{t("common.channel")}</th><th>{t("common.outcome")}</th><th>{t("conversations.summary")}</th><th>{t("conversations.duration")}</th></tr></thead>
           <tbody>
             {rows.length === 0 && <tr><td colSpan={5} className="muted">{t("common.none")}</td></tr>}

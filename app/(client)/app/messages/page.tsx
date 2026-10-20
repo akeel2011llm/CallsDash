@@ -3,7 +3,7 @@ import { getT } from "@/lib/i18n";
 import { fmtDateTime } from "@/lib/format";
 import { getStaffRequests } from "@/lib/data";
 import { staffRequestStatusAction } from "@/lib/actions";
-import { Badge, Notice, PageHead } from "@/components/ui";
+import { Badge, Empty, PageHead } from "@/components/ui";
 import { SubmitButton } from "@/components/SubmitButton";
 
 export default async function MessagesPage() {
@@ -36,7 +36,7 @@ export default async function MessagesPage() {
     <>
       <PageHead title={t("messages.title")} />
       <p className="muted">{t("messages.help")}</p>
-      {open.length === 0 ? <Notice tone="ok">{t("messages.none")}</Notice> : <div className="stack">{open.map(card)}</div>}
+      {open.length === 0 ? <Empty kind="inbox">{t("messages.none")}</Empty> : <div className="stack">{open.map(card)}</div>}
       {done.length > 0 && (
         <details>
           <summary>{t("messages.done")} ({done.length})</summary>

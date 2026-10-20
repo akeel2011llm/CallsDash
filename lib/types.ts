@@ -75,6 +75,7 @@ export interface Permissions {
 export type SidebarStyle = "light" | "dark" | "brand";
 export type RadiusStyle = "sharp" | "soft" | "round";
 export type FontStyle = "modern" | "classic" | "friendly";
+export type PatternStyle = "none" | "waves" | "dots" | "mesh";
 
 /**
  * How a client's portal looks and what it says. Everything is optional beyond the name and colour;
@@ -87,6 +88,10 @@ export interface Branding {
   accentColor?: string;
   /** A small image stored inline as a data: URL (PNG, JPEG, WebP or SVG, at most 150 KB). */
   logoUrl?: string;
+  /** A photo or artwork (data: URL, at most 300 KB) behind the welcome banner and the sign-in cover. */
+  coverUrl?: string;
+  /** Decorative pattern over the banner and sign-in cover. */
+  pattern?: PatternStyle;
   sidebar?: SidebarStyle;
   radius?: RadiusStyle;
   font?: FontStyle;
