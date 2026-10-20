@@ -21,7 +21,7 @@ type Json = Record<string, any>; // eslint-disable-line @typescript-eslint/no-ex
 export interface ParsedCall {
   agentId: string;
   externalId: string;
-  conversation: Omit<Conversation, "id" | "tenantId" | "creditsCharged" | "costUsd">;
+  conversation: Omit<Conversation, "id" | "tenantId" | "creditsCharged" | "costUsd" | "flags" | "reviewed">;
 }
 
 const hasArabic = (s: string) => /[؀-ۿ]/.test(s);

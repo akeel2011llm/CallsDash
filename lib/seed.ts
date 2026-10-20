@@ -5,6 +5,7 @@ import type {
 import { addMonths, creditsFor, round2 } from "./credits";
 import { DEFAULT_OPENING_HOURS } from "./availability";
 import { DEFAULT_CATALOGUE } from "./plans";
+import { DEFAULT_RULES, detectFlags } from "./flags";
 
 export interface DB {
   tenants: Tenant[];
@@ -137,7 +138,7 @@ export function seed(): DB {
     {
       id: "t_alnoor", slug: "al-noor", name: "Al Noor Medical Center", status: "live",
       branding: { displayName: "Al Noor Medical Center", displayNameAr: "مركز النور الطبي", primaryColor: "#0e7c86", domain: "alnoor.example.bh" },
-      plans: [{ id: "plan-1", active: true, type: "package", name: "Clinic package", includedCredits: 2500, monthlyPriceBhd: 199, pricePerCreditBhd: 0.08, rolloverCap: 0.5, periodStart: monthStart }],
+      alertRules: structuredClone(DEFAULT_RULES), plans: [{ id: "plan-1", active: true, type: "package", name: "Clinic package", includedCredits: 2500, monthlyPriceBhd: 199, pricePerCreditBhd: 0.08, rolloverCap: 0.5, periodStart: monthStart }],
       permissions: { editPrompt: true, editVoice: true, editBehaviour: true, editKnowledge: true },
       allowedDomains: ["alnoor.example.bh", "localhost"], zeroBalancePolicy: "pause", lowBalanceThreshold: 0.15,
       retentionDays: 90, calendarConnected: true, openingHours: DEFAULT_OPENING_HOURS,
@@ -147,7 +148,7 @@ export function seed(): DB {
     {
       id: "t_smile", slug: "smile-dental", name: "Smile Dental Clinic", status: "live",
       branding: { displayName: "Smile Dental", displayNameAr: "عيادة الابتسامة", primaryColor: "#7c3aed", domain: "smile.example.bh" },
-      plans: [{ id: "plan-1", active: true, type: "payg", name: "Pay as you go", includedCredits: 0, monthlyPriceBhd: 20, pricePerCreditBhd: 0.11, rolloverCap: 0, periodStart: monthStart }],
+      alertRules: structuredClone(DEFAULT_RULES), plans: [{ id: "plan-1", active: true, type: "payg", name: "Pay as you go", includedCredits: 0, monthlyPriceBhd: 20, pricePerCreditBhd: 0.11, rolloverCap: 0, periodStart: monthStart }],
       permissions: { editPrompt: false, editVoice: true, editBehaviour: true, editKnowledge: true },
       allowedDomains: ["smile.example.bh", "localhost"], zeroBalancePolicy: "overdraft", lowBalanceThreshold: 0.15,
       retentionDays: 90, calendarConnected: false, openingHours: DEFAULT_OPENING_HOURS,
@@ -157,7 +158,7 @@ export function seed(): DB {
     {
       id: "t_physio", slug: "gulf-physio", name: "Gulf Physio Center", status: "error",
       branding: { displayName: "Gulf Physio", displayNameAr: "الخليج للعلاج الطبيعي", primaryColor: "#c2410c", domain: "physio.example.bh" },
-      plans: [{ id: "plan-1", active: true, type: "package", name: "Clinic package", includedCredits: 2500, monthlyPriceBhd: 199, pricePerCreditBhd: 0.08, rolloverCap: 0.5, periodStart: monthStart }],
+      alertRules: structuredClone(DEFAULT_RULES), plans: [{ id: "plan-1", active: true, type: "package", name: "Clinic package", includedCredits: 2500, monthlyPriceBhd: 199, pricePerCreditBhd: 0.08, rolloverCap: 0.5, periodStart: monthStart }],
       permissions: { editPrompt: true, editVoice: true, editBehaviour: true, editKnowledge: true },
       allowedDomains: ["physio.example.bh"], zeroBalancePolicy: "pause", lowBalanceThreshold: 0.15,
       retentionDays: 90, calendarConnected: true, openingHours: DEFAULT_OPENING_HOURS,
@@ -227,11 +228,29 @@ export function seed(): DB {
         outcome, summary: pick(summaries[outcome][lang]), sentiment: outcome === "handed_off" ? "negative" : pick(["positive", "positive", "neutral"] as const),
         transcript: outcome === "abandoned" ? [] : tr,
         recordingUrl: mode === "voice" ? undefined : undefined, // real URLs come from ElevenLabs via the webhook
-        creditsCharged: credits,
+        creditsCharged: credits, flags: [], reviewed: false,
         costUsd: round2(mode === "voice" ? (durationSec / 60) * ELEVENLABS_USD_PER_MIN : messages * ELEVENLABS_USD_PER_MSG),
       });
     }
   }
+  // a few conversations that the alert rules pick up, so the Needs attention page has something to show in the demo
+  const flagged: { id: string; ago: number; channel: Channel; mode: "voice" | "text"; lang: "en" | "ar"; outcome: Outcome; sentiment: Conversation["sentiment"]; summary: string; said: string }[] = [
+    { id: "c_demo_1", ago: 2, channel: "phone", mode: "voice", lang: "en", outcome: "handed_off", sentiment: "negative", summary: "Caller reported chest pain and asked for urgent help; a staff member was asked to call back.", said: "My father has chest pain and he is sweating, please help." },
+    { id: "c_demo_2", ago: 5, channel: "whatsapp", mode: "text", lang: "ar", outcome: "handed_off", sentiment: "negative", summary: "المريض غير راضٍ عن الانتظار الطويل ويريد التحدث مع المدير.", said: "انتظرت كثير وما أحد رد علي، أبي أتكلم مع المدير" },
+    { id: "c_demo_3", ago: 9, channel: "website", mode: "text", lang: "en", outcome: "answered", sentiment: "neutral", summary: "Asked how much teeth whitening costs and whether there is a package offer; did not book.", said: "How much is a whitening session? Do you have any offers?" },
+    { id: "c_demo_4", ago: 26, channel: "instagram", mode: "text", lang: "ar", outcome: "answered", sentiment: "neutral", summary: "سألت عن سعر الاستشارة وهي مهتمة بحجز موعد لاحقاً.", said: "كم سعر الاستشارة عندكم؟" },
+  ];
+  for (const f of flagged) {
+    const durationSec = f.mode === "voice" ? 95 : 60, messages = f.mode === "text" ? 6 : 0;
+    conversations.push({
+      id: f.id, tenantId: "t_alnoor", channel: f.channel, mode: f.mode, language: f.lang, startedAt: iso(nowMs - f.ago * 3_600_000 * 7), durationSec, messages,
+      outcome: f.outcome, summary: f.summary, sentiment: f.sentiment,
+      transcript: [{ role: "patient", text: f.said, atSec: 3 }, { role: "agent", text: f.lang === "ar" ? "أكيد، خليني أساعدك." : "Of course, let me help you with that.", atSec: 9 }],
+      creditsCharged: creditsFor({ mode: f.mode, durationSec, messages }), flags: [], reviewed: false,
+      costUsd: round2(f.mode === "voice" ? (durationSec / 60) * ELEVENLABS_USD_PER_MIN : messages * ELEVENLABS_USD_PER_MSG),
+    });
+  }
+  for (const c of conversations) c.flags = detectFlags(c, DEFAULT_RULES);
   conversations.sort((a, b) => b.startedAt.localeCompare(a.startedAt));
 
   const used = (t: string, since: number) =>

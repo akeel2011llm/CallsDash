@@ -14,10 +14,10 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       title="CallsDash"
       subtitle="Admin"
       nav={[
-        { href: "/admin", label: t("nav.clients"), exact: true },
-        { href: "/admin/packages", label: t("nav.packages") },
-        { href: "/admin/usage", label: t("nav.usage") },
-        { href: "/admin/alerts", label: t("nav.alerts"), badge: open || undefined },
+        { href: "/admin", label: t("nav.clients"), icon: "users", exact: true },
+        { href: "/admin/packages", label: t("nav.packages"), icon: "package" },
+        { href: "/admin/usage", label: t("nav.usage"), icon: "usage" },
+        { href: "/admin/alerts", label: t("nav.alerts"), icon: "bell", badge: open || undefined },
       ]}
     >
       {children}

@@ -11,7 +11,9 @@ import { DuplicateError } from "./errors";
 import { nameKey } from "./tenant-keys";
 import { cleanOpeningHours } from "./availability";
 import { cleanCatalogInput, type PlanInput } from "./plans";
-import type { AgentSettings, BookingStatus, Locale, Permissions } from "./types";
+import { FLAG_KINDS, normalizeRules } from "./flags";
+import { FONT_STYLES, RADIUS_STYLES, SIDEBAR_STYLES, isHex, isLogoUrl, logoDataUrl } from "./theme";
+import type { AgentSettings, Branding, BookingStatus, Locale, Permissions } from "./types";
 
 const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 const num = (f: FormData, k: string) => Number(f.get(k));
@@ -168,6 +170,27 @@ export async function setOpeningHoursAction(f: FormData) {
   redirect("/app/calendar?hours=saved#hours");
 }
 
+export async function reviewConversationAction(f: FormData) {
+  const { tenant, actor } = await requireClient();
+  await store.setConversationReviewed(tenant.id, str(f, "id"), str(f, "reviewed") === "1", actor);
+  revalidatePath("/app", "layout");
+  back(f, "/app/attention", "done=1");
+}
+
+export async function setAlertRulesAction(f: FormData) {
+  const { tenant, actor } = await requireClient();
+  const raw: Record<string, unknown> = {};
+  for (const k of FLAG_KINDS)
+    raw[k] = {
+      enabled: f.get(`${k}_enabled`) === "on",
+      notifyStaff: f.get(`${k}_notify`) === "on",
+      keywords: str(f, `${k}_keywords`).split(/[\n,،]/).map((s) => s.trim().slice(0, 60)).filter(Boolean).slice(0, 50),
+    };
+  await store.setAlertRules(tenant.id, normalizeRules(raw), actor);
+  revalidatePath("/app", "layout");
+  redirect("/app/attention?rules=saved#rules");
+}
+
 /* ---------- admin actions ---------- */
 
 export async function adminTopUpAction(f: FormData) {
@@ -286,6 +309,42 @@ export async function adminTenantSettingsAction(f: FormData) {
   }
   revalidatePath("/admin", "layout");
   back(f, `/admin/clients/${id}`);
+}
+
+const text = (f: FormData, k: string, max: number) => str(f, k).slice(0, max);
+
+/** The branding studio. Every field is optional; an empty text field clears the setting. */
+export async function adminBrandingAction(f: FormData) {
+  const { actor } = await requireAdmin();
+  const id = str(f, "tenantId");
+  const b: Partial<Branding> = {
+    welcome: text(f, "welcome", 240), welcomeAr: text(f, "welcomeAr", 240),
+    tagline: text(f, "tagline", 160), taglineAr: text(f, "taglineAr", 160),
+    supportPhone: text(f, "supportPhone", 40), supportEmail: text(f, "supportEmail", 120), supportWhatsapp: text(f, "supportWhatsapp", 40),
+    reportFooter: text(f, "reportFooter", 200),
+    hidePoweredBy: f.get("hidePoweredBy") === "on",
+  };
+  if (str(f, "displayName")) b.displayName = text(f, "displayName", 120);
+  if (str(f, "displayNameAr")) b.displayNameAr = text(f, "displayNameAr", 120);
+  if (isHex(str(f, "primaryColor"))) b.primaryColor = str(f, "primaryColor");
+  b.accentColor = isHex(str(f, "accentColor")) ? str(f, "accentColor") : "";
+  const sidebar = str(f, "sidebar"), radius = str(f, "radius"), font = str(f, "font");
+  if (SIDEBAR_STYLES.includes(sidebar as never)) b.sidebar = sidebar as Branding["sidebar"];
+  if (RADIUS_STYLES.includes(radius as never)) b.radius = radius as Branding["radius"];
+  if (FONT_STYLES.includes(font as never)) b.font = font as Branding["font"];
+
+  let logoError = false;
+  const file = f.get("logo");
+  if (f.get("removeLogo") === "on") b.logoUrl = "";
+  else if (file instanceof File && file.size > 0) {
+    const url = await logoDataUrl(file);
+    if (url && isLogoUrl(url)) b.logoUrl = url;
+    else logoError = true;
+  }
+  await store.updateTenant(id, { branding: b }, actor);
+  revalidatePath("/admin", "layout");
+  revalidatePath("/app", "layout");
+  redirect(`/admin/clients/${id}/branding?${logoError ? "logo=bad" : "saved=1"}`);
 }
 
 export async function adminSetCalendarAction(f: FormData) {

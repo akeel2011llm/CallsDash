@@ -1,9 +1,20 @@
-export function Stat({ label, value, hint, tone }: { label: string; value: React.ReactNode; hint?: string; tone?: "warn" | "ok" }) {
+import { Icon } from "./icons";
+import { Sparkline } from "./charts";
+
+export function Stat({ label, value, hint, tone, icon, trend, delta }: {
+  label: string; value: React.ReactNode; hint?: string; tone?: "warn" | "ok" | "bad"; icon?: string; trend?: number[]; delta?: { text: string; up: boolean };
+}) {
   return (
     <div className={`card stat ${tone ?? ""}`}>
+      {icon && <span className="chip"><Icon name={icon} size={18} /></span>}
       <span className="muted">{label}</span>
       <strong>{value}</strong>
-      {hint && <small className="muted">{hint}</small>}
+      {(hint || trend || delta) && (
+        <div className="stat-foot">
+          <small className="muted">{delta && <span className={`delta ${delta.up ? "up" : "down"}`}>{delta.text} </span>}{hint}</small>
+          {trend && trend.length > 1 && <Sparkline values={trend} />}
+        </div>
+      )}
     </div>
   );
 }
@@ -16,11 +27,20 @@ export function Notice({ children, tone = "info" }: { children: React.ReactNode;
   return <div className={`notice ${tone}`} role="status">{children}</div>;
 }
 
-export function PageHead({ title, actions }: { title: string; actions?: React.ReactNode }) {
+export function PageHead({ title, subtitle, actions }: { title: string; subtitle?: string; actions?: React.ReactNode }) {
   return (
     <header className="page-head">
-      <h1>{title}</h1>
+      <div>
+        <h1>{title}</h1>
+        {subtitle && <p>{subtitle}</p>}
+      </div>
       {actions && <div className="row">{actions}</div>}
     </header>
   );
+}
+
+const FLAG_ICON = { emergency: "siren", complaint: "alert", lead: "target" } as const;
+/** An icon and a word, never colour alone. */
+export function Flag({ kind, children }: { kind: "emergency" | "complaint" | "lead"; children: React.ReactNode }) {
+  return <span className={`flag ${kind}`}><Icon name={FLAG_ICON[kind]} size={14} />{children}</span>;
 }
