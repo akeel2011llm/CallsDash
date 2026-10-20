@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { usingDatabase } from "@/lib/data";
+import { normalizeDatabaseUrl } from "@/lib/data/database-url";
 import { createNodePgDb } from "@/lib/data/node-pg";
 import { demoMode } from "@/lib/demo-flag";
 import { supabasePublicKey, supabaseUrl } from "@/lib/supabase-env";
@@ -19,6 +20,7 @@ export async function GET() {
   };
   if (usingDatabase()) {
     out.connectionString = describeUrl(process.env.DATABASE_URL!);
+    out.autoCleaned = normalizeDatabaseUrl(process.env.DATABASE_URL!) !== process.env.DATABASE_URL;
     try {
       const q = createNodePgDb(process.env.DATABASE_URL!).q;
       await q("select 1");
