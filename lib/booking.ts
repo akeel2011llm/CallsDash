@@ -1,4 +1,4 @@
-import { computeSlots, describeSlot, isSlotFree, type Busy } from "./availability";
+import { computeSlots, describeSlot, isOpenAt, isSlotFree, nextOpening, type Busy } from "./availability";
 import { SlotTakenError } from "./errors";
 import type { Calendar } from "./google-calendar";
 import type { Data } from "./data/demo";
@@ -113,6 +113,30 @@ export function createBookingService(data: Data, calendar: Calendar | null, nowF
       };
     },
 
+    /** Leaves a message for the clinic team. It appears in the dashboard inbox. */
+    async takeMessage(tenantId: string, p: { name: string; phone: string; message: string; language?: string; conversationId?: string }) {
+      const r = await staffRequest(tenantId, "message", { name: p.name, phone: p.phone, text: p.message, language: p.language, conversationId: p.conversationId });
+      return { requestId: r.id, message: "The message is saved for the team. Tell the caller they will be contacted on the number given." };
+    },
+
+    /**
+     * Asks a person to call the patient back. Live transfer to a phone line is not available yet, so this is a
+     * callback request, marked urgent when the agent says so. The reply tells the agent what to promise.
+     */
+    async handoffToStaff(tenantId: string, p: { name: string; phone: string; reason: string; urgent?: boolean; language?: string; conversationId?: string }) {
+      const { tenant } = await context(tenantId);
+      const r = await staffRequest(tenantId, "handoff", { name: p.name, phone: p.phone, text: p.reason, urgent: p.urgent, language: p.language, conversationId: p.conversationId });
+      const nowMs = nowFn().getTime();
+      const open = isOpenAt(tenant.openingHours, nowMs);
+      const next = open ? null : nextOpening(tenant.openingHours, nowMs);
+      return {
+        requestId: r.id, open, transferred: false,
+        message: open
+          ? "A team member has been asked to call the caller back on the number given, shortly. Do not promise a live transfer."
+          : `The clinic is closed now${next ? `; it opens ${describeSlot(next, p.language === "ar" ? "ar" : "en")}` : ""}. A team member will call the caller back after it opens. Do not promise a live transfer.`,
+      };
+    },
+
     async cancelAppointment(tenantId: string, p: { bookingId: string; patientPhone: string }) {
       const { booking, doctor } = await owned(tenantId, p.bookingId, p.patientPhone);
       await data.updateBooking(tenantId, booking.id, { status: "cancelled" }, "agent");
@@ -146,6 +170,20 @@ export function createBookingService(data: Data, calendar: Calendar | null, nowF
       return { bookingId: updated.id, start: updated.startsAt, label: describeSlot(updated.startsAt, "en") };
     },
   };
+
+  /** Used by the staff tools below. */
+  async function staffRequest(tenantId: string, kind: "message" | "handoff", p: { name: string; phone: string; text: string; urgent?: boolean; language?: string; conversationId?: string }) {
+    await context(tenantId);
+    const name = p.name.replace(/\s+/g, " ").trim().slice(0, 120);
+    const text = p.text.trim().slice(0, 1000);
+    if (lastDigits(p.phone).length < 8) throw new ToolError("missing_details", "Ask the caller for a phone number staff can call back on.");
+    if (!name) throw new ToolError("missing_details", "Ask the caller for their name.");
+    if (!text) throw new ToolError("missing_details", kind === "message" ? "Ask what the message should say." : "Ask the caller what they need help with.");
+    return data.addStaffRequest(tenantId, {
+      kind, name, phone: p.phone.trim().slice(0, 40), text, urgent: Boolean(p.urgent), language: p.language === "ar" ? "ar" : "en",
+      conversationId: p.conversationId?.slice(0, 120) || undefined,
+    });
+  }
 
   /** A booking can only be changed by someone who knows the phone number it was made with. */
   async function owned(tenantId: string, bookingId: string, phone: string) {

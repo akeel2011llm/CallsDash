@@ -9,6 +9,7 @@ import { supabaseConfigured, supabaseServer } from "./supabase";
 import * as store from "./data";
 import { DuplicateError } from "./errors";
 import { nameKey } from "./tenant-keys";
+import { cleanOpeningHours } from "./availability";
 import { cleanCatalogInput, type PlanInput } from "./plans";
 import type { AgentSettings, BookingStatus, Locale, Permissions } from "./types";
 
@@ -146,6 +147,25 @@ export async function requestTopUpAction(f: FormData) {
   await store.requestTopUp(tenant.id, credits, actor);
   revalidatePath("/admin");
   back(f, "/app/credits", "requested=1");
+}
+
+export async function staffRequestStatusAction(f: FormData) {
+  const { tenant, actor } = await requireClient();
+  await store.setStaffRequestStatus(tenant.id, str(f, "id"), str(f, "status") === "open" ? "open" : "done", actor);
+  revalidatePath("/app", "layout");
+  redirect("/app/messages");
+}
+
+export async function setOpeningHoursAction(f: FormData) {
+  const { tenant, actor } = await requireClient();
+  const raw: Record<string, [string, string][]> = {};
+  for (let d = 0; d < 7; d++)
+    raw[String(d)] = (["a", "b"] as const).map((r): [string, string] => [str(f, `open${d}${r}`), str(f, `close${d}${r}`)]).filter(([a, b]) => a || b);
+  const hours = cleanOpeningHours(raw);
+  if (!hours) redirect("/app/calendar?hours=invalid#hours");
+  await store.setOpeningHours(tenant.id, hours, actor);
+  revalidatePath("/app", "layout");
+  redirect("/app/calendar?hours=saved#hours");
 }
 
 /* ---------- admin actions ---------- */

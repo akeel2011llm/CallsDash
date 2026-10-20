@@ -1,14 +1,15 @@
 import { requireClient } from "@/lib/auth";
 import { getT } from "@/lib/i18n";
 import { Shell } from "@/components/Shell";
-import { getWallet } from "@/lib/data";
+import { getStaffRequests, getWallet } from "@/lib/data";
 
 export const dynamic = "force-dynamic";
 
 export default async function ClientLayout({ children }: { children: React.ReactNode }) {
   const { tenant, viewingAsAdmin } = await requireClient();
   const { t, locale } = await getT();
-  const w = await getWallet(tenant.id);
+  const [w, requests] = await Promise.all([getWallet(tenant.id), getStaffRequests(tenant.id)]);
+  const openRequests = requests.filter((r) => r.status === "open").length;
   return (
     <Shell
       title={locale === "ar" ? tenant.branding.displayNameAr : tenant.branding.displayName}
@@ -18,6 +19,7 @@ export default async function ClientLayout({ children }: { children: React.React
       nav={[
         { href: "/app", label: t("nav.home"), exact: true },
         { href: "/app/conversations", label: t("nav.conversations") },
+        { href: "/app/messages", label: t("nav.messages"), badge: openRequests || undefined },
         { href: "/app/bookings", label: t("nav.bookings") },
         { href: "/app/calendar", label: t("nav.calendar") },
         { href: "/app/knowledge", label: t("nav.knowledge") },

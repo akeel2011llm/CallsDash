@@ -4,15 +4,17 @@ import { getT } from "@/lib/i18n";
 import { dayKey, fmtTime } from "@/lib/format";
 import { getBookings, getDoctors } from "@/lib/data";
 import { Notice, PageHead } from "@/components/ui";
+import { setOpeningHoursAction } from "@/lib/actions";
+import { SubmitButton } from "@/components/SubmitButton";
 
 const FIRST_HOUR = 8;
 const HOURS = 12; // 08:00 to 20:00
 const ROW = 56;
 const LOCAL_OFFSET_MS = 3 * 3_600_000; // Asia/Bahrain, no DST
 
-export default async function CalendarPage({ searchParams }: { searchParams: Promise<{ w?: string }> }) {
+export default async function CalendarPage({ searchParams }: { searchParams: Promise<{ w?: string; hours?: string }> }) {
   const { tenant } = await requireClient();
-  const { w } = await searchParams;
+  const { w, hours } = await searchParams;
   const { t, locale } = await getT();
   const offset = Math.max(-52, Math.min(52, Number(w) || 0));
   const local = new Date(Date.now() + LOCAL_OFFSET_MS);
@@ -75,6 +77,29 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
           })}
         </div>
       </div>
+      <section id="hours" className="card stack">
+        <h2>{t("hours.title")}</h2>
+        <p className="muted">{t("hours.help")}</p>
+        {hours === "saved" && <Notice tone="ok">{t("hours.saved")}</Notice>}
+        {hours === "invalid" && <Notice tone="warn">{t("hours.invalid")}</Notice>}
+        <form action={setOpeningHoursAction} className="stack">
+          {[6, 0, 1, 2, 3, 4, 5].map((d) => {
+            const day = tenant.openingHours[String(d)] ?? [];
+            return (
+              <div key={d} className="row" style={{ alignItems: "end" }}>
+                <strong style={{ minInlineSize: 110 }}>{t(`day.${d}` as "day.0")}</strong>
+                {(["a", "b"] as const).map((r, i) => (
+                  <span key={r} className="row" dir="ltr">
+                    <label>{i === 0 ? t("hours.from") : ""}<input type="time" name={`open${d}${r}`} defaultValue={day[i]?.[0] ?? ""} /></label>
+                    <label>{i === 0 ? t("hours.to") : ""}<input type="time" name={`close${d}${r}`} defaultValue={day[i]?.[1] ?? ""} /></label>
+                  </span>
+                ))}
+              </div>
+            );
+          })}
+          <div><SubmitButton className="btn" type="submit">{t("common.save")}</SubmitButton></div>
+        </form>
+      </section>
     </>
   );
 }

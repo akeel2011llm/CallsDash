@@ -4,7 +4,7 @@ import { DEFAULT_CATALOGUE, PLAN_PRESETS, firstPackage, normalizePlans, type Pla
 import { ELEVENLABS_USD_PER_MIN, ELEVENLABS_USD_PER_MSG, USD_TO_BHD, agent as defaultAgent } from "../seed";
 import type {
   AgentSettings, AgentVersion, Alert, AuditEntry, Booking, BookingStatus, Conversation, CreditBatch, Doctor,
-  CatalogPackage, KnowledgeItem, LedgerEntry, Locale, Permissions, Tenant, UnansweredQuestion,
+  CatalogPackage, KnowledgeItem, LedgerEntry, Locale, Permissions, StaffRequest, Tenant, UnansweredQuestion,
 } from "../types";
 import type { Data } from "./demo";
 import { DuplicateError, SlotTakenError } from "../errors";
@@ -42,6 +42,10 @@ const packageOf = (r: Row): CatalogPackage => ({
   id: r.id, name: r.name, nameAr: r.name_ar ?? "", description: r.description ?? "", type: r.type, includedCredits: r.included_credits,
   monthlyPriceBhd: num(r.monthly_price_bhd), pricePerCreditBhd: num(r.price_per_credit_bhd), rolloverCap: num(r.rollover_cap), archived: r.archived,
 });
+const staffRequestOf = (r: Row): StaffRequest => ({
+  id: r.id, tenantId: r.tenant_id, kind: r.kind, name: r.name, phone: r.phone, text: r.text, urgent: r.urgent, language: r.language,
+  conversationId: r.conversation_id ?? undefined, status: r.status, createdAt: iso(r.created_at), handledAt: r.handled_at ? iso(r.handled_at) : undefined,
+});
 const convOf = (r: Row): Conversation => ({
   id: r.id, tenantId: r.tenant_id, channel: r.channel, mode: r.mode, language: r.language, startedAt: iso(r.started_at),
   durationSec: r.duration_sec, messages: r.messages, outcome: r.outcome, summary: r.summary, sentiment: r.sentiment,
@@ -53,7 +57,7 @@ const ledgerOf = (r: Row): LedgerEntry => ({
   conversationId: r.conversation_id ?? undefined, note: r.note ?? undefined,
 });
 
-export const PACKAGE_SCHEMA = [
+export const SCHEMA_ADDITIONS = [
   `alter table credit_batches add column if not exists plan_id text`,
   `create table if not exists packages (
      id uuid primary key default gen_random_uuid(),
@@ -66,6 +70,19 @@ export const PACKAGE_SCHEMA = [
      archived boolean not null default false,
      created_at timestamptz not null default now())`,
   `alter table packages enable row level security`,
+  `create table if not exists staff_requests (
+     id uuid primary key default gen_random_uuid(),
+     tenant_id uuid not null references tenants on delete cascade,
+     kind text not null check (kind in ('message', 'handoff')),
+     name text not null default '', phone text not null default '', text text not null default '',
+     urgent boolean not null default false,
+     language text not null default 'en',
+     conversation_id text,
+     status text not null default 'open' check (status in ('open', 'done')),
+     created_at timestamptz not null default now(),
+     handled_at timestamptz)`,
+  `create index if not exists staff_requests_tenant on staff_requests (tenant_id, status, created_at desc)`,
+  `alter table staff_requests enable row level security`,
 ];
 
 export function createPgData(db: Db): Data {
@@ -75,7 +92,7 @@ export function createPgData(db: Db): Data {
   // deploy works without anyone running SQL by hand (supabase/migrations/0003_packages.sql holds the same statements).
   let schemaReady: Promise<void> | undefined;
   const ensureSchema = () => (schemaReady ??= (async () => {
-    for (const sql of PACKAGE_SCHEMA) await q(sql);
+    for (const sql of SCHEMA_ADDITIONS) await q(sql);
   })().catch((e) => { schemaReady = undefined; throw e; }));
   const tx: Db["tx"] = async (fn) => { await ensureSchema(); return db.tx(fn); };
   const tenantsWhere = async (where: string, params: unknown[]) => (await q<Row>(`select * from tenants ${where}`, params)).map(tenantOf);
@@ -262,6 +279,28 @@ export function createPgData(db: Db): Data {
       await ledger(run, { tenantId, kind: "package_renewal", credits: plan.includedCredits, note: plan.name });
       await audit(run, actor, `Renewed ${plan.name}: ${res.carried} credits rolled over, ${res.lapsed} lapsed`, tenantId);
       return res;
+    }),
+
+    getStaffRequests: async (tenantId) => {
+      await ensureSchema();
+      return (await q<Row>(`select * from staff_requests where tenant_id = $1 order by created_at desc limit 500`, [tenantId])).map(staffRequestOf);
+    },
+
+    addStaffRequest: async (tenantId, r) => tx(async (run) => {
+      const rows = await run<Row>(
+        `insert into staff_requests (tenant_id, kind, name, phone, text, urgent, language, conversation_id) values ($1,$2,$3,$4,$5,$6,$7,$8) returning *`,
+        [tenantId, r.kind, r.name, r.phone, r.text, r.urgent, r.language, r.conversationId ?? null]);
+      return staffRequestOf(rows[0]);
+    }),
+
+    setStaffRequestStatus: async (tenantId, requestId, status, actor) => tx(async (run) => {
+      const rows = await run(`update staff_requests set status = $3, handled_at = case when $3 = 'done' then now() else null end where tenant_id = $1 and id = $2 returning id`, [tenantId, requestId, status]);
+      if (rows[0]) await audit(run, actor, status === "done" ? "Marked a message as handled" : "Reopened a message", tenantId);
+    }),
+
+    setOpeningHours: async (tenantId, hours, actor) => tx(async (run) => {
+      await run(`update tenants set opening_hours = $2 where id = $1`, [tenantId, JSON.stringify(hours)]);
+      await audit(run, actor, "Opening hours changed", tenantId);
     }),
 
     addPlan: async (tenantId, input, actor) => tx(async (run) => {

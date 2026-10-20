@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_OPENING_HOURS, computeSlots, isSlotFree } from "@/lib/availability";
+import { DEFAULT_OPENING_HOURS, cleanOpeningHours, computeSlots, isOpenAt, isSlotFree, nextOpening } from "@/lib/availability";
 
 // Wednesday 2026-10-21, 06:00 UTC = 09:00 in Bahrain
 const hour = (iso: string) => new Date(new Date(iso).getTime() + 3 * 3_600_000).toISOString().slice(11, 16);
@@ -47,5 +47,26 @@ describe("isSlotFree", () => {
     expect(isSlotFree({ ...p, startMs: Date.parse("2026-10-21T07:00:00Z") })).toBe(false); // busy
     expect(isSlotFree({ ...p, startMs: Date.parse("2026-10-21T06:10:00Z") })).toBe(false); // off the 30-min grid
     expect(isSlotFree({ ...p, startMs: Date.parse("2026-10-21T01:00:00Z") })).toBe(false); // 04:00 local, closed
+  });
+});
+
+describe("opening hours editing", () => {
+  const day = (...r: [string, string][]) => r;
+  it("accepts a split shift and treats empty days as closed", () => {
+    const h = cleanOpeningHours({ "0": day(["16:00", "21:00"], ["08:00", "13:00"]), "5": [] })!;
+    expect(h["0"]).toEqual([["08:00", "13:00"], ["16:00", "21:00"]]);
+    expect(h["5"]).toEqual([]);
+    expect(h["3"]).toEqual([]);
+  });
+  it("rejects bad, reversed, overlapping or too many intervals", () => {
+    for (const bad of [day(["8:00", "13:00"]), day(["13:00", "08:00"]), day(["08:00", "13:00"], ["12:00", "15:00"]), day(["08:00", "09:00"], ["10:00", "11:00"], ["12:00", "13:00"]), day(["08:00", "25:00"])])
+      expect(cleanOpeningHours({ "1": bad })).toBeNull();
+  });
+  it("knows if the clinic is open and when it opens next (local time)", () => {
+    expect(isOpenAt(DEFAULT_OPENING_HOURS, Date.parse("2026-10-21T07:00:00Z"))).toBe(true); // Wed 10:00
+    expect(isOpenAt(DEFAULT_OPENING_HOURS, Date.parse("2026-10-21T00:00:00Z"))).toBe(false); // Wed 03:00
+    expect(nextOpening(DEFAULT_OPENING_HOURS, Date.parse("2026-10-21T00:00:00Z"))).toBe("2026-10-21T05:00:00.000Z"); // Wed 08:00
+    expect(nextOpening(DEFAULT_OPENING_HOURS, Date.parse("2026-10-23T19:00:00Z"))).toBe("2026-10-24T05:00:00.000Z"); // Fri 22:00 -> Sat 08:00
+    expect(nextOpening({ "0": [], "1": [], "2": [], "3": [], "4": [], "5": [], "6": [] }, Date.parse("2026-10-21T00:00:00Z"))).toBeNull();
   });
 });

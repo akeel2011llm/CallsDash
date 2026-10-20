@@ -6,7 +6,7 @@ import { findDuplicate, nameKey } from "./tenant-keys";
 import { DEFAULT_OPENING_HOURS } from "./availability";
 import { seed, type DB, ELEVENLABS_USD_PER_MIN, ELEVENLABS_USD_PER_MSG } from "./seed";
 import type {
-  AgentSettings, Booking, BookingStatus, Channel, Conversation, Locale, Permissions, Tenant,
+  AgentSettings, Booking, BookingStatus, Channel, Conversation, Locale, Permissions, StaffRequest, Tenant,
 } from "./types";
 
 /**
@@ -46,6 +46,28 @@ export const getKnowledge = (tenantId: string) => db().knowledge.filter((k) => k
 export const getUnanswered = (tenantId: string) => db().unanswered.filter((u) => u.tenantId === tenantId);
 export const getAlerts = (tenantId?: string) =>
   db().alerts.filter((a) => !tenantId || a.tenantId === tenantId).sort((a, b) => b.at.localeCompare(a.at));
+export const getStaffRequests = (tenantId: string) =>
+  db().staffRequests.filter((r) => r.tenantId === tenantId).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+
+export function addStaffRequest(tenantId: string, r: Pick<StaffRequest, "kind" | "name" | "phone" | "text" | "urgent" | "language"> & { conversationId?: string }) {
+  const req: StaffRequest = { ...r, id: id("sr"), tenantId, status: "open", createdAt: now().toISOString() };
+  db().staffRequests.push(req);
+  return req;
+}
+
+export function setStaffRequestStatus(tenantId: string, requestId: string, status: "open" | "done", actor: string) {
+  const r = db().staffRequests.find((x) => x.tenantId === tenantId && x.id === requestId);
+  if (!r) return;
+  r.status = status;
+  r.handledAt = status === "done" ? now().toISOString() : undefined;
+  audit(actor, status === "done" ? "Marked a message as handled" : "Reopened a message", tenantId);
+}
+
+export function setOpeningHours(tenantId: string, hours: Tenant["openingHours"], actor: string) {
+  getTenant(tenantId)!.openingHours = hours;
+  audit(actor, "Opening hours changed", tenantId);
+}
+
 export const getAudit = (tenantId?: string) =>
   db().audit.filter((a) => !tenantId || a.tenantId === tenantId).sort((a, b) => b.at.localeCompare(a.at));
 export const getLedger = (tenantId: string) => db().ledger.filter((l) => l.tenantId === tenantId).sort((a, b) => b.at.localeCompare(a.at));
@@ -288,7 +310,7 @@ export function deleteTenant(tenantId: string, actor: string) {
   d.tenants = d.tenants.filter((x) => x.id !== tenantId);
   delete d.agents[tenantId];
   const lists = d as unknown as Record<string, { tenantId?: string }[]>;
-  for (const k of ["agentVersions", "doctors", "bookings", "conversations", "knowledge", "unanswered", "batches", "ledger", "alerts", "audit", "topUpRequests"])
+  for (const k of ["agentVersions", "doctors", "bookings", "conversations", "knowledge", "unanswered", "batches", "ledger", "alerts", "audit", "topUpRequests", "staffRequests"])
     lists[k] = lists[k].filter((x) => x.tenantId !== tenantId);
   audit(actor, `Deleted client "${t.name}"`);
 }

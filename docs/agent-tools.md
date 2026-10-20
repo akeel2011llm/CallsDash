@@ -11,6 +11,12 @@ Create one **server tool** per row in the ElevenLabs agent (Agents > Tools > Add
 | `find_patient_booking` | `patient_phone` | `bookings[]` with `bookingId`, `doctor`, `label` |
 | `cancel_appointment` | `booking_id`, `patient_phone` | `cancelled` |
 | `reschedule_appointment` | `booking_id`, `patient_phone`, `new_starts_at` | `bookingId`, `label` |
+| `take_message` | `patient_name`, `patient_phone`, `message`, `language`, `conversation_id` | `requestId`, `message` (what to tell the caller) |
+| `handoff_to_staff` | `patient_name`, `patient_phone`, `reason`, `urgent` (true when it cannot wait, e.g. a medical emergency), `language`, `conversation_id` | `requestId`, `open` (clinic open now), `transferred` (always false for now), `message` |
+
+`take_message` and `handoff_to_staff` both land in the client's **Messages** inbox (handoffs first when urgent). Live call transfer needs a phone line
+(phase 2); until then a handoff is a callback request and the agent must not promise an immediate transfer. For a medical emergency the agent
+should tell the caller to call the emergency number (999 in Bahrain) as well as calling `handoff_to_staff` with `urgent: true`.
 
 Responses are `{ "ok": true, ... }` or `{ "ok": false, "error": "<code>", "message": "<what the agent should say or do>" }`.
 Error codes: `slot_taken`, `calendar_unavailable`, `missing_details`, `not_found`, `bad_time`, `bad_date`, `unknown_doctor`.
@@ -27,4 +33,4 @@ back to the patient before calling book_appointment. If a tool returns ok:false,
 Availability = the clinic's opening hours minus CallsDash bookings minus busy time on the doctor's Google Calendar.
 If the calendar cannot be read the tool refuses to book and raises an alert; it never books blind.
 
-Not built yet: WhatsApp confirmation after booking (needs the WhatsApp channel), `handoff_to_staff` and `take_message`.
+Not built yet: WhatsApp confirmation after booking (needs the WhatsApp channel) and notifying staff of a message outside the dashboard.
