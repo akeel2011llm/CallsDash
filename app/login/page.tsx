@@ -6,6 +6,7 @@ import { listTenants } from "@/lib/data";
 import { LocaleSwitch } from "@/components/LocaleSwitch";
 import { Notice } from "@/components/ui";
 import { Suspense } from "react";
+import { SubmitButton } from "@/components/SubmitButton";
 
 export const dynamic = "force-dynamic";
 
@@ -27,11 +28,11 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           <>
             <Notice>{t("login.demoNote")}</Notice>
             <form action={login} className="stack">
-              <button className="btn" name="who" value="admin">{t("login.admin")}</button>
+              <SubmitButton className="btn" name="who" value="admin">{t("login.admin")}</SubmitButton>
               {(await listTenants()).map((c) => (
-                <button key={c.id} className="btn ghost" name="who" value={`client:${c.id}`}>
+                <SubmitButton key={c.id} className="btn ghost" name="who" value={`client:${c.id}`}>
                   {t("login.client")} {locale === "ar" ? c.branding.displayNameAr : c.branding.displayName}
-                </button>
+                </SubmitButton>
               ))}
             </form>
           </>
@@ -40,7 +41,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
             {error && <Notice tone="warn">{t("login.failed")}</Notice>}
             <label>{t("login.email")}<input name="email" type="email" autoComplete="username" required /></label>
             <label>{t("login.password")}<input name="password" type="password" autoComplete="current-password" required /></label>
-            <button className="btn" type="submit">{t("login.submit")}</button>
+            <SubmitButton className="btn" type="submit">{t("login.submit")}</SubmitButton>
           </form>
         ) : (
           <Notice tone="warn">{t("login.notConfigured")}</Notice>

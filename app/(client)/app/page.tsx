@@ -7,12 +7,10 @@ import { Badge, Notice, PageHead, Stat } from "@/components/ui";
 
 export default async function Home() {
   const { tenant } = await requireClient();
-  const { t, locale } = await getT();
-  const w = await getWallet(tenant.id);
+  const [{ t, locale }, w, convs, bookings] = await Promise.all([getT(), getWallet(tenant.id), getConversations(tenant.id), getBookings(tenant.id)]);
   const weekAgo = Date.now() - 7 * 86_400_000;
-  const convs = await getConversations(tenant.id);
   const recent = convs.filter((c) => new Date(c.startedAt).getTime() >= weekAgo);
-  const upcoming = (await getBookings(tenant.id)).filter((b) => new Date(b.startsAt).getTime() > Date.now() && b.status !== "cancelled");
+  const upcoming = bookings.filter((b) => new Date(b.startsAt).getTime() > Date.now() && b.status !== "cancelled");
   return (
     <>
       <PageHead title={t("home.title")} />

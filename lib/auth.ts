@@ -16,8 +16,10 @@ export async function getSession(): Promise<Session | null> {
   const jar = await cookies();
   if (!demoMode()) {
     if (!supabaseConfigured()) return null;
-    const { data } = await (await supabaseServer()).auth.getUser();
-    const profile = data.user ? await getProfile(data.user.id) : undefined;
+    // Verified locally against Supabase's published signing keys: no extra network call per page.
+    const { data } = await (await supabaseServer()).auth.getClaims();
+    const userId = data?.claims?.sub;
+    const profile = userId ? await getProfile(userId) : undefined;
     if (!profile) return null;
     if (profile.role === "admin") return { role: "admin", viewAsTenantId: jar.get("cd_view")?.value };
     return profile.tenantId ? { role: "client", tenantId: profile.tenantId } : null;

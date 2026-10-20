@@ -2,6 +2,7 @@
 
 import { usePathname, useSearchParams } from "next/navigation";
 import { setLocale } from "@/lib/actions";
+import { SubmitButton } from "@/components/SubmitButton";
 
 export function LocaleSwitch({ locale }: { locale: "en" | "ar" }) {
   const path = usePathname();
@@ -11,9 +12,9 @@ export function LocaleSwitch({ locale }: { locale: "en" | "ar" }) {
     <form action={setLocale}>
       <input type="hidden" name="locale" value={next} />
       <input type="hidden" name="returnTo" value={path + (qs ? `?${qs}` : "")} />
-      <button className="btn ghost" type="submit" lang={next}>
+      <SubmitButton className="btn ghost" type="submit" lang={next}>
         {next === "ar" ? "العربية" : "English"}
-      </button>
+      </SubmitButton>
     </form>
   );
 }

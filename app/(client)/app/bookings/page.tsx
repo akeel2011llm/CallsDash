@@ -5,6 +5,7 @@ import { fmtDateTime } from "@/lib/format";
 import { getBookings, getDoctors } from "@/lib/data";
 import { setBookingStatusAction } from "@/lib/actions";
 import { Badge, PageHead } from "@/components/ui";
+import { SubmitButton } from "@/components/SubmitButton";
 
 export default async function BookingsPage({ searchParams }: { searchParams: Promise<{ doctor?: string; status?: string }> }) {
   const { tenant } = await requireClient();
@@ -30,7 +31,7 @@ export default async function BookingsPage({ searchParams }: { searchParams: Pro
             {(["confirmed", "rescheduled", "cancelled", "no_show"] as const).map((s) => <option key={s} value={s}>{t(`booking.${s}` as "booking.confirmed")}</option>)}
           </select>
         </label>
-        <button className="btn" type="submit">{t("common.apply")}</button>
+        <SubmitButton className="btn" type="submit">{t("common.apply")}</SubmitButton>
       </form>
       <div className="card table-wrap">
         <table>
@@ -49,13 +50,13 @@ export default async function BookingsPage({ searchParams }: { searchParams: Pro
                   {b.status !== "cancelled" && (
                     <form action={setBookingStatusAction}>
                       <input type="hidden" name="id" value={b.id} /><input type="hidden" name="status" value="cancelled" /><input type="hidden" name="returnTo" value={returnTo} />
-                      <button className="btn small danger">{t("bookings.cancel")}</button>
+                      <SubmitButton className="btn small danger">{t("bookings.cancel")}</SubmitButton>
                     </form>
                   )}
                   {b.status === "confirmed" && new Date(b.startsAt) < new Date() && (
                     <form action={setBookingStatusAction}>
                       <input type="hidden" name="id" value={b.id} /><input type="hidden" name="status" value="no_show" /><input type="hidden" name="returnTo" value={returnTo} />
-                      <button className="btn small ghost">{t("bookings.markNoShow")}</button>
+                      <SubmitButton className="btn small ghost">{t("bookings.markNoShow")}</SubmitButton>
                     </form>
                   )}
                   </div>

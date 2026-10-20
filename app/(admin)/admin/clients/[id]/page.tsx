@@ -4,17 +4,19 @@ import { getT } from "@/lib/i18n";
 import { fmtDate, fmtDateTime, fmtNum } from "@/lib/format";
 import { getAgent, getAgentVersions, getDoctors, getAudit, getLedger, getTenant, getWallet } from "@/lib/data";
 import {
-  adminPermissionsAction, adminRenewAction, adminSetCalendarAction, adminRollbackAction, adminTenantSettingsAction, adminTopUpAction, viewAsClient,
+  adminPermissionsAction, adminRenewAction, adminSetCalendarAction, adminRollbackAction, adminTenantSettingsAction, adminTopUpAction, adminDeleteTenantAction, viewAsClient,
 } from "@/lib/actions";
 import { Badge, Notice, PageHead, Stat } from "@/components/ui";
+import { SubmitButton } from "@/components/SubmitButton";
 
-export default async function ClientAdmin({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ saved?: string }> }) {
+export default async function ClientAdmin({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ saved?: string; error?: string }> }) {
   const { id } = await params;
-  const { saved } = await searchParams;
+  const { saved, error } = await searchParams;
   const tenant = await getTenant(id);
   if (!tenant) notFound();
-  const { t, locale } = await getT();
-  const w = await getWallet(id);
+  const [{ t, locale }, w, agent, versions, doctors, ledger, audit] = await Promise.all([
+    getT(), getWallet(id), getAgent(id), getAgentVersions(id), getDoctors(id), getLedger(id), getAudit(id),
+  ]);
   const returnTo = `/admin/clients/${id}`;
   const perms = [
     ["editPrompt", "admin.perm.editPrompt"], ["editVoice", "admin.perm.editVoice"],
@@ -27,15 +29,16 @@ export default async function ClientAdmin({ params, searchParams }: { params: Pr
         actions={
           <>
             <Link className="btn ghost" href="/admin">{t("common.back")}</Link>
-            <form action={viewAsClient}><input type="hidden" name="tenantId" value={id} /><button className="btn">{t("admin.viewAs")}</button></form>
+            <form action={viewAsClient}><input type="hidden" name="tenantId" value={id} /><SubmitButton className="btn">{t("admin.viewAs")}</SubmitButton></form>
           </>
         }
       />
+      {(error === "name" || error === "domain" || error === "confirm") && <Notice tone="warn">{t(`admin.err.${error}` as "admin.err.name")}</Notice>}
       {saved && <Notice tone="ok">{t("agent.saved").split(".")[0]}.</Notice>}
       <div className="grid">
         <Stat label={t("admin.balance")} value={fmtNum(w.balance, locale, 1)} tone={w.low ? "warn" : undefined} hint={tenant.plan.name} />
         <Stat label={t("common.status")} value={t(`status.${tenant.status}` as "status.live")} />
-        <Stat label="Agent id" value={<code>{(await getAgent(id)).elevenLabsAgentId || "–"}</code>} />
+        <Stat label="Agent id" value={<code>{agent.elevenLabsAgentId || "–"}</code>} />
       </div>
 
       <div className="grid two">
@@ -59,13 +62,13 @@ export default async function ClientAdmin({ params, searchParams }: { params: Pr
             <input type="hidden" name="tenantId" value={id} /><input type="hidden" name="returnTo" value={returnTo} />
             <label style={{ flex: 1 }}>{t("admin.amount")}<input name="credits" type="number" min="1" step="1" defaultValue={500} required /></label>
             <label style={{ flex: 2 }}>Note<input name="note" placeholder="Invoice 2026-114" maxLength={120} /></label>
-            <button className="btn" type="submit">{t("admin.grant")}</button>
+            <SubmitButton className="btn" type="submit">{t("admin.grant")}</SubmitButton>
           </form>
           <small className="muted">{t("admin.grantHelp")}</small>
           {tenant.plan.type === "package" && (
             <form action={adminRenewAction} className="stack">
               <input type="hidden" name="tenantId" value={id} /><input type="hidden" name="returnTo" value={returnTo} />
-              <button className="btn ghost" type="submit">{t("admin.renew")}</button>
+              <SubmitButton className="btn ghost" type="submit">{t("admin.renew")}</SubmitButton>
               <small className="muted">{t("admin.renewHelp")}</small>
             </form>
           )}
@@ -78,7 +81,7 @@ export default async function ClientAdmin({ params, searchParams }: { params: Pr
             {perms.map(([k, label]) => (
               <label key={k} className="inline"><input type="checkbox" name={k} defaultChecked={tenant.permissions[k]} />{t(label)}</label>
             ))}
-            <button className="btn" type="submit">{t("common.save")}</button>
+            <SubmitButton className="btn" type="submit">{t("common.save")}</SubmitButton>
           </form>
         </section>
 
@@ -96,7 +99,7 @@ export default async function ClientAdmin({ params, searchParams }: { params: Pr
                 <option value="overdraft">{t("admin.policy.overdraft")}</option>
               </select>
             </label>
-            <button className="btn" type="submit">{t("common.save")}</button>
+            <SubmitButton className="btn" type="submit">{t("common.save")}</SubmitButton>
           </form>
         </section>
 
@@ -105,14 +108,14 @@ export default async function ClientAdmin({ params, searchParams }: { params: Pr
           <div className="table-wrap">
             <table>
               <tbody>
-                {(await getAgentVersions(id)).map((v, i) => (
+                {versions.map((v, i) => (
                   <tr key={v.id}>
                     <td>{fmtDateTime(v.createdAt, locale)}<br /><small className="muted">{v.author} · {v.summary}</small></td>
                     <td>
                       {i > 0 && (
                         <form action={adminRollbackAction}>
                           <input type="hidden" name="tenantId" value={id} /><input type="hidden" name="versionId" value={v.id} /><input type="hidden" name="returnTo" value={returnTo} />
-                          <button className="btn small ghost" type="submit">{t("admin.rollback")}</button>
+                          <SubmitButton className="btn small ghost" type="submit">{t("admin.rollback")}</SubmitButton>
                         </form>
                       )}
                     </td>
@@ -127,12 +130,12 @@ export default async function ClientAdmin({ params, searchParams }: { params: Pr
       <section className="card stack">
         <h2>{t("admin.doctors")}</h2>
         <small className="muted">{t("admin.doctors.help")}</small>
-        {(await getDoctors(id)).map((d) => (
+        {doctors.map((d) => (
           <form key={d.id} action={adminSetCalendarAction} className="row">
             <input type="hidden" name="tenantId" value={id} /><input type="hidden" name="doctorId" value={d.id} /><input type="hidden" name="returnTo" value={returnTo} />
             <span style={{ minWidth: 180 }}>{d.name}</span>
             <input name="calendarId" defaultValue={d.googleCalendarId ?? ""} placeholder="clinic@group.calendar.google.com" style={{ flex: 1, minWidth: 220 }} dir="ltr" />
-            <button className="btn small" type="submit">{t("common.save")}</button>
+            <SubmitButton className="btn small" type="submit">{t("common.save")}</SubmitButton>
           </form>
         ))}
       </section>
@@ -142,7 +145,7 @@ export default async function ClientAdmin({ params, searchParams }: { params: Pr
         <div className="table-wrap">
           <table>
             <tbody>
-              {(await getLedger(id)).filter((l) => l.kind !== "usage").slice(0, 10).map((l) => (
+              {ledger.filter((l) => l.kind !== "usage").slice(0, 10).map((l) => (
                 <tr key={l.id}>
                   <td>{fmtDateTime(l.at, locale)}</td>
                   <td><Badge>{t(`ledger.${l.kind}` as "ledger.topup")}</Badge></td>
@@ -160,12 +163,22 @@ export default async function ClientAdmin({ params, searchParams }: { params: Pr
         <div className="table-wrap">
           <table>
             <tbody>
-              {(await getAudit(id)).slice(0, 12).map((a) => (
+              {audit.slice(0, 12).map((a) => (
                 <tr key={a.id}><td>{fmtDateTime(a.at, locale)}</td><td>{a.actor}</td><td>{a.action}</td></tr>
               ))}
             </tbody>
           </table>
         </div>
+      </section>
+
+      <section className="card stack danger-zone">
+        <h2>{t("admin.delete.title")}</h2>
+        <p className="muted">{t("admin.delete.help")}</p>
+        <form action={adminDeleteTenantAction} className="row">
+          <input type="hidden" name="tenantId" value={id} />
+          <label style={{ flex: 1 }}>{tenant.name}<input name="confirmName" required autoComplete="off" placeholder={tenant.name} /></label>
+          <SubmitButton className="btn danger" type="submit">{t("admin.delete.button")}</SubmitButton>
+        </form>
       </section>
     </>
   );

@@ -18,7 +18,8 @@ export async function proxy(req: NextRequest) {
       },
     },
   });
-  await supabase.auth.getUser();
+  // getClaims checks the signed token locally (no round trip to Supabase) and still refreshes an expired session.
+  await supabase.auth.getClaims();
   return res;
 }
 

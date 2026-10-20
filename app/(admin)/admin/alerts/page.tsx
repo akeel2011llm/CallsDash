@@ -3,6 +3,7 @@ import { fmtDateTime } from "@/lib/format";
 import { getAlerts, listTenants } from "@/lib/data";
 import { resolveAlertAction } from "@/lib/actions";
 import { Badge, Notice, PageHead } from "@/components/ui";
+import { SubmitButton } from "@/components/SubmitButton";
 
 export default async function AlertsPage() {
   const { t, locale } = await getT();
@@ -23,7 +24,7 @@ export default async function AlertsPage() {
             </div>
             <form action={resolveAlertAction}>
               <input type="hidden" name="id" value={a.id} />
-              <button className="btn small ghost">{t("common.resolve")}</button>
+              <SubmitButton className="btn small ghost">{t("common.resolve")}</SubmitButton>
             </form>
           </div>
         ))}
