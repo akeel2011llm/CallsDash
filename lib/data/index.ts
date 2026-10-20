@@ -77,5 +77,15 @@ export const saveProfile = call("saveProfile");
 export const patchProfile = call("patchProfile");
 export const removeProfile = call("removeProfile");
 export const setOnboarding = call("setOnboarding");
+export const setIntegrations = call("setIntegrations");
+export const setChannelStatus = call("setChannelStatus");
+export const getSecrets = call("getSecrets");
+export const setSecrets = call("setSecrets");
+export const getSetting = call("getSetting");
+export const setSetting = call("setSetting");
+export const getChatSession = call("getChatSession");
+export const findChatSession = call("findChatSession");
+export const saveChatSession = call("saveChatSession");
+export const deleteChatSession = call("deleteChatSession");
 
 export const getData = backend;

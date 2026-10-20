@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { dictionaries } from "@/lib/i18n";
 import { getAgent, getTenant, getWallet, listTenants } from "@/lib/data";
+import { agentVariables } from "@/lib/agent-context";
 
 export const dynamic = "force-dynamic";
 
@@ -29,6 +30,7 @@ export async function GET(req: Request) {
     color: tenant.branding.primaryColor,
     agentId: (await getAgent(tenant.id)).elevenLabsAgentId || null,
     paused,
+    dynamicVariables: agentVariables(tenant, new Date(), { channel: "website" }),
     strings: {
       en: Object.fromEntries(Object.entries(dictionaries.en).filter(([k]) => k.startsWith("widget."))),
       ar: Object.fromEntries(Object.entries(dictionaries.ar).filter(([k]) => k.startsWith("widget."))),

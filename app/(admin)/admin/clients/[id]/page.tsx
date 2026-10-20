@@ -33,6 +33,7 @@ export default async function ClientAdmin({ params, searchParams }: { params: Pr
           <>
             <Link className="btn ghost" href="/admin">{t("common.back")}</Link>
             <Link className="btn ghost" href={`/admin/clients/${id}/setup`}>{t("nav.setup")}</Link>
+            <Link className="btn ghost" href={`/admin/clients/${id}/channels`}>{t("nav.channels")}</Link>
             <Link className="btn ghost" href={`/admin/clients/${id}/branding`}>{t("brand.open")}</Link>
             <form action={viewAsClient}><input type="hidden" name="tenantId" value={id} /><SubmitButton className="btn">{t("admin.viewAs")}</SubmitButton></form>
           </>

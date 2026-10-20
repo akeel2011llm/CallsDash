@@ -168,7 +168,37 @@ export interface Tenant {
   channels: Record<Channel, "connected" | "pending" | "off">;
   /** Progress through the admin setup wizard and the checklist items an admin ticked by hand. */
   onboarding: Onboarding;
+  /** Per-channel settings that are not secret (account ids, template names). Secrets live in `TenantSecrets`. */
+  integrations: Integrations;
   createdAt: string;
+}
+
+export interface Integrations {
+  elevenlabs?: { kbDocId?: string; syncedAt?: string; error?: string };
+  whatsapp?: { phoneNumberId?: string; displayNumber?: string; confirmTemplate?: string; confirmTemplateLang?: string };
+  /** `accountId` is the Instagram business account id Meta sends in webhooks; `inboundUrl` is the custom channel address copied from ElevenLabs. */
+  instagram?: { accountId?: string; username?: string; inboundUrl?: string };
+  phone?: { number?: string; provider?: "twilio" | "sip" | "other" };
+}
+
+/** Tokens and shared secrets for a client's channels. Stored apart from the tenant row, never shown again after saving. */
+export interface TenantSecrets {
+  /** Instagram messaging access token (Meta). */
+  instagramToken?: string;
+  /** ElevenLabs custom channel: the secret we send with each inbound message. */
+  instagramInboundSecret?: string;
+  /** ElevenLabs custom channel: the secret that signs replies to our reply webhook. */
+  instagramReplySecret?: string;
+}
+
+/** Remembers which ElevenLabs conversation a person on a chat channel is in, so a chat continues instead of restarting. */
+export interface ChatSession {
+  tenantId: string;
+  channel: Channel;
+  /** The person's id on that channel (Instagram-scoped id). */
+  externalId: string;
+  conversationId: string;
+  lastAt: string;
 }
 
 /** What the admin has confirmed by hand during setup; everything else on the checklist is worked out from the data. */

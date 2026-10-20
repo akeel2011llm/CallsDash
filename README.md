@@ -20,13 +20,14 @@ Implementation plan: see the project's "CallsDash Implementation Plan" doc.
 | Supabase Auth sign-in (email + password; role and clinic from `profiles`) | Written, **not tested** against a real Supabase project |
 
 | Users and credentials (admin Users page, client Team page, forgot password, forced password change), setup checklist and website scan per client | Rules tested on Postgres with a fake Supabase Auth; real user creation needs `SUPABASE_SERVICE_ROLE_KEY` (see below) |
+| Channels (admin Channels page): one-click sync of each clinic's agent, tools and knowledge to ElevenLabs, conversation-start webhook, WhatsApp booking confirmation, Instagram DM bridge (text and voice notes), phone record | Tested against fake ElevenLabs/Meta APIs; **not yet verified on real accounts**, see [docs/channels.md](docs/channels.md) |
 
 ## Not in phase 1 yet
 
 - Recording playback from Supabase Storage (signed links) and the "unanswered questions" list in production (both empty until built).
-- WhatsApp confirmation after booking, `handoff_to_staff` and `take_message` tools, and an opening-hours editor (hours are a per-client database value, default Sat-Thu 08:00-21:00, Fri 16:00-21:00).
-- Pushing agent settings and knowledge to ElevenLabs. Saving creates a version and audit entry only.
-- WhatsApp, Instagram bridge and phone (phases as per plan), outbound reminders, online payment.
+- Recording playback is still missing; notifying staff outside the dashboard (email/WhatsApp), scheduled emailed reports, monthly auto-renew.
+- Phone line: needs a Bahrain number first.
+- Outbound reminders and online payment (phase 2).
 
 ## Run it
 

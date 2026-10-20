@@ -7,7 +7,7 @@ const tenant = (o: Partial<Tenant> = {}): Tenant => ({
   id: "t", slug: "t", name: "T", status: "live", branding: { displayName: "T", displayNameAr: "T", primaryColor: "#000000" },
   plans: [], alertRules: structuredClone(DEFAULT_RULES), permissions: { editPrompt: true, editVoice: true, editBehaviour: true, editKnowledge: true },
   allowedDomains: [], zeroBalancePolicy: "pause", lowBalanceThreshold: 0.15, retentionDays: 90, calendarConnected: false, openingHours: {},
-  channels: { website: "pending", whatsapp: "off", instagram: "off", phone: "off" }, onboarding: { done: [] }, createdAt: "2026-01-01T00:00:00Z", ...o,
+  channels: { website: "pending", whatsapp: "off", instagram: "off", phone: "off" }, onboarding: { done: [] }, integrations: {}, createdAt: "2026-01-01T00:00:00Z", ...o,
 });
 const facts = { knowledgeCount: 0, doctorCount: 0, userCount: 0, conversationCount: 0, agentId: "", balance: 0 };
 const done = (items: ReturnType<typeof setupChecklist>) => items.filter((i) => i.done).map((i) => i.id);

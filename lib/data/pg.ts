@@ -4,7 +4,7 @@ import { DEFAULT_CATALOGUE, PLAN_PRESETS, firstPackage, normalizePlans, type Pla
 import { ELEVENLABS_USD_PER_MIN, ELEVENLABS_USD_PER_MSG, USD_TO_BHD, agent as defaultAgent } from "../seed";
 import type {
   AgentSettings, AgentVersion, Alert, AuditEntry, Booking, BookingStatus, Conversation, CreditBatch, Doctor,
-  CatalogPackage, KnowledgeItem, LedgerEntry, Locale, Permissions, Profile, StaffRequest, Tenant, UnansweredQuestion,
+  CatalogPackage, KnowledgeItem, LedgerEntry, ChatSession, Channel, Locale, Permissions, Profile, StaffRequest, Tenant, TenantSecrets, UnansweredQuestion,
 } from "../types";
 import type { Data } from "./demo";
 import { DuplicateError, SlotTakenError } from "../errors";
@@ -29,6 +29,7 @@ const tenantOf = (r: Row): Tenant => ({
   permissions: jsonish(r.permissions), allowedDomains: r.allowed_domains ?? [], zeroBalancePolicy: r.zero_balance_policy,
   lowBalanceThreshold: num(r.low_balance_threshold), retentionDays: r.retention_days, calendarConnected: r.calendar_connected,
   channels: jsonish(r.channels), openingHours: jsonish(r.opening_hours),
+  integrations: r.integrations == null ? {} : jsonish<Tenant["integrations"]>(r.integrations),
   onboarding: ((o) => ({ ...o, done: o.done ?? [] }))(r.onboarding == null ? {} : jsonish<Partial<Tenant["onboarding"]>>(r.onboarding)), createdAt: iso(r.created_at),
 });
 const bookingOf = (r: Row): Booking => ({
@@ -48,6 +49,7 @@ const profileOf = (r: Row): Profile => ({
   id: r.id, tenantId: r.tenant_id ?? null, role: r.role, fullName: r.full_name ?? "", email: r.email ?? "",
   disabled: Boolean(r.disabled), mustChangePassword: Boolean(r.must_change_password), createdAt: iso(r.created_at),
 });
+const sessionOf = (r: Row): ChatSession => ({ tenantId: r.tenant_id, channel: r.channel, externalId: r.external_id, conversationId: r.conversation_id, lastAt: iso(r.last_at) });
 const staffRequestOf = (r: Row): StaffRequest => ({
   id: r.id, tenantId: r.tenant_id, kind: r.kind, name: r.name, phone: r.phone, text: r.text, urgent: r.urgent, language: r.language,
   conversationId: r.conversation_id ?? undefined, status: r.status, createdAt: iso(r.created_at), handledAt: r.handled_at ? iso(r.handled_at) : undefined,
@@ -100,6 +102,23 @@ export const SCHEMA_ADDITIONS = [
   `create unique index if not exists profiles_email_unique on profiles (lower(email)) where email <> ''`,
   `update profiles p set email = u.email from auth.users u where u.id = p.id and p.email = '' and u.email is not null`,
   `alter table tenants add column if not exists onboarding jsonb not null default '{}'`,
+  `alter table tenants add column if not exists integrations jsonb not null default '{}'`,
+  `create table if not exists tenant_secrets (
+     tenant_id uuid primary key references tenants on delete cascade,
+     data jsonb not null default '{}',
+     updated_at timestamptz not null default now())`,
+  `alter table tenant_secrets enable row level security`, // no policy: only the server's own connection can read it
+  `create table if not exists app_settings (key text primary key, value jsonb not null, updated_at timestamptz not null default now())`,
+  `alter table app_settings enable row level security`,
+  `create table if not exists chat_sessions (
+     tenant_id uuid not null references tenants on delete cascade,
+     channel text not null,
+     external_id text not null,
+     conversation_id text not null,
+     last_at timestamptz not null default now(),
+     primary key (tenant_id, channel, external_id))`,
+  `create index if not exists chat_sessions_conversation on chat_sessions (conversation_id)`,
+  `alter table chat_sessions enable row level security`,
   `create index if not exists conversations_flagged on conversations (tenant_id, started_at desc) where cardinality(flags) > 0`,
 ];
 
@@ -219,6 +238,49 @@ export function createPgData(db: Db): Data {
       const r = await run<Row>(`delete from profiles where id = $1 returning email, tenant_id`, [userId]);
       if (r[0]) await audit(run, actor, `User deleted: ${r[0].email}`, r[0].tenant_id ?? undefined);
     }),
+    setIntegrations: async (tenantId, integrations, actor, note) => tx(async (run) => {
+      await run(`update tenants set integrations = $2 where id = $1`, [tenantId, JSON.stringify(integrations)]);
+      if (note) await audit(run, actor, note, tenantId);
+    }),
+    setChannelStatus: async (tenantId, channel: Channel, status, actor) => tx(async (run) => {
+      const t = await lockTenant(run, tenantId);
+      if (t.channels[channel] === status) return;
+      await run(`update tenants set channels = $2 where id = $1`, [tenantId, JSON.stringify({ ...t.channels, [channel]: status })]);
+      await audit(run, actor, `Channel ${channel} set to ${status}`, tenantId);
+    }),
+    getSecrets: async (tenantId): Promise<TenantSecrets> => {
+      await ensureSchema();
+      const r = await q<Row>(`select data from tenant_secrets where tenant_id = $1`, [tenantId]);
+      return r[0] ? jsonish<TenantSecrets>(r[0].data) : {};
+    },
+    setSecrets: async (tenantId, patch) => tx(async (run) => {
+      const r = await run<Row>(`select data from tenant_secrets where tenant_id = $1 for update`, [tenantId]);
+      const next: Record<string, string> = r[0] ? { ...jsonish<Record<string, string>>(r[0].data) } : {};
+      for (const [k, v] of Object.entries(patch)) if (v) next[k] = v; else delete next[k];
+      await run(`insert into tenant_secrets (tenant_id, data) values ($1,$2) on conflict (tenant_id) do update set data = $2, updated_at = now()`, [tenantId, JSON.stringify(next)]);
+    }),
+    getSetting: async (key) => {
+      await ensureSchema();
+      const r = await q<Row>(`select value from app_settings where key = $1`, [key]);
+      return r[0] ? jsonish<unknown>(r[0].value) : undefined;
+    },
+    setSetting: async (key, value) => { await ensureSchema(); await q(`insert into app_settings (key, value) values ($1,$2) on conflict (key) do update set value = $2, updated_at = now()`, [key, JSON.stringify(value)]); },
+    getChatSession: async (tenantId, channel, externalId) => {
+      await ensureSchema();
+      const r = await q<Row>(`select * from chat_sessions where tenant_id = $1 and channel = $2 and external_id = $3`, [tenantId, channel, externalId]);
+      return r[0] ? sessionOf(r[0]) : undefined;
+    },
+    findChatSession: async (conversationId) => {
+      await ensureSchema();
+      const r = await q<Row>(`select * from chat_sessions where conversation_id = $1 limit 1`, [conversationId]);
+      return r[0] ? sessionOf(r[0]) : undefined;
+    },
+    saveChatSession: async (s: ChatSession) => {
+      await ensureSchema();
+      await q(`insert into chat_sessions (tenant_id, channel, external_id, conversation_id, last_at) values ($1,$2,$3,$4,$5)
+               on conflict (tenant_id, channel, external_id) do update set conversation_id = $4, last_at = $5`, [s.tenantId, s.channel, s.externalId, s.conversationId, s.lastAt]);
+    },
+    deleteChatSession: async (conversationId) => { await ensureSchema(); await q(`delete from chat_sessions where conversation_id = $1`, [conversationId]); },
     setOnboarding: async (tenantId, onboarding, actor, note) => tx(async (run) => {
       await run(`update tenants set onboarding = $2 where id = $1`, [tenantId, JSON.stringify(onboarding)]);
       if (note) await audit(run, actor, note, tenantId);

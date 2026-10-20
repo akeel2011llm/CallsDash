@@ -22,6 +22,9 @@ export interface DB {
   audit: import("./types").AuditEntry[];
   staffRequests: import("./types").StaffRequest[];
   profiles: import("./types").Profile[];
+  secrets: Record<string, import("./types").TenantSecrets>;
+  settings: Record<string, unknown>;
+  chatSessions: import("./types").ChatSession[];
   packages: import("./types").CatalogPackage[];
   topUpRequests: { id: string; tenantId: string; at: string; credits: number; status: "open" | "done" }[];
   seq: number;
@@ -145,6 +148,7 @@ export function seed(): DB {
       retentionDays: 90, calendarConnected: true, openingHours: DEFAULT_OPENING_HOURS,
       channels: { website: "connected", whatsapp: "connected", instagram: "pending", phone: "off" },
       onboarding: { done: ["hours"] },
+      integrations: { whatsapp: { phoneNumberId: "524029457612345", displayNumber: "+973 3600 1122", confirmTemplate: "booking_confirmation", confirmTemplateLang: "en" } },
       createdAt: iso(nowMs - 40 * DAY),
     },
     {
@@ -156,6 +160,7 @@ export function seed(): DB {
       retentionDays: 90, calendarConnected: false, openingHours: DEFAULT_OPENING_HOURS,
       channels: { website: "connected", whatsapp: "pending", instagram: "off", phone: "off" },
       onboarding: { done: [] },
+      integrations: {},
       createdAt: iso(nowMs - 12 * DAY),
     },
     {
@@ -167,6 +172,7 @@ export function seed(): DB {
       retentionDays: 90, calendarConnected: true, openingHours: DEFAULT_OPENING_HOURS,
       channels: { website: "connected", whatsapp: "connected", instagram: "off", phone: "off" },
       onboarding: { done: ["hours"] },
+      integrations: {},
       createdAt: iso(nowMs - 25 * DAY),
     },
   ];
@@ -305,6 +311,7 @@ export function seed(): DB {
     agentVersions: [{ id: "v1", tenantId: "t_alnoor", createdAt: iso(nowMs - 30 * DAY), author: "AqeelLLM", summary: "Initial clinic template", settings: structuredClone(settings) }],
     audit: [{ id: "au1", tenantId: "t_alnoor", at: iso(nowMs - 30 * DAY), actor: "AqeelLLM", action: "Created client from clinic template" }],
     topUpRequests: [],
+    secrets: {}, settings: {}, chatSessions: [],
     profiles: [
       { id: "u_manager_alnoor", tenantId: "t_alnoor", role: "manager", fullName: "Sara Al Khalifa", email: "sara@alnoor.example.bh", disabled: false, mustChangePassword: false, createdAt: iso(nowMs - 38 * DAY) },
       { id: "u_recep_alnoor", tenantId: "t_alnoor", role: "receptionist", fullName: "Mariam Hassan", email: "mariam@alnoor.example.bh", disabled: false, mustChangePassword: false, createdAt: iso(nowMs - 20 * DAY) },
