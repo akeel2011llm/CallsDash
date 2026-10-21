@@ -7,6 +7,7 @@ import { findDuplicate, nameKey } from "./tenant-keys";
 import { DEFAULT_OPENING_HOURS } from "./availability";
 import { seed, type DB, ELEVENLABS_USD_PER_MIN, ELEVENLABS_USD_PER_MSG } from "./seed";
 import type {
+  AgentToolCall,
   NewConversation,
   AgentSettings, Booking, BookingStatus, Channel, Conversation, ChatSession, Doctor, Locale, Permissions, Profile, StaffRequest, Tenant, TenantSecrets,
 } from "./types";
@@ -148,6 +149,16 @@ export function setOpeningHours(tenantId: string, hours: Tenant["openingHours"],
   getTenant(tenantId)!.openingHours = hours;
   audit(actor, "Opening hours changed", tenantId);
 }
+
+/** Keeps the newest 300 tool calls; older ones are only useful while a problem is being chased. */
+export function logToolCall(e: Omit<AgentToolCall, "id" | "at">) {
+  const d = db();
+  d.toolCalls.push({ ...e, id: id("tc"), at: now().toISOString() });
+  if (d.toolCalls.length > 300) d.toolCalls.splice(0, d.toolCalls.length - 300);
+}
+
+export const getToolCalls = (tenantId?: string, limit = 30) =>
+  db().toolCalls.filter((c) => !tenantId || c.tenantId === tenantId).sort((a, b) => b.at.localeCompare(a.at)).slice(0, limit);
 
 export const getAudit = (tenantId?: string) =>
   db().audit.filter((a) => !tenantId || a.tenantId === tenantId).sort((a, b) => b.at.localeCompare(a.at));

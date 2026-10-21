@@ -458,3 +458,13 @@ pre { background: var(--surface-2); border: 1px solid var(--line); border-radius
   .checklist li > :last-child { grid-column: 1 / -1; }
   .cred dl { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* Agent console (components/AgentConsole.tsx) */
+.console-log { overflow-y: auto; border: 1px solid var(--line); border-radius: var(--radius); padding: .6rem .7rem; background: var(--surface-2); display: flex; flex-direction: column; gap: .45rem; }
+.console-line { line-height: 1.45; overflow-wrap: anywhere; }
+.console-line.agent { color: var(--text); }
+.console-line.user { color: var(--muted); }
+.console-line.tool, .console-line.note { font-size: .85rem; color: var(--muted); border-inline-start: 3px solid var(--line); padding-inline-start: .5rem; }
+.console-line.tool.failed { border-color: var(--bad); color: var(--bad); }
+.console-state { font-size: .9rem; color: var(--muted); }
+.console-state.speaking { color: var(--brand); font-weight: 600; }

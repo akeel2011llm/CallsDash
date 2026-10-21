@@ -5,14 +5,20 @@ import { appUrl } from "@/lib/app-url";
 import { agentVariables } from "@/lib/agent-context";
 import { bookingService } from "@/lib/booking-service";
 import { ToolError } from "@/lib/booking";
-import { getAgent, getBookings, getConversations, getDoctors, getKnowledge, getStaffRequests, getWallet, listTenants } from "@/lib/data";
-import { syncAgentAction } from "@/lib/channel-actions";
+import * as store from "@/lib/data";
+import { getAgent, getBookings, getConversations, getDoctors, getKnowledge, getStaffRequests, getToolCalls, getWallet, listTenants } from "@/lib/data";
+import { syncAgentAction, testBookingToolsAction } from "@/lib/channel-actions";
+import { toolsStatus } from "@/lib/agent-sync";
+import { recentConversations } from "@/lib/agent-inspect";
+import { elevenLabsFromEnv } from "@/lib/elevenlabs-api";
+import { consoleLabels } from "@/lib/console-labels";
 import { viewAsClient } from "@/lib/actions";
-import { AgentTestWidget } from "@/components/AgentTestWidget";
+import { AgentConsole } from "@/components/AgentConsole";
 import { SubmitButton } from "@/components/SubmitButton";
 import { Badge, Notice, PageHead } from "@/components/ui";
 
-type SP = { c?: string; lang?: string; saved?: string; error?: string };
+type SP = { c?: string; lang?: string; saved?: string; error?: string; tools?: string; n?: string; code?: string };
+const TOOL_RESULTS = ["ok", "secret", "protected", "agent", "nosecret", "noagent", "unreachable", "error", "http"] as const;
 const SCENARIOS = ["hours", "faq", "book", "change", "message", "human", "arabic", "unknown"] as const;
 
 /** The client's real agent, run from the admin portal, with everything needed to judge the result on one page. */
@@ -22,10 +28,15 @@ export default async function TestAgentPage({ searchParams }: { searchParams: Pr
   const tenant = tenants.find((x) => x.id === sp.c) ?? tenants[0];
   if (!tenant) return <><PageHead title={t("test.title")} /><Notice>{t("test.noClients")}</Notice></>;
   const lang = sp.lang === "ar" ? "ar" : "en";
-  const [agent, wallet, doctors, knowledge, conversations, requests, bookings, url] = await Promise.all([
+  const [agent, wallet, doctors, knowledge, conversations, requests, bookings, url, calls, strayCalls] = await Promise.all([
     getAgent(tenant.id), getWallet(tenant.id), getDoctors(tenant.id), getKnowledge(tenant.id), getConversations(tenant.id),
-    getStaffRequests(tenant.id), getBookings(tenant.id), appUrl(),
+    getStaffRequests(tenant.id), getBookings(tenant.id), appUrl(), getToolCalls(tenant.id, 20), getToolCalls(undefined, 50),
   ]);
+  const unknownAgentCalls = strayCalls.filter((c) => !c.tenantId).slice(0, 5);
+  const tools = await toolsStatus(store, url, process.env.AGENT_TOOLS_SECRET);
+  const api = elevenLabsFromEnv();
+  const seen = api && agent.elevenLabsAgentId ? await recentConversations(api, agent.elevenLabsAgentId, 4) : null;
+  const toolResult = TOOL_RESULTS.find((r) => r === sp.tools);
   const host = new URL(url).hostname;
   const el = tenant.integrations.elevenlabs;
   const allowed = Boolean(el?.widgetHosts?.includes(host));
@@ -73,15 +84,26 @@ export default async function TestAgentPage({ searchParams }: { searchParams: Pr
             {check(!paused, t("test.check.credits"), `${fmtNum(wallet.balance, locale, 1)} · ${paused ? t("test.check.paused") : t("status.live")}`)}
             {check(doctors.some((d) => d.googleCalendarId), t("test.check.calendar"), t("test.check.calendarCount").replace("{n}", String(doctors.filter((d) => d.googleCalendarId).length)).replace("{m}", String(doctors.length)))}
             {check(knowledge.length > 0, t("test.check.knowledge"), t("test.check.knowledgeCount").replace("{n}", String(knowledge.length)))}
+            {check(tools.current && tools.url === url, t("test.check.tools"), !tools.created ? t("test.check.toolsMissing")
+              : tools.current && tools.url === url ? t("test.check.toolsOk").replace("{url}", url) : t("test.check.toolsOld").replace("{url}", tools.url ?? "?"))}
           </tbody></table></div>
           <div className="row">
             <form action={syncAgentAction}>
               <input type="hidden" name="tenantId" value={tenant.id} /><input type="hidden" name="returnTo" value={here} />
               <SubmitButton className="btn" type="submit">{agent.elevenLabsAgentId ? t("channels.agent.sync") : t("channels.agent.create")}</SubmitButton>
             </form>
+            <form action={testBookingToolsAction}>
+              <input type="hidden" name="tenantId" value={tenant.id} /><input type="hidden" name="returnTo" value={here} />
+              <SubmitButton className="btn ghost" type="submit">{t("test.tools.run")}</SubmitButton>
+            </form>
             <Link className="btn ghost" href={`/admin/clients/${tenant.id}/channels`}>{t("nav.channels")}</Link>
           </div>
-          <small className="muted">{t("test.syncHelp")}</small>
+          <small className="muted" id="tools">{t("test.syncHelp")} {t("test.tools.help")}</small>
+          {toolResult && (
+            <Notice tone={toolResult === "ok" ? "ok" : "warn"}>
+              {t(`test.tools.${toolResult}` as Key).replace("{n}", String(Number(sp.n) || 0)).replace("{code}", (sp.code ?? "").slice(0, 40))}
+            </Notice>
+          )}
         </section>
 
         <section className="card stack" style={{ alignContent: "start" }}>
@@ -92,11 +114,66 @@ export default async function TestAgentPage({ searchParams }: { searchParams: Pr
               {!allowed && <Notice tone="warn">{t("test.check.portalMissing").replace("{host}", host)}</Notice>}
               {paused && <Notice tone="warn">{t("test.pausedNote")}</Notice>}
               <small className="muted">{t("test.costNote")}</small>
-              <AgentTestWidget key={`${tenant.id}-${lang}`} agentId={agent.elevenLabsAgentId} language={lang} variables={agentVariables(tenant, new Date(), { channel: "website" })} />
+              <AgentConsole key={`${tenant.id}-${lang}`} agentId={agent.elevenLabsAgentId} language={lang} labels={consoleLabels(locale === "ar" ? "ar" : "en")} showTools
+                variables={agentVariables(tenant, new Date(), { channel: "website" })} />
             </>
           ) : <Notice tone="warn">{t("test.check.agentMissing")}</Notice>}
         </section>
       </div>
+
+      <section className="card stack" style={{ alignContent: "start" }}>
+        <div className="row" style={{ justifyContent: "space-between" }}>
+          <h2>{t("test.log")}</h2>
+          <Link className="btn small ghost" href={here}>{t("test.refresh")}</Link>
+        </div>
+        <small className="muted">{t("test.logHelp")}</small>
+        {calls.length === 0 ? <Notice>{t("test.logEmpty")}</Notice> : (
+          <div className="table-wrap"><table><tbody>
+            {calls.map((c) => (
+              <tr key={c.id}>
+                <td><small>{fmtDateTime(c.at, locale)}</small></td>
+                <td><Badge tone={c.ok ? "ok" : "warn"}>{c.ok ? t("test.ok") : c.code ?? "error"}</Badge></td>
+                <td><code>{c.tool}</code><br /><small className="muted" dir="auto">{c.detail}</small></td>
+                <td><small className="muted">{fmtNum(c.ms / 1000, locale, 1)}s</small></td>
+              </tr>
+            ))}
+          </tbody></table></div>
+        )}
+        {unknownAgentCalls.length > 0 && (
+          <Notice tone="warn">
+            <strong>{t("test.logUnknown")}</strong>
+            {unknownAgentCalls.map((c) => <div key={c.id}><small>{fmtDateTime(c.at, locale)} · <code>{c.tool}</code> · {c.detail}</small></div>)}
+          </Notice>
+        )}
+      </section>
+
+      {seen && (
+        <section className="card stack" style={{ alignContent: "start" }}>
+          <h2>{t("test.el")}</h2>
+          <small className="muted">{t("test.elHelp")}</small>
+          {seen.error ? <Notice tone="warn">{t("test.elError").replace("{e}", seen.error)}</Notice>
+            : seen.items.length === 0 ? <small className="muted">{t("test.elNone")}</small>
+            : seen.items.map((c) => (
+              <details key={c.id} open={c.tools.some((x) => x.ok === false)}>
+                <summary>
+                  {c.startedAt ? fmtDateTime(c.startedAt, locale) : c.id} · {c.status}
+                  {c.tools.length > 0 && <> · {c.tools.map((x, i) => <Badge key={i} tone={x.ok === false ? "warn" : "ok"}>{x.name}</Badge>)}</>}
+                  {c.opening && <><br /><small className="muted" dir="auto">{c.opening}</small></>}
+                </summary>
+                {c.tools.length === 0 ? <small className="muted">{t("test.elNoTools")}</small> : (
+                  <div className="table-wrap"><table><tbody>
+                    {c.tools.map((x, i) => (
+                      <tr key={i}>
+                        <td><Badge tone={x.ok === false ? "warn" : "ok"}>{x.name}</Badge></td>
+                        <td><small><strong>{t("test.asked")}:</strong> <code dir="ltr">{x.asked || "-"}</code><br /><strong>{t("test.answer")}:</strong> <code dir="ltr">{x.answer || "-"}</code></small></td>
+                      </tr>
+                    ))}
+                  </tbody></table></div>
+                )}
+              </details>
+            ))}
+        </section>
+      )}
 
       <section className="card stack" style={{ alignContent: "start" }}>
         <h2>{t("test.try")}</h2>

@@ -17,13 +17,26 @@ export interface SyncDeps {
   initSecret: string;
 }
 
-const TOOLS_KEY = "elevenlabs.tools";
-interface ToolsSetting { ids: Record<string, string>; hash: string }
+export const TOOLS_KEY = "elevenlabs.tools";
+/** `url` is the address the tools call, so the Test page can show it when it differs from this app's address. */
+export interface ToolsSetting { ids: Record<string, string>; hash: string; url?: string }
+
+const toolsHash = (appUrl: string, secret: string) => createHash("sha256").update(JSON.stringify(toolDefinitions(appUrl, secret))).digest("hex");
+
+/**
+ * Whether the booking tools in ElevenLabs match this app: created, calling `appUrl`, with today's secret and definitions.
+ * When `current` is false, ElevenLabs is still calling an old address or sending an old secret until the next Sync.
+ */
+export async function toolsStatus(data: Pick<Data, "getSetting">, appUrl: string, secret: string | undefined) {
+  const saved = (await data.getSetting(TOOLS_KEY)) as ToolsSetting | undefined;
+  const created = Boolean(saved && Object.keys(saved.ids).length);
+  return { created, url: saved?.url, current: Boolean(created && secret && saved?.hash === toolsHash(appUrl, secret)) };
+}
 
 /** The booking tools are shared by every client's agent, so they are created once and updated when their definition changes. */
 async function ensureTools(d: SyncDeps): Promise<string[]> {
   const defs = toolDefinitions(d.appUrl, d.toolsSecret);
-  const hash = createHash("sha256").update(JSON.stringify(defs)).digest("hex");
+  const hash = toolsHash(d.appUrl, d.toolsSecret);
   const saved = (await d.data.getSetting(TOOLS_KEY)) as ToolsSetting | undefined;
   const ids: Record<string, string> = { ...(saved?.ids ?? {}) };
   const stale = saved?.hash !== hash;
@@ -31,7 +44,7 @@ async function ensureTools(d: SyncDeps): Promise<string[]> {
     if (!ids[name]) ids[name] = (await d.api.createWebhookTool(def)).id;
     else if (stale) await d.api.updateTool(ids[name], def);
   }
-  if (stale || Object.keys(ids).length !== Object.keys(saved?.ids ?? {}).length) await d.data.setSetting(TOOLS_KEY, { ids, hash } satisfies ToolsSetting);
+  if (stale || saved?.url !== d.appUrl || Object.keys(ids).length !== Object.keys(saved?.ids ?? {}).length) await d.data.setSetting(TOOLS_KEY, { ids, hash, url: d.appUrl } satisfies ToolsSetting);
   return Object.values(ids);
 }
 
@@ -77,14 +90,15 @@ export async function syncAgent(d: SyncDeps, tenantId: string, actor: string): P
       const name = `Knowledge: ${tenant.name}`.slice(0, 100);
       newDoc = { id: (await d.api.createKnowledgeText({ name, text: knowledgeText(items) })).id, name };
     }
-    const config = buildAgentConfig({ tenant, settings, toolIds, knowledgeDoc: newDoc, appUrl: d.appUrl, initSecret: d.initSecret });
+    const doctors = await d.data.getDoctors(tenantId);
+    const config = buildAgentConfig({ tenant, settings, doctors, toolIds, knowledgeDoc: newDoc, appUrl: d.appUrl, initSecret: d.initSecret });
     let agentId = settings.elevenLabsAgentId;
     const created = !agentId;
     if (!agentId) {
       agentId = (await d.api.createAgent(config)).agent_id;
       await d.data.saveAgent(tenantId, { ...settings, elevenLabsAgentId: agentId }, actor, "Created the ElevenLabs agent");
     }
-    const warnings = await applyExtras(d.api, agentId, config, buildExtras({ tenant, doctors: await d.data.getDoctors(tenantId) }));
+    const warnings = await applyExtras(d.api, agentId, config, buildExtras({ tenant, doctors }));
     if (prevDoc && prevDoc !== newDoc?.id) await d.api.deleteKnowledge(prevDoc).catch(() => undefined); // the old copy is no longer attached
     await d.data.setIntegrations(tenantId, { ...tenant.integrations, elevenlabs: { kbDocId: newDoc?.id, syncedAt: new Date().toISOString(), widgetHosts: widgetHostnames(tenant, d.appUrl), ...(warnings.length ? { warnings } : {}) } }, actor, created ? "Created the ElevenLabs agent" : "Synced the agent to ElevenLabs");
     if (tenant.allowedDomains.length) await d.data.setChannelStatus(tenantId, "website", "connected", actor);

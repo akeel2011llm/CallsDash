@@ -1,4 +1,4 @@
-import { computeSlots, describeSlot, isOpenAt, isSlotFree, nextOpening, type Busy } from "./availability";
+import { LOCAL_OFFSET_MIN, computeSlots, describeSlot, isOpenAt, isSlotFree, nextOpening, type Busy } from "./availability";
 import { SlotTakenError } from "./errors";
 import type { Calendar, EventInput } from "./google-calendar";
 import type { Data } from "./data/demo";
@@ -17,6 +17,34 @@ const DAY_MS = 86_400_000;
 /** A doctor with their own hours works those; otherwise the clinic's opening hours. */
 export const hoursFor = (tenant: Tenant, doctor: Doctor) => doctor.hours ?? tenant.openingHours;
 export const isActive = (d: Doctor) => d.active !== false;
+
+const plainName = (s: string) => s.toLowerCase().normalize("NFKC")
+  .replace(/^\s*(?:(?:dr|doctor)\b\.?|الدكتورة|الدكتور|دكتورة|دكتور|د\.)\s*/u, "").replace(/[.\s]+/g, " ").trim();
+
+/**
+ * The doctor a tool call means. The agent is told to pass the id from check_availability, but a model sometimes passes
+ * the doctor's name instead ("Dr. Hana"), so a unique name match is accepted too.
+ */
+export function matchDoctor<D extends Pick<Doctor, "id" | "name">>(doctors: D[], ref: string): D | undefined {
+  const exact = doctors.find((d) => d.id === ref.trim());
+  if (exact) return exact;
+  const want = plainName(ref);
+  if (!want) return undefined;
+  const same = doctors.filter((d) => plainName(d.name) === want);
+  if (same.length === 1) return same[0];
+  const partial = doctors.filter((d) => plainName(d.name).split(" ").includes(want) || plainName(d.name).includes(want));
+  return partial.length === 1 ? partial[0] : undefined;
+}
+
+/** A slot start from the agent. A time written without a zone ("2026-10-23T16:00") is Bahrain time, as the agent says it. */
+export function parseStart(s: string): number {
+  const t = s.trim();
+  if (/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(t)) {
+    const sign = LOCAL_OFFSET_MIN >= 0 ? "+" : "-", m = Math.abs(LOCAL_OFFSET_MIN);
+    return Date.parse(`${t.replace(" ", "T")}${sign}${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`);
+  }
+  return Date.parse(t);
+}
 /** Whole local days (Bahrain, UTC+3) of leave and clinic closures, as busy time. */
 const dayRanges = (ranges: DateRange[] | undefined): Busy[] =>
   (ranges ?? []).map((r) => ({ start: Date.parse(`${r.from}T00:00:00+03:00`), end: Date.parse(`${r.to}T00:00:00+03:00`) + DAY_MS }))
@@ -61,8 +89,9 @@ export function createBookingService(data: Data, calendar: Calendar | null, nowF
     const tenant = await data.getTenant(tenantId);
     if (!tenant) throw new ToolError("unknown_clinic", "Unknown clinic.");
     const doctors = await data.getDoctors(tenantId);
-    const picked = doctorId ? doctors.filter((d) => d.id === doctorId) : doctors;
-    if (doctorId && picked.length === 0) throw new ToolError("unknown_doctor", "That doctor was not found.");
+    const match = doctorId ? matchDoctor(doctors, doctorId) : undefined;
+    const picked = doctorId ? (match ? [match] : []) : doctors;
+    if (doctorId && picked.length === 0) throw new ToolError("unknown_doctor", `That doctor was not found. The doctors are: ${doctors.filter(isActive).map((d) => `${d.name} (doctor_id ${d.id})`).join(", ")}.`);
     return { tenant, doctors: picked };
   }
 
@@ -78,7 +107,7 @@ export function createBookingService(data: Data, calendar: Calendar | null, nowF
   /** Moves a live booking to a free time, and moves its Google Calendar event with it. */
   async function moveBooking(tenantId: string, booking: Booking, doctor: Doctor, newStartsAt: string, actor: string) {
     const { tenant } = await context(tenantId);
-    const startMs = Date.parse(newStartsAt);
+    const startMs = parseStart(newStartsAt);
     if (Number.isNaN(startMs)) throw new ToolError("bad_time", "The start time must be an ISO date-time.");
     const busy = await busyFor(tenant, doctor, startMs, startMs + booking.durationMin * 60_000, booking.id);
     if (!isSlotFree({ openingHours: hoursFor(tenant, doctor), busy, startMs, durationMin: booking.durationMin, nowMs: nowFn().getTime() }))
@@ -104,8 +133,10 @@ export function createBookingService(data: Data, calendar: Calendar | null, nowF
       const doctors = all.filter(isActive);
       if (p.doctorId && doctors.length === 0) throw new ToolError("doctor_unavailable", "That doctor is not taking bookings. Offer another doctor.");
       const now = nowFn();
-      const from = p.fromDate && /^\d{4}-\d{2}-\d{2}$/.test(p.fromDate) ? Date.parse(`${p.fromDate}T00:00:00+03:00`) : now.getTime();
-      if (Number.isNaN(from)) throw new ToolError("bad_date", "The date must be YYYY-MM-DD.");
+      const asked = p.fromDate && /^\d{4}-\d{2}-\d{2}$/.test(p.fromDate) ? Date.parse(`${p.fromDate}T00:00:00+03:00`) : now.getTime();
+      if (Number.isNaN(asked)) throw new ToolError("bad_date", "The date must be YYYY-MM-DD.");
+      // A day already over (the model guessed the year, or today's date was not given) means "from now".
+      const from = asked + DAY_MS <= now.getTime() ? now.getTime() : asked;
       const days = Math.min(HORIZON_DAYS, Math.max(1, p.days ?? 7));
       const to = from + days * 86_400_000;
       const out: { doctorId: string; doctor: string; start: string; label: string }[] = [];
@@ -124,7 +155,7 @@ export function createBookingService(data: Data, calendar: Calendar | null, nowF
       const { tenant, doctors } = await context(tenantId, p.doctorId);
       const doctor = doctors[0];
       if (!isActive(doctor)) throw new ToolError("doctor_unavailable", "That doctor is not taking bookings. Offer another doctor.");
-      const startMs = Date.parse(p.startsAt);
+      const startMs = parseStart(p.startsAt);
       if (Number.isNaN(startMs)) throw new ToolError("bad_time", "The start time must be an ISO date-time.");
       if (!p.patientName.trim() || lastDigits(p.patientPhone).length < 8) throw new ToolError("missing_details", "Ask the patient for their name and a full phone number.");
       const free = isSlotFree({ openingHours: hoursFor(tenant, doctor), busy: await busyFor(tenant, doctor, startMs, startMs + SLOT_MIN * 60_000), startMs, durationMin: SLOT_MIN, nowMs: nowFn().getTime() });

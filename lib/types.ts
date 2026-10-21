@@ -350,6 +350,21 @@ export interface Alert {
   resolved: boolean;
 }
 
+/** One call from the ElevenLabs agent to a booking tool, kept so the admin can see why a booking did or did not happen. */
+export interface AgentToolCall {
+  id: string;
+  /** Empty when the call named an agent that belongs to no client. */
+  tenantId?: string;
+  at: string;
+  tool: string;
+  ok: boolean;
+  /** The error code on failure (slot_taken, unknown_doctor, ...). */
+  code?: string;
+  /** What was asked and what came back, without the patient's full phone number. */
+  detail: string;
+  ms: number;
+}
+
 export interface AuditEntry {
   id: string;
   tenantId?: string;
