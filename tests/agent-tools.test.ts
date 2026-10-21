@@ -50,6 +50,13 @@ describe("what the agent sends to the booking tools", () => {
     expect(again.slots.map((s) => s.start)).not.toContain("2026-10-21T07:00:00.000Z");
   });
 
+  it("books when the agent passes ElevenLabs' own conversation id (conv_...), which is not a uuid", async () => {
+    const { svc, t, data } = await setup();
+    const b = await svc.bookAppointment(t.id, { doctorId: "Dr Hana", startsAt: "2026-10-21T10:30", patientName: "Fatima", patientPhone: "+973 3912 3456", conversationId: "conv_01jabc2x9k8qz5t7v3w4m6n1p0" });
+    const saved = (await data.getBookings(t.id)).find((x) => x.id === b.bookingId);
+    expect(saved?.conversationId).toBe("conv_01jabc2x9k8qz5t7v3w4m6n1p0");
+  });
+
   it("names the doctors when the model passes one that does not exist", async () => {
     const { svc, t } = await setup();
     await expect(svc.checkAvailability(t.id, { doctorId: "Dr Sara" })).rejects.toMatchObject({ code: "unknown_doctor", message: expect.stringContaining("Dr. Hana Ali (doctor_id") });
