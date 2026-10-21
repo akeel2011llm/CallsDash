@@ -27,6 +27,11 @@ The agent prompt lists the active doctors with their ids (lib/agent-config.ts).
 
 ## When a booking fails
 
+If the Test agent page says the secret "contains a character that cannot be sent", `AGENT_TOOLS_SECRET` (or
+`ELEVENLABS_INIT_SECRET` / `ELEVENLABS_API_KEY`) has a space, curly quote or hidden symbol from copy-paste. Sync saves it
+fine, but ElevenLabs cannot put it in a header, so every tool call fails. Use **Make a secret** (Channels or Test agent page;
+made in the browser, letters and digits only), paste it into Vercel, redeploy and press Sync.
+
 Admin > **Test agent** shows three things for the chosen client:
 
 1. **Booking tools** in the checklist: whether ElevenLabs calls this app's current address with the current secret.

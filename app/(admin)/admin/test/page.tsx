@@ -12,13 +12,15 @@ import { toolsStatus } from "@/lib/agent-sync";
 import { recentConversations } from "@/lib/agent-inspect";
 import { elevenLabsFromEnv } from "@/lib/elevenlabs-api";
 import { consoleLabels } from "@/lib/console-labels";
+import { headerSafe } from "@/lib/header-safe";
+import { SecretGenerator } from "@/components/SecretGenerator";
 import { viewAsClient } from "@/lib/actions";
 import { AgentConsole } from "@/components/AgentConsole";
 import { SubmitButton } from "@/components/SubmitButton";
 import { Badge, Notice, PageHead } from "@/components/ui";
 
 type SP = { c?: string; lang?: string; saved?: string; error?: string; tools?: string; n?: string; code?: string; why?: string; at?: string };
-const TOOL_RESULTS = ["ok", "secret", "protected", "agent", "nosecret", "noagent", "unreachable", "error", "http"] as const;
+const TOOL_RESULTS = ["ok", "badsecret", "secret", "protected", "agent", "nosecret", "noagent", "unreachable", "error", "http"] as const;
 const SCENARIOS = ["hours", "faq", "book", "change", "message", "human", "arabic", "unknown"] as const;
 
 /** The client's real agent, run from the admin portal, with everything needed to judge the result on one page. */
@@ -37,6 +39,7 @@ export default async function TestAgentPage({ searchParams }: { searchParams: Pr
   const api = elevenLabsFromEnv();
   const seen = api && agent.elevenLabsAgentId ? await recentConversations(api, agent.elevenLabsAgentId, 4) : null;
   const toolResult = TOOL_RESULTS.find((r) => r === sp.tools);
+  const secretBad = Boolean(process.env.AGENT_TOOLS_SECRET) && !headerSafe(process.env.AGENT_TOOLS_SECRET);
   const host = new URL(url).hostname;
   const el = tenant.integrations.elevenlabs;
   const allowed = Boolean(el?.widgetHosts?.includes(host));
@@ -84,7 +87,7 @@ export default async function TestAgentPage({ searchParams }: { searchParams: Pr
             {check(!paused, t("test.check.credits"), `${fmtNum(wallet.balance, locale, 1)} · ${paused ? t("test.check.paused") : t("status.live")}`)}
             {check(doctors.some((d) => d.googleCalendarId), t("test.check.calendar"), t("test.check.calendarCount").replace("{n}", String(doctors.filter((d) => d.googleCalendarId).length)).replace("{m}", String(doctors.length)))}
             {check(knowledge.length > 0, t("test.check.knowledge"), t("test.check.knowledgeCount").replace("{n}", String(knowledge.length)))}
-            {check(tools.current && tools.url === url, t("test.check.tools"), !tools.created ? t("test.check.toolsMissing")
+            {check(!secretBad && tools.current && tools.url === url, t("test.check.tools"), secretBad ? t("test.check.toolsBadSecret") : !tools.created ? t("test.check.toolsMissing")
               : tools.current && tools.url === url ? t("test.check.toolsOk").replace("{url}", url) : t("test.check.toolsOld").replace("{url}", tools.url ?? "?"))}
           </tbody></table></div>
           <div className="row">
@@ -99,6 +102,9 @@ export default async function TestAgentPage({ searchParams }: { searchParams: Pr
             <Link className="btn ghost" href={`/admin/clients/${tenant.id}/channels`}>{t("nav.channels")}</Link>
           </div>
           <small className="muted" id="tools">{t("test.syncHelp")} {t("test.tools.help")}</small>
+          {(secretBad || toolResult === "badsecret") && (
+            <SecretGenerator labels={{ make: t("secret.make"), copy: t("secret.copy"), copied: t("secret.copied"), hint: t("secret.hint") }} />
+          )}
           {toolResult && (
             <Notice tone={toolResult === "ok" ? "ok" : "warn"}>
               {t(`test.tools.${toolResult}` as Key).replace("{n}", String(Number(sp.n) || 0)).replace("{code}", (sp.code ?? "").slice(0, 40)).replace("{why}", (sp.why ?? "").slice(0, 80)).replace("{url}", (sp.at ?? "").slice(0, 120))}

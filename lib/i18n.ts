@@ -907,6 +907,16 @@ const en = {
   "test.asked": "Asked",
   "test.answer": "Answer",
   "w.notAllowed": "This assistant is not available on this website.",
+  "channels.err.bad_secret": "A setting in Vercel that is sent to ElevenLabs (AGENT_TOOLS_SECRET, ELEVENLABS_INIT_SECRET or ELEVENLABS_API_KEY) contains a character that cannot be sent: a space, a curly quote or a hidden symbol from copy-paste. Make a new secret with the generator on the Channels page, paste it into Vercel, redeploy, then press Sync.",
+  "channels.env.badChars": "Contains a character that cannot be sent (a space, curly quote or hidden symbol). Replace it with the generator below and redeploy.",
+  "secret.title": "Make a safe secret",
+  "secret.help": "For AGENT_TOOLS_SECRET: press Make, Copy, then in Vercel open Settings > Environment Variables, edit AGENT_TOOLS_SECRET, paste the new value (type Secret), save and redeploy. The value is made in your browser and is not saved here.",
+  "secret.make": "Make a secret",
+  "secret.copy": "Copy",
+  "secret.copied": "Copied",
+  "secret.hint": "Paste this into Vercel now. After you leave this page it cannot be shown again; make a new one if you lose it.",
+  "test.tools.badsecret": "AGENT_TOOLS_SECRET in Vercel contains a character that cannot be sent (a space, a curly quote or a hidden symbol from copy-paste), so ElevenLabs cannot call the booking tools. Make a new one below, paste it into Vercel, redeploy, press Sync, then test again.",
+  "test.check.toolsBadSecret": "The secret has a character that cannot be sent. Make a new one below.",
 } as const;
 
 export type Key = keyof typeof en;
@@ -1816,6 +1826,16 @@ const ar: Record<Key, string> = {
   "test.asked": "الطلب",
   "test.answer": "الرد",
   "w.notAllowed": "هذا المساعد غير متاح على هذا الموقع.",
+  "channels.err.bad_secret": "أحد الإعدادات في Vercel التي تُرسل إلى ElevenLabs (AGENT_TOOLS_SECRET أو ELEVENLABS_INIT_SECRET أو ELEVENLABS_API_KEY) يحتوي على حرف لا يمكن إرساله: مسافة أو علامة اقتباس منحنية أو رمز مخفي من النسخ واللصق. أنشئ سراً جديداً بالمولّد في صفحة القنوات والصقه في Vercel وأعد النشر ثم اضغط مزامنة.",
+  "channels.env.badChars": "يحتوي على حرف لا يمكن إرساله (مسافة أو علامة اقتباس منحنية أو رمز مخفي). استبدله باستخدام المولّد أدناه وأعد النشر.",
+  "secret.title": "إنشاء سر آمن",
+  "secret.help": "لـ AGENT_TOOLS_SECRET: اضغط إنشاء ثم نسخ، ثم في Vercel افتح Settings ثم Environment Variables وعدّل AGENT_TOOLS_SECRET والصق القيمة الجديدة (النوع Secret) واحفظ وأعد النشر. تُنشأ القيمة في متصفحك ولا تُحفظ هنا.",
+  "secret.make": "إنشاء سر",
+  "secret.copy": "نسخ",
+  "secret.copied": "تم النسخ",
+  "secret.hint": "الصقه في Vercel الآن. بعد مغادرة الصفحة لن يمكن عرضه مجدداً؛ أنشئ واحداً جديداً إذا فقدته.",
+  "test.tools.badsecret": "المتغير AGENT_TOOLS_SECRET في Vercel يحتوي على حرف لا يمكن إرساله (مسافة أو علامة اقتباس منحنية أو رمز مخفي من النسخ واللصق) لذلك لا يستطيع ElevenLabs استدعاء أدوات الحجز. أنشئ سراً جديداً أدناه والصقه في Vercel وأعد النشر واضغط مزامنة ثم اختبر مجدداً.",
+  "test.check.toolsBadSecret": "السر يحتوي على حرف لا يمكن إرساله. أنشئ سراً جديداً أدناه.",
 };
 
 export const dictionaries = { en, ar } as const;

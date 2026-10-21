@@ -4,6 +4,7 @@ import * as store from "./data";
 import { appUrl } from "./app-url";
 import { syncAgent } from "./agent-sync";
 import { elevenLabsFromEnv } from "./elevenlabs-api";
+import { badHeaderSetting } from "./header-safe";
 
 /**
  * Brings the client's ElevenLabs agent up to date after a change that the agent reads (knowledge, prompt, voices,
@@ -13,7 +14,7 @@ import { elevenLabsFromEnv } from "./elevenlabs-api";
 export async function autoSync(tenantId: string, actor: string) {
   const api = elevenLabsFromEnv();
   const tools = process.env.AGENT_TOOLS_SECRET;
-  if (!api || !tools) return;
+  if (!api || !tools || badHeaderSetting()) return; // a secret that cannot be sent is reported on the Channels page, not retried here
   const url = await appUrl();
   if (!url.startsWith("https://")) return;
   if (!(await store.getAgent(tenantId)).elevenLabsAgentId) return;

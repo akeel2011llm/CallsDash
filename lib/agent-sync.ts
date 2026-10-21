@@ -5,7 +5,7 @@ import { ElevenLabsError, type ElevenLabsApi } from "./elevenlabs-api";
 import type { Data } from "./data/demo";
 
 export class SyncError extends Error {
-  constructor(public code: "no_api_key" | "no_secret" | "no_app_url" | "unknown_client" | "failed", detail?: string) { super(detail ?? code); }
+  constructor(public code: "no_api_key" | "no_secret" | "bad_secret" | "no_app_url" | "unknown_client" | "failed", detail?: string) { super(detail ?? code); }
 }
 
 export interface SyncDeps {
