@@ -3,7 +3,7 @@ import { addMonths, addTopUp, balance, creditsFor, deduct, lowBalance, renewPack
 import { DEFAULT_CATALOGUE, PLAN_PRESETS, firstPackage, normalizePlans, type PlanInput } from "../plans";
 import { ELEVENLABS_USD_PER_MIN, ELEVENLABS_USD_PER_MSG, USD_TO_BHD, agent as defaultAgent } from "../seed";
 import type {
-  AgentSettings, AgentVersion, Alert, AuditEntry, Booking, BookingStatus, Conversation, CreditBatch, Doctor,
+  AgentSettings, AgentToolCall, AgentVersion, Alert, AuditEntry, Booking, BookingStatus, Conversation, CreditBatch, Doctor,
   CatalogPackage, KnowledgeItem, LedgerEntry, ChatSession, Channel, Locale, Permissions, Profile, StaffRequest, Tenant, TenantSecrets, UnansweredQuestion,
 } from "../types";
 import type { Data } from "./demo";
@@ -77,6 +77,14 @@ export const schemaVersion = () => createHash("sha1").update(SCHEMA_ADDITIONS.jo
 
 export const SCHEMA_ADDITIONS = [
   `alter table credit_batches add column if not exists plan_id text`,
+  `create table if not exists agent_tool_calls (
+     id uuid primary key default gen_random_uuid(),
+     tenant_id uuid references tenants on delete cascade,
+     at timestamptz not null default now(),
+     tool text not null, ok boolean not null, code text,
+     detail text not null default '', ms integer not null default 0)`,
+  `create index if not exists agent_tool_calls_at on agent_tool_calls (tenant_id, at desc)`,
+  `alter table agent_tool_calls enable row level security`,
   `alter type user_role add value if not exists 'doctor'`,
   `alter table profiles add column if not exists doctor_id uuid references doctors on delete set null`,
   `alter table bookings add column if not exists notes text`,
@@ -343,6 +351,18 @@ export function createPgData(db: Db): Data {
     getAlerts: async (tenantId) =>
       (await q<Row>(`select * from alerts where ($1::uuid is null or tenant_id = $1) order by at desc`, [tenantId ?? null])).map((r): Alert => ({
         id: r.id, tenantId: r.tenant_id, at: iso(r.at), severity: r.severity, message: r.message, resolved: r.resolved })),
+    logToolCall: async (e) => {
+      await ensureSchema();
+      await q(`insert into agent_tool_calls (tenant_id, tool, ok, code, detail, ms) values ($1, $2, $3, $4, $5, $6)`,
+        [e.tenantId ?? null, e.tool, e.ok, e.code ?? null, e.detail.slice(0, 600), Math.round(e.ms)]);
+      // a month is plenty for chasing a problem; the table never grows past that
+      if (Math.random() < 0.05) await q(`delete from agent_tool_calls where at < now() - interval '30 days'`);
+    },
+    getToolCalls: async (tenantId, limit = 30) => {
+      await ensureSchema();
+      return (await q<Row>(`select * from agent_tool_calls where ($1::uuid is null or tenant_id = $1) order by at desc limit $2`, [tenantId ?? null, limit])).map((r): AgentToolCall => ({
+        id: r.id, tenantId: r.tenant_id ?? undefined, at: iso(r.at), tool: r.tool, ok: r.ok, code: r.code ?? undefined, detail: r.detail, ms: r.ms }));
+    },
     getAudit: async (tenantId) =>
       (await q<Row>(`select * from audit_log where ($1::uuid is null or tenant_id = $1) order by at desc limit 500`, [tenantId ?? null])).map((r): AuditEntry => ({
         id: r.id, tenantId: r.tenant_id ?? undefined, at: iso(r.at), actor: r.actor, action: r.action })),

@@ -1,6 +1,6 @@
 import { variablePlaceholders } from "./agent-context";
 import { resolveVoiceId } from "./voices";
-import type { AgentSettings, KnowledgeItem, Tenant } from "./types";
+import type { AgentSettings, Doctor, KnowledgeItem, Tenant } from "./types";
 
 const REPLY_LENGTH = {
   short: "Keep every reply to one or two short sentences.",
@@ -18,15 +18,26 @@ const ARABIC_STYLE = {
 } as const;
 
 const TOOL_RULES = [
-  "Always call check_availability before offering times. Never invent slots.",
-  "Confirm doctor, time, patient name and phone number back to the patient before calling book_appointment.",
+  "Always call check_availability before offering times. Never invent slots. Leave from_date empty to start from today.",
+  "Ask for the patient's full name and phone number, then confirm doctor, time, name and number back to the patient before calling book_appointment.",
+  "Call book_appointment with the doctor_id and starts_at exactly as check_availability returned them; never rewrite the time yourself.",
+  "Only say an appointment is booked after book_appointment returns ok:true, then read back its label.",
   "If a tool returns ok:false, follow its message. Never promise a booking that a tool did not confirm.",
   "Use take_message when the patient wants staff to call back. Use handoff_to_staff when a person must take over; there is no live transfer, so say that staff will call back.",
   "For a medical emergency tell the caller to call 999 immediately and also call handoff_to_staff with urgent set to true.",
 ];
 
-/** The agent's instructions: the client's own sections, the style settings, live context and the tool rules. */
-export function buildPrompt(settings: AgentSettings): string {
+type DoctorLine = Pick<Doctor, "id" | "name" | "specialty" | "active">;
+
+/** The doctors who take bookings, with the id the tools expect, so the agent can name them and pass the right id. */
+function doctorSection(doctors: DoctorLine[]) {
+  const active = doctors.filter((d) => d.active !== false);
+  if (!active.length) return "";
+  return `# Doctors\n${active.map((d) => `- ${d.name}${d.specialty ? `, ${d.specialty}` : ""} (doctor_id: ${d.id})`).join("\n")}`;
+}
+
+/** The agent's instructions: the client's own sections, the style settings, live context, the doctors and the tool rules. */
+export function buildPrompt(settings: AgentSettings, doctors: DoctorLine[] = []): string {
   const p = settings.prompt;
   return [
     `# Role\n${p.identity}`,
@@ -37,8 +48,9 @@ export function buildPrompt(settings: AgentSettings): string {
     `# Handing over\n${p.handoff}`,
     `# Style\n${REPLY_LENGTH[settings.replyLength]} ${FORMALITY[settings.formality]} Answer only from the knowledge base and the facts below; if you do not know, say so and offer to take a message.`,
     `# Facts for this conversation\nToday is {{today}}. The clinic is open now: {{open_now}}. Opening hours today: {{hours_today}}. If closed, it next opens {{next_opening}}. Channel: {{channel}}. The caller's phone number, if known: {{caller_phone}} (ask them to confirm it before booking).`,
+    doctorSection(doctors),
     `# Tools\n${TOOL_RULES.map((r) => `- ${r}`).join("\n")}`,
-  ].join("\n\n");
+  ].filter(Boolean).join("\n\n");
 }
 
 const clean = (s: string) => s.replace(/\s+/g, " ").trim();
@@ -59,6 +71,7 @@ export function knowledgeText(items: Pick<KnowledgeItem, "question" | "answer">[
 export interface AgentConfigInput {
   tenant: Tenant;
   settings: AgentSettings;
+  doctors?: DoctorLine[];
   toolIds: string[];
   knowledgeDoc?: { id: string; name: string };
   appUrl: string;
@@ -96,7 +109,7 @@ export function buildAgentConfig(i: AgentConfigInput) {
         language: "en",
         dynamic_variables: { dynamic_variable_placeholders: variablePlaceholders() },
         prompt: {
-          prompt: buildPrompt(settings),
+          prompt: buildPrompt(settings, i.doctors),
           llm: i.llm ?? process.env.ELEVENLABS_LLM ?? "gemini-2.5-flash",
           temperature: settings.temperature,
           tool_ids: i.toolIds,

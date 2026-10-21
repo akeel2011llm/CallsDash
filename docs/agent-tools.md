@@ -6,7 +6,7 @@ Create one **server tool** per row in the ElevenLabs agent (Agents > Tools > Add
 
 | Tool | Body fields (besides `agent_id`) | Returns |
 | --- | --- | --- |
-| `check_availability` | `doctor_id` (optional), `from_date` (YYYY-MM-DD, optional), `days` (1-30, default 7), `language` (`en`/`ar`) | `slots[]` with `doctor_id`, `doctor`, `start` (ISO), `label` |
+| `check_availability` | `doctor_id` (optional), `from_date` (YYYY-MM-DD, optional), `days` (1-30, default 7), `language` (`en`/`ar`) | `slots[]` with `doctor_id`, `doctor`, `starts_at` (ISO, pass to `book_appointment` as is), `label`; `message` when there are none |
 | `book_appointment` | `doctor_id`, `starts_at` (ISO, from a slot), `patient_name`, `patient_phone`, `service`, `conversation_id` (`system__conversation_id`) | `bookingId`, `label` |
 | `find_patient_booking` | `patient_phone` | `bookings[]` with `bookingId`, `doctor`, `label` |
 | `cancel_appointment` | `booking_id`, `patient_phone` | `cancelled` |
@@ -19,7 +19,24 @@ Create one **server tool** per row in the ElevenLabs agent (Agents > Tools > Add
 should tell the caller to call the emergency number (999 in Bahrain) as well as calling `handoff_to_staff` with `urgent: true`.
 
 Responses are `{ "ok": true, ... }` or `{ "ok": false, "error": "<code>", "message": "<what the agent should say or do>" }`.
-Error codes: `slot_taken`, `calendar_unavailable`, `missing_details`, `not_found`, `bad_time`, `bad_date`, `unknown_doctor`.
+Error codes: `slot_taken`, `calendar_unavailable`, `missing_details`, `not_found`, `bad_time`, `bad_date`, `unknown_doctor`, `doctor_unavailable`.
+
+The tools forgive what models commonly get wrong: `doctor_id` may be the doctor's name ("Dr Hana") when only one doctor
+matches; a time without a zone ("2026-10-23T16:00") is read as Bahrain time; a `from_date` that is already over means today.
+The agent prompt lists the active doctors with their ids (lib/agent-config.ts).
+
+## When a booking fails
+
+Admin > **Test agent** shows three things for the chosen client:
+
+1. **Booking tools** in the checklist: whether ElevenLabs calls this app's current address with the current secret.
+   If not, press **Sync**. The app address is `NEXT_PUBLIC_SITE_URL`, else Vercel's production domain, so a sync from a
+   preview or deployment address never points the tools at a protected URL.
+2. **Test the booking tools** calls `check_availability` over the internet as ElevenLabs does and names the problem:
+   wrong secret, an address behind Vercel Deployment Protection, an agent no client owns, or the tool's own error.
+3. **Booking tool log** (table `agent_tool_calls`, 30 days): every call that reached CallsDash with what was asked and the
+   result. **What ElevenLabs saw** reads the agent's latest conversations from ElevenLabs with each tool call and answer,
+   so a call that never reached CallsDash (refused, timed out) still shows its error.
 
 Add to the prompt: "Always call check_availability before offering times. Never invent slots. Confirm doctor, time, name and phone number
 back to the patient before calling book_appointment. If a tool returns ok:false, follow its message."

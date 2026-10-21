@@ -21,6 +21,7 @@ export interface DB {
   alerts: Alert[];
   audit: import("./types").AuditEntry[];
   staffRequests: import("./types").StaffRequest[];
+  toolCalls: import("./types").AgentToolCall[];
   profiles: import("./types").Profile[];
   secrets: Record<string, import("./types").TenantSecrets>;
   settings: Record<string, unknown>;
@@ -317,6 +318,7 @@ export function seed(): DB {
       { id: "u_recep_alnoor", tenantId: "t_alnoor", role: "receptionist", fullName: "Mariam Hassan", email: "mariam@alnoor.example.bh", disabled: false, mustChangePassword: false, createdAt: iso(nowMs - 20 * DAY) },
       { id: "u_manager_smile", tenantId: "t_smile", role: "manager", fullName: "Dr. Yusuf Ebrahim", email: "yusuf@smile.example.bh", disabled: false, mustChangePassword: true, createdAt: iso(nowMs - 11 * DAY) },
     ],
+    toolCalls: [],
     staffRequests: [
       { id: "sr1", tenantId: "t_alnoor", kind: "handoff", name: "Hessa Al Mannai", phone: "+97336001122", text: "Wants to speak to the doctor about test results.", urgent: true, language: "ar", status: "open", createdAt: iso(nowMs - 3 * 3_600_000) },
       { id: "sr2", tenantId: "t_alnoor", kind: "message", name: "Omar Yusuf", phone: "+97339887766", text: "Please call back about the invoice for last week's visit.", urgent: false, language: "en", status: "open", createdAt: iso(nowMs - 26 * 3_600_000) },

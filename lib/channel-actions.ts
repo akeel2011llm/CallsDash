@@ -6,7 +6,7 @@ import { requireAdmin } from "./auth";
 import * as store from "./data";
 import { appUrl } from "./app-url";
 import { safePath } from "./format";
-import { syncAgent, SyncError } from "./agent-sync";
+import { syncAgent, SyncError, TOOLS_KEY, type ToolsSetting } from "./agent-sync";
 import { elevenLabsFromEnv } from "./elevenlabs-api";
 import { sendBookingConfirmation } from "./whatsapp";
 import type { Channel, Integrations } from "./types";
@@ -40,6 +40,43 @@ export async function syncAgentAction(f: FormData) {
   done(id);
   const back = safePath(f.get("returnTo"), "");
   redirect(back ? `${back}${back.includes("?") ? "&" : "?"}${q}` : page(id, q));
+}
+
+/**
+ * Calls this app's own check_availability tool over the internet, exactly as ElevenLabs does, and reports what came back.
+ * Finds the problems the agent cannot explain: a refused secret, an address behind a login wall, an unknown agent.
+ */
+export async function testBookingToolsAction(f: FormData) {
+  await requireAdmin();
+  const id = str(f, "tenantId");
+  await only(id);
+  const agentId = (await store.getAgent(id)).elevenLabsAgentId;
+  const secret = process.env.AGENT_TOOLS_SECRET;
+  const saved = (await store.getSetting(TOOLS_KEY)) as ToolsSetting | undefined;
+  const base = saved?.url || (await appUrl());
+  let q: string;
+  if (!secret) q = "tools=nosecret";
+  else if (!agentId) q = "tools=noagent";
+  else {
+    try {
+      const res = await fetch(`${base}/api/agent-tools/check_availability`, {
+        method: "POST", signal: AbortSignal.timeout(20_000), cache: "no-store",
+        headers: { authorization: `Bearer ${secret}`, "content-type": "application/json" },
+        body: JSON.stringify({ agent_id: agentId, days: 7, language: "en" }),
+      });
+      const body = (await res.json().catch(() => null)) as { ok?: boolean; error?: string; slots?: unknown[] } | null;
+      if (res.ok && body?.ok) q = `tools=ok&n=${body.slots?.length ?? 0}`;
+      else if (res.ok && body) q = `tools=error&code=${encodeURIComponent(String(body.error ?? "internal"))}`;
+      else if (res.status === 401 && body?.error === "unauthorized") q = "tools=secret";
+      else if (res.status === 401 || res.status === 403) q = "tools=protected";
+      else if (res.status === 404 && body?.error === "unknown agent") q = "tools=agent";
+      else q = `tools=http&code=${res.status}`;
+    } catch {
+      q = "tools=unreachable";
+    }
+  }
+  const back = safePath(f.get("returnTo"), `/admin/test?c=${id}`);
+  redirect(`${back}${back.includes("?") ? "&" : "?"}${q}#tools`);
 }
 
 export async function saveWhatsappAction(f: FormData) {
