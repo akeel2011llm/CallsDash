@@ -191,4 +191,17 @@ describe("pg data layer", () => {
     expect((await data.getDoctors(t.id)).map((d) => d.name)).toEqual(["Dr. B"]);
     await expect(data.removeDoctor(t.id, a.id, "admin")).rejects.toThrow("doctor not found");
   });
+
+  it("applies the schema additions once, then a later start needs a single check", async () => {
+    const pg = await makeDb();
+    const seen: string[] = [];
+    const q: Q = async (sql, params) => { seen.push(sql); return (await pg.query(sql, params as unknown[])).rows as never; };
+    const db: Db = { q, tx: (fn) => pg.transaction((tx) => fn(async (sql, params) => (await tx.query(sql, params as unknown[])).rows as never)) };
+    await createPgData(db).listTenants();
+    expect(seen.length).toBeGreaterThan(20);
+    seen.length = 0;
+    await createPgData(db).listTenants(); // a new server instance against the same database
+    expect(seen.filter((s) => /^\s*(alter|create|do)\b/i.test(s))).toEqual([]);
+    expect(seen.length).toBeLessThanOrEqual(3);
+  });
 });

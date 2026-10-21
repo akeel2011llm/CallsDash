@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { addMonths, addTopUp, balance, creditsFor, deduct, lowBalance, renewPackage, revenuePerCredit, round2, sweepExpired, topUpKind } from "../credits";
 import { DEFAULT_CATALOGUE, PLAN_PRESETS, firstPackage, normalizePlans, type PlanInput } from "../plans";
 import { ELEVENLABS_USD_PER_MIN, ELEVENLABS_USD_PER_MSG, USD_TO_BHD, agent as defaultAgent } from "../seed";
@@ -66,6 +66,9 @@ const ledgerOf = (r: Row): LedgerEntry => ({
   id: r.id, tenantId: r.tenant_id, at: iso(r.at), kind: r.kind, credits: num(r.credits), channel: r.channel ?? undefined,
   conversationId: r.conversation_id ?? undefined, note: r.note ?? undefined,
 });
+
+/** Changes whenever a statement below is added or edited. */
+export const schemaVersion = () => createHash("sha1").update(SCHEMA_ADDITIONS.join("\n")).digest("hex");
 
 export const SCHEMA_ADDITIONS = [
   `alter table credit_batches add column if not exists plan_id text`,
@@ -139,7 +142,13 @@ export function createPgData(db: Db): Data {
   // deploy works without anyone running SQL by hand (supabase/migrations/0003_packages.sql holds the same statements).
   let schemaReady: Promise<void> | undefined;
   const ensureSchema = () => (schemaReady ??= (async () => {
+    // Every cold server would otherwise repeat dozens of statements, each a round trip to the database, before its first page.
+    // The version is stored once everything has been applied, so later starts need a single check.
+    const version = schemaVersion();
+    const stored = await q<Row>(`select value from app_settings where key = 'schema_version'`).catch(() => []);
+    if (stored[0] && String(stored[0].value).replace(/^"|"$/g, "") === version) return; // a jsonb string may arrive quoted or already parsed
     for (const sql of SCHEMA_ADDITIONS) await q(sql);
+    await q(`insert into app_settings (key, value) values ('schema_version', $1) on conflict (key) do update set value = $1, updated_at = now()`, [JSON.stringify(version)]);
   })().catch((e) => { schemaReady = undefined; throw e; }));
   const tx: Db["tx"] = async (fn) => { await ensureSchema(); return db.tx(fn); };
   const tenantsWhere = async (where: string, params: unknown[]) => {
