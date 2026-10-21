@@ -3,8 +3,8 @@
 One booking record per appointment, whoever made it. The record says who: the AI receptionist (`ai`), the clinic team (`staff`) or later the doctor (`doctor`).
 
 ## Receptionist screens (client app)
-- `/app/bookings`: today, upcoming, past and all; search by name, phone or CPR number; filter by doctor and status; one-click cancel.
-- `/app/bookings/new`: pick a doctor and a day, choose a free time (opening hours, existing bookings and the doctor's Google Calendar are all respected), enter the patient (name, phone and CPR number, all required) and notes.
+- `/app/bookings`: today, upcoming, past and all; search by name, phone or CPR number (as with a phone number, what is typed in the search box is part of the page address, so clear it when done); filter by doctor and status; one-click cancel.
+- `/app/bookings/new`: pick a doctor and a day, choose a free time (opening hours, existing bookings and the doctor's Google Calendar are all respected), enter the patient (name and phone are required; the CPR number can be left empty for a visitor who has none, but a number that is typed must be 9 digits) and notes.
 - `/app/bookings/[id]`: notes, reschedule, mark completed, no-show, cancel, restore. WhatsApp and call links for the patient.
 
 All of it goes through `lib/booking.ts`, the same service the AI agent's tools use, so staff and the AI can never double-book a doctor.

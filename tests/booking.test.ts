@@ -94,6 +94,17 @@ describe("booking service", () => {
     expect(Object.values(full)[0].description).not.toContain("850123456");
   });
 
+  it("lets the receptionist book a visitor with no CPR number, but accepts no made-up one, and the AI always asks", async () => {
+    const { svc, t, doc, data } = await setup();
+    const visitor = await svc.bookAppointment(t.id, { doctorId: doc, startsAt: WED_10, patientName: "Visitor", patientPhone: phone, source: "staff", actor: "reception@x" });
+    expect((await data.getBookings(t.id)).find((x) => x.id === visitor.bookingId)?.patientCpr).toBeUndefined();
+    for (const bad of ["12345", "000000000", "111-111-111"])
+      await expect(svc.bookAppointment(t.id, { doctorId: doc, startsAt: "2026-10-21T08:00:00Z", patientName: "B", patientPhone: phone, patientCpr: bad, source: "staff" })).rejects.toMatchObject({ code: "bad_cpr" });
+    await expect(svc.bookAppointment(t.id, { doctorId: doc, startsAt: "2026-10-21T08:00:00Z", patientName: "B", patientPhone: phone, source: "ai" })).rejects.toMatchObject({ code: "bad_cpr" });
+    await expect(svc.bookAppointment(t.id, { doctorId: doc, startsAt: "2026-10-21T08:00:00Z", patientName: "B", patientPhone: phone })).rejects.toMatchObject({ code: "bad_cpr" });
+    expect(await data.getBookings(t.id)).toHaveLength(1);
+  });
+
   it("finds a booking made before CPR numbers were asked by its phone number, given with any CPR", async () => {
     const { svc, t, doc, data } = await setup();
     const old = await data.createBooking(t.id, { doctorId: doc, patientName: "Old", patientPhone: phone, service: "Consultation", startsAt: WED_10, durationMin: 30, status: "confirmed" }, "x");

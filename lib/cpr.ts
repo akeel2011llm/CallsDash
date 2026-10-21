@@ -8,8 +8,12 @@ export const CPR_DIGITS = 9;
 export const asciiDigits = (s: string) =>
   s.replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x660)).replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x6f0));
 
-/** The 9 digits of a CPR number written with or without spaces, dashes or dots, or null when it is not 9 digits. */
+/**
+ * The 9 digits of a CPR number written with or without spaces, dashes or dots, or null when it is not 9 digits. The same
+ * digit nine times (000000000) is a placeholder, not a number, and would tie unrelated patients' bookings together.
+ */
 export function normalizeCpr(v: string | null | undefined): string | null {
   const digits = asciiDigits(String(v ?? "")).replace(/[\s.\-–]/g, "");
-  return new RegExp(`^\\d{${CPR_DIGITS}}$`).test(digits) ? digits : null;
+  if (!new RegExp(`^\\d{${CPR_DIGITS}}$`).test(digits) || /^(\d)\1+$/.test(digits)) return null;
+  return digits;
 }

@@ -79,6 +79,25 @@ describe("staff booking edits", () => {
     expect((await data.getBookings(t.id)).find((x) => x.id === bookingId)?.calendarEventId).toBe(Object.keys(events)[0]);
   });
 
+  it("never loses a booking's calendar event when the new doctor's calendar cannot be written", async () => {
+    const { svc, t, a, b, events, data } = await setup();
+    const { bookingId } = await svc.bookAppointment(t.id, { doctorId: a.id, startsAt: WED_10, patientName: "Fatma", patientPhone: phone, patientCpr: "850123456" });
+    const broken: Calendar = { async busy() { return []; }, async createEvent() { throw new Error("403"); }, async updateEvent() {}, async deleteEvent(_c, id) { delete events[id]; } };
+    const moved = await createBookingService(data, broken, () => NOW).staffUpdateDetails(t.id, bookingId, { doctorId: b.id }, "staff");
+    expect(moved.doctorId).toBe(b.id);
+    expect(Object.values(events)).toEqual([{ calendar: "cal-a", start: WED_10 }]); // the old event is kept for staff to move by hand
+    expect((await data.getAlerts(t.id)).some((x) => /still in Dr\. A's calendar/.test(x.message))).toBe(true);
+  });
+
+  it("moves the event to the new doctor even when the old one cannot be removed", async () => {
+    const { svc, t, a, b, events, data } = await setup();
+    const { bookingId } = await svc.bookAppointment(t.id, { doctorId: a.id, startsAt: WED_10, patientName: "Fatma", patientPhone: phone, patientCpr: "850123456" });
+    const stuck: Calendar = { async busy() { return []; }, async createEvent(c, e) { events.new = { calendar: c, start: e.startIso }; return "new"; }, async updateEvent() {}, async deleteEvent() { throw new Error("403"); } };
+    await createBookingService(data, stuck, () => NOW).staffUpdateDetails(t.id, bookingId, { doctorId: b.id }, "staff");
+    expect((await data.getBookings(t.id))[0].calendarEventId).toBe("new");
+    expect((await data.getAlerts(t.id)).some((x) => /old event could not be removed/.test(x.message))).toBe(true);
+  });
+
   it("refuses a doctor who is busy then, an empty name, and a doctor changing doctors", async () => {
     const { svc, t, a, b } = await setup();
     const one = await svc.bookAppointment(t.id, { doctorId: a.id, startsAt: WED_10, patientName: "One", patientPhone: phone, patientCpr: "850123456" });

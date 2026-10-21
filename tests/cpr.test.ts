@@ -13,7 +13,7 @@ describe("CPR numbers", () => {
   });
 
   it("refuses anything that is not exactly 9 digits", () => {
-    for (const v of ["", "85012345", "8501234567", "85012345x", "CPR 850123456", "+850123456", null, undefined]) expect(normalizeCpr(v)).toBeNull();
+    for (const v of ["", "85012345", "8501234567", "85012345x", "CPR 850123456", "+850123456", "000000000", "111111111", null, undefined]) expect(normalizeCpr(v)).toBeNull();
   });
 
   it("turns Arabic digits into ASCII and leaves everything else alone", () => {

@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { TextConversation } from "@elevenlabs/client";
+import { agentVariables } from "@/lib/agent-context";
+import type { Tenant } from "@/lib/types";
 
 const WIDGET_SCRIPT = "https://unpkg.com/@elevenlabs/convai-widget-embed";
 
@@ -19,8 +21,8 @@ type Line = { id: number; who: "user" | "agent" | "note"; text: string };
  * (floating in the corner, talk or type), and a written chat like WhatsApp or Instagram. Both use the live knowledge
  * base, calendar and booking tools, so whatever happens here happens for real.
  */
-export function AgentTry({ agentId, variables, labels, defaultLanguage, suggestions }: {
-  agentId: string; variables: Record<string, string>; labels: TryLabels; defaultLanguage: Lang; suggestions: Record<Lang, string[]>;
+export function AgentTry({ agentId, openingHours, labels, defaultLanguage, suggestions }: {
+  agentId: string; openingHours: Tenant["openingHours"]; labels: TryLabels; defaultLanguage: Lang; suggestions: Record<Lang, string[]>;
 }) {
   const [language, setLanguage] = useState<Lang>(defaultLanguage);
   return (
@@ -36,12 +38,12 @@ export function AgentTry({ agentId, variables, labels, defaultLanguage, suggesti
         <section className="stack" style={{ alignContent: "start" }}>
           <h3 style={{ margin: 0 }}>{labels.chatTitle}</h3>
           <small className="muted">{labels.chatHelp}</small>
-          <TextChat key={`${agentId}-${language}`} agentId={agentId} language={language} variables={variables} labels={labels} suggestions={suggestions[language]} />
+          <TextChat key={`${agentId}-${language}`} agentId={agentId} language={language} openingHours={openingHours} labels={labels} suggestions={suggestions[language]} />
         </section>
         <aside className="try-widget stack" style={{ alignContent: "start" }}>
           <h3 style={{ margin: 0 }}>{labels.widgetTitle}</h3>
           <small className="muted">{labels.widgetHelp}</small>
-          <FloatingWidget key={`${agentId}-${language}`} agentId={agentId} language={language} variables={variables} />
+          <FloatingWidget key={`${agentId}-${language}`} agentId={agentId} language={language} openingHours={openingHours} />
         </aside>
       </div>
     </div>
@@ -53,8 +55,8 @@ export function AgentTry({ agentId, variables, labels, defaultLanguage, suggesti
  * It sits in a "dock" the size of the screen above the phone tab bar (app/globals.css), so on a phone its button does not
  * cover the tabs: the dock's transform makes it the box the widget's fixed position is measured from.
  */
-function FloatingWidget({ agentId, language, variables }: { agentId: string; language: Lang; variables: Record<string, string> }) {
-  const vars = JSON.stringify(variables);
+function FloatingWidget({ agentId, language, openingHours }: { agentId: string; language: Lang; openingHours: Tenant["openingHours"] }) {
+  const hours = JSON.stringify(openingHours);
   useEffect(() => {
     if (!document.querySelector(`script[src="${WIDGET_SCRIPT}"]`)) {
       const s = document.createElement("script");
@@ -66,12 +68,13 @@ function FloatingWidget({ agentId, language, variables }: { agentId: string; lan
     dock.className = "widget-dock";
     const w = document.createElement("elevenlabs-convai");
     w.setAttribute("agent-id", agentId);
-    w.setAttribute("dynamic-variables", vars);
+    // today, open now and so on are worked out when the widget is put on the screen, not when the page was built
+    w.setAttribute("dynamic-variables", JSON.stringify(agentVariables({ openingHours: JSON.parse(hours) }, new Date(), { channel: "website" })));
     w.setAttribute("override-language", language);
     dock.appendChild(w);
     document.body.appendChild(dock);
     return () => dock.remove();
-  }, [agentId, language, vars]);
+  }, [agentId, language, hours]);
   return null;
 }
 
@@ -79,8 +82,8 @@ function FloatingWidget({ agentId, language, variables }: { agentId: string; lan
  * A text-only conversation with the agent. A chat that has been quiet for a while is ended by ElevenLabs; the next
  * message then starts a new conversation that is told what was said so far, so a booking can carry on where it stopped.
  */
-function TextChat({ agentId, language, variables, labels, suggestions }: {
-  agentId: string; language: Lang; variables: Record<string, string>; labels: TryLabels; suggestions: string[];
+function TextChat({ agentId, language, openingHours, labels, suggestions }: {
+  agentId: string; language: Lang; openingHours: Tenant["openingHours"]; labels: TryLabels; suggestions: string[];
 }) {
   const [lines, setLines] = useState<Line[]>([]);
   const [draft, setDraft] = useState("");
@@ -91,8 +94,13 @@ function TextChat({ agentId, language, variables, labels, suggestions }: {
   const history = useRef<Line[]>([]);
   const seq = useRef(0);
   const log = useRef<HTMLDivElement>(null);
+  const gone = useRef(false); // the screen was left while a chat was still connecting
+  const greeted = useRef<(() => void) | null>(null);
 
-  useEffect(() => () => { void conv.current?.endSession(); }, []);
+  useEffect(() => {
+    gone.current = false;
+    return () => { gone.current = true; void conv.current?.endSession(); };
+  }, []);
   useEffect(() => { log.current?.scrollTo({ top: log.current.scrollHeight }); }, [lines, waiting]);
 
   const add = (who: Line["who"], text: string) => {
@@ -104,18 +112,22 @@ function TextChat({ agentId, language, variables, labels, suggestions }: {
   async function connect(): Promise<TextConversation | null> {
     setStatus("connecting");
     const earlier = history.current.map((l) => `${l.who === "user" ? "Patient" : "Assistant"}: ${l.text}`).join("\n");
+    // A new chat starts with the assistant's greeting; the first message waits for it, so the chat reads in order.
+    const greeting = earlier ? Promise.resolve() : new Promise<void>((resolve) => { greeted.current = resolve; setTimeout(resolve, 3500); });
     try {
       const { Conversation } = await import("@elevenlabs/client");
       const c = await Conversation.startSession({
         agentId,
         connectionType: "websocket",
         textOnly: true,
-        dynamicVariables: variables,
+        dynamicVariables: agentVariables({ openingHours }, new Date(), { channel: "website" }),
         // carrying on after the chat was ended: no second greeting, the conversation continues
         overrides: { agent: { language, ...(earlier ? { firstMessage: "" } : {}) }, conversation: { textOnly: true } },
         onMessage: (m) => {
           const text = m.message?.trim();
           if (!text || m.role === "user") return;
+          greeted.current?.();
+          greeted.current = null;
           setWaiting(false);
           setWorking(false);
           add("agent", text);
@@ -130,8 +142,11 @@ function TextChat({ agentId, language, variables, labels, suggestions }: {
         },
         onError: (message) => add("note", `${labels.failed} ${message}`),
       });
+      if (gone.current) { void c.endSession(); return null; }
       conv.current = c;
       if (earlier) c.sendContextualUpdate(`This chat is continuing. Earlier messages in it:\n${earlier.slice(-6000)}`);
+      await greeting;
+      if (gone.current || conv.current !== c) return null; // left, or ended, while waiting for the greeting
       setStatus("connected");
       return c;
     } catch (e) {
@@ -170,9 +185,9 @@ function TextChat({ agentId, language, variables, labels, suggestions }: {
         {lines.map((l) => l.who === "note"
           ? <small key={l.id} className="muted try-note">{l.text}</small>
           : (
-            <div key={l.id} className={`bubble ${l.who === "user" ? "patient" : "agent"}`} dir="auto">
+            <div key={l.id} className={`bubble ${l.who === "user" ? "patient" : "agent"}`}>
               <small>{l.who === "user" ? labels.you : labels.assistant}</small>
-              {l.text}
+              <span dir="auto" style={{ display: "block" }}>{l.text}</span>
             </div>
           ))}
         {(status === "connecting" || waiting) && (
@@ -180,7 +195,7 @@ function TextChat({ agentId, language, variables, labels, suggestions }: {
         )}
       </div>
       {history.current.length === 0 && suggestions.length > 0 && (
-        <div className="try-suggestions" aria-label={labels.suggestions}>
+        <div className="try-suggestions" role="group" aria-label={labels.suggestions}>
           {suggestions.map((s) => (
             <button key={s} type="button" className="btn small ghost" dir="auto" disabled={status === "connecting"} onClick={() => void send(s)}>{s}</button>
           ))}

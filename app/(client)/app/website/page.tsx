@@ -1,9 +1,9 @@
 import { headers } from "next/headers";
-import Script from "next/script";
 import { requireClient } from "@/lib/auth";
 import { getT } from "@/lib/i18n";
 import { getAgent } from "@/lib/data";
 import { Notice, PageHead } from "@/components/ui";
+import { WidgetPreview } from "@/components/WidgetPreview";
 
 export default async function WebsitePage() {
   const { tenant } = await requireClient();
@@ -24,7 +24,7 @@ export default async function WebsitePage() {
       <section className="card stack">
         <h2>{t("website.preview")}</h2>
         {!connected && <Notice>{t("website.noAgent")}</Notice>}
-        <Script src="/widget.js" data-tenant={tenant.slug} strategy="afterInteractive" />
+        <WidgetPreview tenant={tenant.slug} />
       </section>
     </>
   );

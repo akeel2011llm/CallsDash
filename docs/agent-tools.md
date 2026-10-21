@@ -19,13 +19,23 @@ Create one **server tool** per row in the ElevenLabs agent (Agents > Tools > Add
 should tell the caller to call the emergency number (999 in Bahrain) as well as calling `handoff_to_staff` with `urgent: true`.
 
 Responses are `{ "ok": true, ... }` or `{ "ok": false, "error": "<code>", "message": "<what the agent should say or do>" }`.
-Error codes: `slot_taken`, `calendar_unavailable`, `missing_details`, `bad_cpr`, `not_found`, `bad_time`, `bad_date`, `unknown_doctor`, `doctor_unavailable`.
+Error codes: `slot_taken`, `calendar_unavailable`, `missing_details`, `bad_cpr`, `tools_outdated`, `not_found`, `bad_time`, `bad_date`, `unknown_doctor`, `doctor_unavailable`.
 
-**CPR numbers.** Every booking needs the patient's CPR number, the 9-digit personal number on the Bahraini ID card
-(`lib/cpr.ts` accepts spaces, dashes and Arabic digits). A patient proves a booking is theirs with the same CPR number to look
-it up, move it or cancel it. Bookings made before CPR was asked have none; for those the phone number they were made with
-is the proof, as before. The CPR number is kept in CallsDash only: it is not written into the Google Calendar event, and the
+**CPR numbers.** The AI always asks for the patient's CPR number, the 9-digit personal number on the Bahraini ID card
+(`lib/cpr.ts` accepts spaces, dashes and Arabic digits; a number that is one digit repeated, like 000000000, is refused).
+A patient proves a booking is theirs with the same CPR number to look it up, move it or cancel it. The receptionist can
+leave the CPR empty for a visitor who has none; the AI is told to take a message for those, so the team books them.
+Bookings made before CPR was asked have none; for those the phone number they were made with is the proof. When
+`find_patient_booking` finds nothing and no phone was given, its answer tells the agent to ask for that phone number and
+call again with both. The CPR number is kept in CallsDash only: it is not written into the Google Calendar event, and the
 tool log keeps its last 3 digits.
+
+**Tools out of date.** The booking tools live in ElevenLabs and are only rewritten on a Sync. If a call for `book_appointment`,
+`find_patient_booking`, `cancel_appointment` or `reschedule_appointment` arrives without the `patient_cpr` field, ElevenLabs
+still holds an older definition. The route then answers `tools_outdated` (the agent is told to take a message), and updates
+the shared tools itself after the answer is sent (once a minute at most; `ensureSharedTools` in `lib/agent-sync.ts`). Each
+client's prompt rules are still only rewritten on a Sync, so press **Update the assistant** for every client after a release
+that raises `AGENT_VERSION`.
 
 The tools forgive what models commonly get wrong: `doctor_id` may be the doctor's name ("Dr Hana") when only one doctor
 matches; a time without a zone ("2026-10-23T16:00") is read as Bahrain time; a `from_date` that is already over means today.

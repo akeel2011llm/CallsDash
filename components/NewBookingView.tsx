@@ -47,7 +47,7 @@ export async function NewBookingView({ base, tenant, doctorId, sp }: BookingScop
             </label>
             <label>{t("bookings.patientName")}<input name="patientName" required maxLength={120} defaultValue={sp.name ?? ""} /></label>
             <label>{t("bookings.patientPhone")}<input name="patientPhone" required maxLength={30} inputMode="tel" dir="ltr" placeholder="+973 3xxx xxxx" defaultValue={sp.phone ?? ""} /></label>
-            <label>{t("bookings.patientCpr")}<input name="patientCpr" required maxLength={12} inputMode="numeric" autoComplete="off" dir="ltr" placeholder="850123456" /></label>
+            <label>{t("bookings.patientCpr")}<input name="patientCpr" maxLength={12} inputMode="numeric" autoComplete="off" dir="ltr" placeholder="850123456" /></label>
             <small className="muted">{t("bookings.cprHelp")}</small>
             <label>{t("common.service")}<input name="service" maxLength={120} placeholder={t("bookings.servicePlaceholder")} defaultValue={sp.service ?? ""} /></label>
             <label>{t("bookings.notes")}<textarea name="notes" rows={3} maxLength={1000} /></label>

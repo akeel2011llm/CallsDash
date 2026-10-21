@@ -29,8 +29,8 @@ const TOOL_RULES = [
   "Call book_appointment with the doctor_id and starts_at exactly as check_availability returned them; never rewrite the time yourself.",
   "Only say an appointment is booked after book_appointment returns ok:true, then read back its label.",
   "When someone asks about their booking, or wants to move or cancel it, first ask for their CPR number and call find_patient_booking with it. Only talk about the bookings it returns. Use their booking_id and the same CPR number for cancel_appointment or reschedule_appointment, and confirm the change with the patient before calling the tool.",
-  "To move a booking, call check_availability first (with the new doctor's doctor_id if they want another doctor), then call reschedule_appointment with the chosen starts_at as new_starts_at, and doctor_id only when the doctor changes.",
-  "If find_patient_booking finds nothing and the booking was made before CPR numbers were asked, ask for the phone number it was made with and call find_patient_booking again with both.",
+  "To move a booking, call check_availability first with the doctor_id that find_patient_booking returned for the booking (or another doctor's doctor_id if the patient wants a different doctor), then call reschedule_appointment with the chosen starts_at as new_starts_at, and doctor_id only when the doctor changes.",
+  "If find_patient_booking finds nothing but the patient says they have a booking, ask for the phone number it was made with and call find_patient_booking again with both patient_cpr and patient_phone; give the same patient_phone to cancel_appointment or reschedule_appointment for that booking.",
   "Never say a CPR number aloud except to read back the one the patient just gave. If the patient has no CPR number (for example a visitor), use take_message so the team can book for them.",
   "If a tool returns ok:false, follow its message. Never promise a booking that a tool did not confirm.",
   "Use take_message when the patient wants staff to call back. Use handoff_to_staff when a person must take over; there is no live transfer, so say that staff will call back.",
@@ -179,7 +179,7 @@ export function toolDefinitions(appUrl: string, secret: string): Record<string, 
   });
   return {
     check_availability: tool("check_availability", "List free appointment slots. Call before offering any time.", {
-      doctor_id: str("Doctor id, if the patient asked for a specific doctor."), from_date: str("First day to look at, YYYY-MM-DD."),
+      doctor_id: str("Doctor id, if the patient asked for a specific doctor, or to move a booking with the doctor it is with."), from_date: str("First day to look at, YYYY-MM-DD."),
       days: { type: "integer", description: "How many days to look at, 1 to 30." }, language: str("en or ar, the language the slot labels should be in."),
     }, []),
     book_appointment: tool("book_appointment", "Book an appointment in a slot returned by check_availability.", {

@@ -6,6 +6,9 @@ import { sharedCalendar } from "@/lib/booking-service";
 import { elevenLabsFromEnv } from "@/lib/elevenlabs-api";
 import { sendBookingConfirmation } from "@/lib/whatsapp";
 import { asciiDigits } from "@/lib/cpr";
+import { appUrl } from "@/lib/app-url";
+import { ensureSharedTools } from "@/lib/agent-sync";
+import { badHeaderSetting } from "@/lib/header-safe";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +19,24 @@ export const dynamic = "force-dynamic";
  */
 const same = (a: string, b: string) => a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
 const str = (v: unknown) => (typeof v === "string" ? v : "");
+
+/** The tools that need the patient's CPR number. A call without the field comes from a tool definition made before CPR numbers were asked. */
+const CPR_TOOLS = new Set(["book_appointment", "find_patient_booking", "cancel_appointment", "reschedule_appointment"]);
+let toolsCheckedAt = 0;
+
+/**
+ * Updates the shared booking tools in ElevenLabs after the answer is sent, so a release that adds a field reaches every
+ * client's agent without anyone pressing Sync. At most once a minute; does nothing when the keys or address are not usable.
+ */
+async function refreshSharedTools(data: Awaited<ReturnType<typeof getData>>) {
+  const api = elevenLabsFromEnv();
+  const toolsSecret = process.env.AGENT_TOOLS_SECRET;
+  if (!api || !toolsSecret || badHeaderSetting() || Date.now() - toolsCheckedAt < 60_000) return;
+  const url = await appUrl();
+  if (!url.startsWith("https://")) return;
+  toolsCheckedAt = Date.now();
+  after(() => ensureSharedTools({ api, data, appUrl: url, toolsSecret }).catch((e) => console.error("could not update the booking tools", e)));
+}
 
 export async function POST(req: Request, ctx: { params: Promise<{ tool: string }> }) {
   const secret = process.env.AGENT_TOOLS_SECRET;
@@ -43,6 +64,15 @@ export async function POST(req: Request, ctx: { params: Promise<{ tool: string }
   if (!tenant) {
     log(undefined, { ok: false, error: "unknown_agent", message: `No client has agent "${str(body.agent_id).slice(0, 60)}". Press Sync for the client.` });
     return NextResponse.json({ error: "unknown agent" }, { status: 404 });
+  }
+  if (CPR_TOOLS.has(tool) && !("patient_cpr" in body)) {
+    await refreshSharedTools(data);
+    const res = {
+      ok: false, error: "tools_outdated",
+      message: "The booking tools are being updated and this call could not be completed. Do not try again. Apologise, and use take_message so the team can follow up on the booking.",
+    };
+    log(tenant.id, res);
+    return NextResponse.json(res);
   }
   const res = await run(tool, body, data, tenant.id);
   if (!res) return NextResponse.json({ error: "unknown tool" }, { status: 404 });
@@ -92,7 +122,9 @@ async function run(tool: string, body: Record<string, unknown>, data: Awaited<Re
         // Field names match cancel_appointment and reschedule_appointment's inputs, so the model copies booking_id and doctor_id across unchanged.
         return ok({
           bookings: bookings.map((b) => ({ booking_id: b.bookingId, doctor_id: b.doctorId, doctor: b.doctor, starts_at: b.start, label: b.label, service: b.service })),
-          ...(bookings.length ? {} : { message: "No upcoming booking was found for this CPR number. Read the number back to the patient to check it, then offer to book a new appointment or take a message." }),
+          ...(bookings.length ? {} : { message: str(body.patient_phone)
+            ? "No upcoming booking was found for this CPR number and phone number. Read the CPR number back to the patient to check it, then offer to book a new appointment or take a message."
+            : "No upcoming booking was found for this CPR number. Read the number back to the patient to check it. If they are sure they have a booking, ask for the phone number it was made with and call find_patient_booking again with both. Otherwise offer to book a new appointment or take a message." }),
         });
       }
       case "cancel_appointment":

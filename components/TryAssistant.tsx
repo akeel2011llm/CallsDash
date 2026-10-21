@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { getT, type Key } from "@/lib/i18n";
 import { appUrl } from "@/lib/app-url";
-import { agentVariables } from "@/lib/agent-context";
 import { AGENT_VERSION } from "@/lib/agent-config";
 import { getAgent, getWallet } from "@/lib/data";
 import { syncAgentAction } from "@/lib/channel-actions";
@@ -53,11 +52,11 @@ export async function TryAssistant({ tenant, admin, returnTo, sp = {} }: { tenan
           {(sp.saved === "synced" || sp.saved === "created") && <Notice tone="ok">{t("try.synced")}</Notice>}
           {syncError && <Notice tone="warn">{syncError === "failed" ? `${t("try.syncFailed")} ${el?.error ?? ""}` : t(`channels.err.${syncError}` as Key)}</Notice>}
           {(blocked || outdated) && <Notice tone="warn">{t(admin ? "try.behind.admin" : "try.behind.client")}</Notice>}
-          {paused && <Notice tone="warn">{t("try.paused")}</Notice>}
+          {paused && <Notice tone="warn">{t(admin ? "try.paused.admin" : "try.paused.client")}</Notice>}
           <AgentTry
             agentId={agentId}
             defaultLanguage={locale === "ar" ? "ar" : "en"}
-            variables={agentVariables(tenant, new Date(), { channel: "website" })}
+            openingHours={tenant.openingHours}
             suggestions={{ en: SUGGESTIONS_EN, ar: SUGGESTIONS_AR }}
             labels={{
               suggestions: t("try.suggestions"), language: t("common.language"), widgetTitle: t("try.widget"), widgetHelp: t("try.widgetHelp"), chatTitle: t("try.chat"),

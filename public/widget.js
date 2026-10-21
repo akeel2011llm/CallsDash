@@ -10,6 +10,7 @@
   var script = document.currentScript;
   if (!script || window.__callsdashWidget) return;
   window.__callsdashWidget = true;
+  // data-callsdash-widget marks what this script adds to the page, so a screen that previews it can take it away again
   var tenant = script.getAttribute("data-tenant");
   if (!tenant) return console.warn("[CallsDash] data-tenant is missing");
   var base = new URL(script.src).origin;
@@ -33,11 +34,13 @@
   }
 
   function init(cfg) {
+    // the dashboard previews the widget (data-preview); if that screen was left before the settings arrived, show nothing
+    if (script.hasAttribute("data-preview") && !script.isConnected) { window.__callsdashWidget = false; return; }
     var s = cfg.strings[lang] || cfg.strings.en;
     var rtl = lang === "ar";
     var color = cfg.color || "#0e7c86";
     var side = rtl ? "left" : "right";
-    var root = el("div", { dir: rtl ? "rtl" : "ltr", style: { position: "fixed", bottom: "20px", zIndex: 2147483000, fontFamily: "system-ui, 'Noto Sans Arabic', sans-serif" } });
+    var root = el("div", { "data-callsdash-widget": "launcher", dir: rtl ? "rtl" : "ltr", style: { position: "fixed", bottom: "20px", zIndex: 2147483000, fontFamily: "system-ui, 'Noto Sans Arabic', sans-serif" } });
     root.style[side] = "20px";
 
     var launcher = el("button", { type: "button", "aria-label": s["widget.open"], text: s["widget.open"], style: {
@@ -65,7 +68,7 @@
       if (!cfg.agentId) { show([text("Demo: the ElevenLabs agent is not connected yet.")]); return; }
       var loader = el("script", { src: "https://unpkg.com/@elevenlabs/convai-widget-embed", async: "", type: "text/javascript" });
       document.head.appendChild(loader);
-      document.body.appendChild(el("elevenlabs-convai", { "agent-id": cfg.agentId, "dynamic-variables": JSON.stringify(cfg.dynamicVariables || {}) }));
+      document.body.appendChild(el("elevenlabs-convai", { "data-callsdash-widget": "embed", "agent-id": cfg.agentId, "dynamic-variables": JSON.stringify(cfg.dynamicVariables || {}) }));
     }
 
     function consentCard() {

@@ -27,7 +27,7 @@ async function main() {
     }
     for (const v of d.agentVersions) await c.query(`insert into agent_versions (tenant_id, created_at, author, summary, settings) values ($1,$2,$3,$4,$5)`, [id(v.tenantId), v.createdAt, v.author, v.summary, v.settings]);
     for (const x of d.doctors) await c.query(`insert into doctors (id, tenant_id, name, specialty, color) values ($1,$2,$3,$4,$5)`, [id(x.id), id(x.tenantId), x.name, x.specialty, x.color]);
-    for (const b of d.bookings) await c.query(`insert into bookings (tenant_id, doctor_id, patient_name, patient_phone, service, starts_at, duration_min, status) values ($1,$2,$3,$4,$5,$6,$7,$8)`, [id(b.tenantId), id(b.doctorId), b.patientName, b.patientPhone, b.service, b.startsAt, b.durationMin, b.status]);
+    for (const b of d.bookings) await c.query(`insert into bookings (tenant_id, doctor_id, patient_name, patient_phone, patient_cpr, service, starts_at, duration_min, status) values ($1,$2,$3,$4,$5,$6,$7,$8,$9)`, [id(b.tenantId), id(b.doctorId), b.patientName, b.patientPhone, b.patientCpr ?? null, b.service, b.startsAt, b.durationMin, b.status]);
     for (const v of d.conversations) {
       await c.query(
         `insert into conversations (id, tenant_id, channel, mode, language, started_at, duration_sec, messages, outcome, sentiment, summary, transcript, credits_charged, cost_usd)

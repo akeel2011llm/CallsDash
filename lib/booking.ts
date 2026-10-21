@@ -107,6 +107,26 @@ export function createBookingService(data: Data, calendar: Calendar | null, nowF
   }
 
   /**
+   * Moves a booking's Google Calendar event from one doctor's calendar to another's. The new event is made first and the
+   * old one removed after, so a failure on either side never leaves the booking with no event at all.
+   */
+  async function moveEvent(tenantId: string, booking: Booking, from: Doctor, to: Doctor, updated: Booking, actor: string): Promise<Booking> {
+    if (!calendar) return updated;
+    try {
+      const eventId = to.googleCalendarId ? await calendar.createEvent(to.googleCalendarId, eventFor(updated)) : undefined;
+      updated = await data.updateBooking(tenantId, booking.id, { calendarEventId: eventId ?? "" }, actor);
+    } catch {
+      await data.addAlert(tenantId, "warning", `Booking for ${booking.patientName} was moved to ${to.name} but Google Calendar was not updated. Its event is still in ${from.name}'s calendar.`);
+      return updated;
+    }
+    if (from.googleCalendarId && booking.calendarEventId) {
+      try { await calendar.deleteEvent(from.googleCalendarId, booking.calendarEventId); }
+      catch { await data.addAlert(tenantId, "warning", `Booking for ${booking.patientName} was moved to ${to.name}, but its old event could not be removed from ${from.name}'s Google Calendar.`); }
+    }
+    return updated;
+  }
+
+  /**
    * Moves a live booking to a free time, and moves its Google Calendar event with it. With `target`, the booking goes
    * to that doctor at the new time, and its event moves from the old doctor's calendar to the new one's.
    */
@@ -125,15 +145,8 @@ export function createBookingService(data: Data, calendar: Calendar | null, nowF
       if (e instanceof SlotTakenError) throw new ToolError("slot_taken", "That time was just taken. Offer other slots.");
       throw e;
     }
-    if (calendar && otherDoctor) {
-      try {
-        if (doctor.googleCalendarId && booking.calendarEventId) await calendar.deleteEvent(doctor.googleCalendarId, booking.calendarEventId);
-        const eventId = target.googleCalendarId ? await calendar.createEvent(target.googleCalendarId, eventFor(updated)) : undefined;
-        updated = await data.updateBooking(tenantId, booking.id, { calendarEventId: eventId ?? "" }, actor);
-      } catch {
-        await data.addAlert(tenantId, "warning", `Booking for ${booking.patientName} was moved to ${target.name} but Google Calendar was not updated.`);
-      }
-    } else if (calendar && doctor.googleCalendarId && booking.calendarEventId) {
+    if (calendar && otherDoctor) updated = await moveEvent(tenantId, booking, doctor, target, updated, actor);
+    else if (calendar && doctor.googleCalendarId && booking.calendarEventId) {
       try { await calendar.updateEvent(doctor.googleCalendarId, booking.calendarEventId, eventFor(updated)); }
       catch { await data.addAlert(tenantId, "warning", `Booking ${booking.id} was moved but its Google Calendar event was not updated.`); }
     }
@@ -169,21 +182,23 @@ export function createBookingService(data: Data, calendar: Calendar | null, nowF
       return { slots: out.slice(0, p.limit ?? 8) };
     },
 
-    async bookAppointment(tenantId: string, p: { doctorId: string; startsAt: string; patientName: string; patientPhone: string; patientCpr: string; service?: string; conversationId?: string; notes?: string; source?: BookingSource; actor?: string }) {
+    async bookAppointment(tenantId: string, p: { doctorId: string; startsAt: string; patientName: string; patientPhone: string; patientCpr?: string; service?: string; conversationId?: string; notes?: string; source?: BookingSource; actor?: string }) {
       const { tenant, doctors } = await context(tenantId, p.doctorId);
       const doctor = doctors[0];
       if (!isActive(doctor)) throw new ToolError("doctor_unavailable", "That doctor is not taking bookings. Offer another doctor.");
       const startMs = parseStart(p.startsAt);
       if (Number.isNaN(startMs)) throw new ToolError("bad_time", "The start time must be an ISO date-time.");
       if (!p.patientName.trim() || lastDigits(p.patientPhone).length < 8) throw new ToolError("missing_details", "Ask the patient for their name and a full phone number.");
-      const cpr = normalizeCpr(p.patientCpr);
-      if (!cpr) throw new ToolError("bad_cpr", ASK_CPR);
+      // The receptionist can book a patient who has no CPR number (a visitor); the AI always asks, so a number can be found again later.
+      const cprGiven = (p.patientCpr ?? "").trim();
+      const cpr = normalizeCpr(cprGiven);
+      if (!cpr && (cprGiven || (p.source ?? "ai") === "ai")) throw new ToolError("bad_cpr", cprGiven ? "The CPR number must be 9 digits, or left empty for a visitor." : ASK_CPR);
       const free = isSlotFree({ openingHours: hoursFor(tenant, doctor), busy: await busyFor(tenant, doctor, startMs, startMs + SLOT_MIN * 60_000), startMs, durationMin: SLOT_MIN, nowMs: nowFn().getTime() });
       if (!free) throw new ToolError("slot_taken", "That time is no longer available. Offer other slots.");
       let booking: Booking;
       try {
         booking = await data.createBooking(tenantId, {
-          doctorId: doctor.id, patientName: p.patientName.trim().slice(0, 120), patientPhone: p.patientPhone.trim().slice(0, 30), patientCpr: cpr,
+          doctorId: doctor.id, patientName: p.patientName.trim().slice(0, 120), patientPhone: p.patientPhone.trim().slice(0, 30), patientCpr: cpr ?? undefined,
           service: (p.service ?? "Consultation").slice(0, 120), startsAt: new Date(startMs).toISOString(), durationMin: SLOT_MIN, status: "confirmed", conversationId: p.conversationId,
           notes: p.notes?.trim().slice(0, 1000) || undefined, source: p.source ?? "ai",
         }, p.actor ?? "agent");
@@ -364,16 +379,10 @@ export function createBookingService(data: Data, calendar: Calendar | null, nowF
         throw e;
       }
       if (calendar && live(updated)) {
-        try {
-          if (target.id !== doctor.id) {
-            if (doctor.googleCalendarId && booking.calendarEventId) await calendar.deleteEvent(doctor.googleCalendarId, booking.calendarEventId);
-            const eventId = target.googleCalendarId ? await calendar.createEvent(target.googleCalendarId, eventFor(updated)) : undefined;
-            updated = await data.updateBooking(tenantId, booking.id, { calendarEventId: eventId ?? "" }, actor);
-          } else if (doctor.googleCalendarId && updated.calendarEventId) {
-            await calendar.updateEvent(doctor.googleCalendarId, updated.calendarEventId, eventFor(updated));
-          }
-        } catch {
-          await data.addAlert(tenantId, "warning", `Booking for ${updated.patientName} was changed but Google Calendar was not updated.`);
+        if (target.id !== doctor.id) updated = await moveEvent(tenantId, booking, doctor, target, updated, actor);
+        else if (doctor.googleCalendarId && updated.calendarEventId) {
+          try { await calendar.updateEvent(doctor.googleCalendarId, updated.calendarEventId, eventFor(updated)); }
+          catch { await data.addAlert(tenantId, "warning", `Booking for ${updated.patientName} was changed but Google Calendar was not updated.`); }
         }
       }
       return updated;
@@ -412,7 +421,7 @@ export function createBookingService(data: Data, calendar: Calendar | null, nowF
     const booking = (await data.getBookings(tenantId)).find((b) => b.id === bookingId);
     const doctor = booking && (await data.getDoctors(tenantId)).find((d) => d.id === booking.doctorId);
     if (!booking || !doctor || !live(booking) || !belongsTo(booking, cpr, lastDigits(phone)))
-      throw new ToolError("not_found", "No active booking matches that booking and CPR number. Call find_patient_booking with the patient's CPR number.");
+      throw new ToolError("not_found", "No active booking matches that booking and CPR number. Call find_patient_booking with the patient's CPR number (and patient_phone for a booking made before CPR numbers were asked).");
     return { booking, doctor };
   }
 }
