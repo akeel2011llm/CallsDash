@@ -140,9 +140,13 @@ export function createBookingService(data: Data, calendar: Calendar | null, nowF
       const days = Math.min(HORIZON_DAYS, Math.max(1, p.days ?? 7));
       const to = from + days * 86_400_000;
       const out: { doctorId: string; doctor: string; start: string; label: string }[] = [];
-      for (const d of doctors) {
+      // Every doctor's Google Calendar is read at the same time: one after another, a slow Google could pass ElevenLabs' 20 second wait.
+      const perDoctor = await Promise.all(doctors.map(async (d) => ({
+        d, busy: await busyFor(tenant, d, from, to),
+      })));
+      for (const { d, busy } of perDoctor) {
         const slots = computeSlots({
-          openingHours: hoursFor(tenant, d), busy: await busyFor(tenant, d, from, to), fromMs: from, toMs: to,
+          openingHours: hoursFor(tenant, d), busy, fromMs: from, toMs: to,
           durationMin: SLOT_MIN, nowMs: now.getTime(), limit: p.limit ?? 6,
         });
         for (const s of slots) out.push({ doctorId: d.id, doctor: d.name, start: s, label: describeSlot(s, p.locale ?? "en") });

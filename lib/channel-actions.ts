@@ -71,8 +71,11 @@ export async function testBookingToolsAction(f: FormData) {
       else if (res.status === 401 || res.status === 403) q = "tools=protected";
       else if (res.status === 404 && body?.error === "unknown agent") q = "tools=agent";
       else q = `tools=http&code=${res.status}`;
-    } catch {
-      q = "tools=unreachable";
+    } catch (e) {
+      // Say why, with the address tried: a typo in NEXT_PUBLIC_SITE_URL (no such host), a slow answer (timeout) and a refused connection each have a different fix.
+      const cause = (e as { cause?: { code?: string; message?: string } })?.cause;
+      const why = e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError") ? "timeout" : (cause?.code ?? cause?.message ?? (e instanceof Error ? e.message : "error"));
+      q = `tools=unreachable&why=${encodeURIComponent(String(why).slice(0, 80))}&at=${encodeURIComponent(base.slice(0, 120))}`;
     }
   }
   const back = safePath(f.get("returnTo"), `/admin/test?c=${id}`);
