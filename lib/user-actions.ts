@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
-import { getSession } from "./auth";
+import { getSession, homeFor } from "./auth";
 import { authAdmin } from "./auth-admin-supabase";
 import * as store from "./data";
 import { safePath } from "./format";
@@ -29,6 +29,7 @@ async function context(): Promise<{ deps: UserDeps; actor: UserActor }> {
   if (!s || s.mustChangePassword) throw new UserError("forbidden");
   let actor: UserActor;
   if (s.role === "admin") actor = { role: "admin", label: "admin", userId: s.userId };
+  else if (s.role === "doctor") throw new UserError("forbidden");
   else if (s.staffRole !== "receptionist") actor = { role: "manager", tenantId: s.tenantId, label: `staff:${s.tenantId}`, userId: s.userId };
   else throw new UserError("forbidden");
   const auth = authAdmin();
@@ -47,7 +48,7 @@ export async function createUserAction(_prev: UserActionState, f: FormData): Pro
   try {
     const { deps, actor } = await context();
     const role = str(f, "role") as Role;
-    const r = await users.createUser(deps, actor, { email: str(f, "email"), fullName: str(f, "fullName"), role, tenantId: str(f, "tenantId") || null, password: String(f.get("password") ?? "").trim() || undefined });
+    const r = await users.createUser(deps, actor, { email: str(f, "email"), fullName: str(f, "fullName"), role, tenantId: str(f, "tenantId") || null, doctorId: str(f, "doctorId") || null, password: String(f.get("password") ?? "").trim() || undefined });
     refresh();
     const t = r.profile.tenantId ? await store.getTenant(r.profile.tenantId) : undefined;
     return { credentials: { email: r.profile.email, fullName: r.profile.fullName, password: r.password, generated: r.generated, kind: "created", clientName: t?.name, loginPath: t ? `/login?c=${t.slug}` : "/login" } };
@@ -105,8 +106,8 @@ export async function changeOwnPasswordAction(_prev: PasswordState, f: FormData)
   if (problem) return { error: problem };
   const { error } = await (await supabaseServer()).auth.updateUser({ password: pw });
   if (error) return { error: "failed" };
-  await store.patchProfile(s.userId, { mustChangePassword: false }, s.role === "admin" ? "admin" : `staff:${s.role === "client" ? s.tenantId : ""}`, "Password changed");
-  redirect(s.role === "admin" ? "/admin" : "/app");
+  await store.patchProfile(s.userId, { mustChangePassword: false }, s.role === "admin" ? "admin" : `staff:${s.tenantId}`, "Password changed");
+  redirect(homeFor(s));
 }
 
 /** Sends the reset email. Always answers the same way, so nobody can use this form to find out which addresses have accounts. */

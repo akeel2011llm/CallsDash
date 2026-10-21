@@ -5,3 +5,7 @@ alter table bookings add column if not exists source text not null default 'ai';
 alter table bookings drop constraint if exists bookings_status_check;
 alter table bookings drop constraint if exists bookings_status_v2;
 alter table bookings add constraint bookings_status_v2 check (status in ('confirmed', 'rescheduled', 'completed', 'cancelled', 'no_show'));
+
+-- Doctor portal: a sign-in for a doctor, tied to one of the clinic's doctors.
+alter type user_role add value if not exists 'doctor';
+alter table profiles add column if not exists doctor_id uuid references doctors on delete set null;

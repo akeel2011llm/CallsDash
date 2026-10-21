@@ -1,10 +1,10 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { demoMode, getSession } from "@/lib/auth";
+import { demoMode, getSession, homeFor } from "@/lib/auth";
 import { login, loginWithPassword } from "@/lib/actions";
 import { supabaseConfigured } from "@/lib/supabase";
 import { getT } from "@/lib/i18n";
-import { listTenants } from "@/lib/data";
+import { getDoctors, listTenants } from "@/lib/data";
 import { publicBranding } from "@/lib/brand-image";
 import { patternOf, themeVars } from "@/lib/theme";
 import { LocaleSwitch } from "@/components/LocaleSwitch";
@@ -19,10 +19,11 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   const { error, c } = await searchParams;
   // one address for everyone: people who are already signed in go straight to their own portal
   const session = await getSession();
-  if (session) redirect(session.role === "admin" ? "/admin" : "/app");
+  if (session) redirect(homeFor(session));
   const { t, locale } = await getT();
   const demo = demoMode();
   const tenants = demo || c ? await listTenants() : [];
+  const demoDoctors = demo ? (await Promise.all(tenants.map(async (x) => (await getDoctors(x.id)).slice(0, 1).map((d) => ({ tenant: x, doctor: d }))))).flat() : [];
   // a client's own sign-in page: /login?c=<slug>
   const tenant = c ? tenants.find((x) => x.slug === c) : undefined;
   const brand = tenant ? publicBranding(tenant) : undefined;
@@ -62,6 +63,11 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
                 {tenants.filter((x) => !brand || x.slug === c).map((x) => (
                   <SubmitButton key={x.id} className="btn ghost" name="who" value={`client:${x.id}`}>
                     {t("login.client")} {locale === "ar" ? x.branding.displayNameAr : x.branding.displayName}
+                  </SubmitButton>
+                ))}
+                {demoDoctors.filter((x) => !brand || x.tenant.slug === c).map((x) => (
+                  <SubmitButton key={x.doctor.id} className="btn ghost" name="who" value={`doctor:${x.tenant.id}:${x.doctor.id}`}>
+                    {t("login.doctor")} {x.doctor.name}
                   </SubmitButton>
                 ))}
               </form>

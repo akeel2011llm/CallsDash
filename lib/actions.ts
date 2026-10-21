@@ -3,7 +3,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { demoMode, requireAdmin, requireClient } from "./auth";
+import { demoMode, requireAdmin, requireBookingUser, requireClient } from "./auth";
 import { safePath } from "./format";
 import { supabaseConfigured, supabaseServer } from "./supabase";
 import * as store from "./data";
@@ -45,6 +45,13 @@ export async function login(f: FormData) {
   if (who.startsWith("client:") && await store.getTenant(who.slice(7))) {
     jar.set("cd_session", who, cookieOpts);
     redirect("/app");
+  }
+  if (who.startsWith("doctor:")) {
+    const [, tenantId, doctorId] = who.split(":");
+    if (tenantId && doctorId && (await store.getDoctors(tenantId)).some((d) => d.id === doctorId)) {
+      jar.set("cd_session", who, cookieOpts);
+      redirect("/doctor");
+    }
   }
   redirect("/login");
 }
@@ -144,44 +151,46 @@ async function attempt(fn: () => Promise<unknown>): Promise<string | null> {
   catch (e) { if (e instanceof ToolError) return e.code; throw e; }
 }
 
+// The booking actions serve the receptionist's screens and the doctor portal. A doctor's calls are limited to their own bookings.
 export async function setBookingStatusAction(f: FormData) {
-  const { tenant, actor } = await requireClient();
+  const { tenant, actor, doctorId, base } = await requireBookingUser();
   const status = str(f, "status") as BookingStatus;
-  const err = await attempt(async () => (await bookingService()).staffSetStatus(tenant.id, str(f, "id"), status, actor));
-  revalidatePath("/app", "layout");
-  back(f, "/app/bookings", err ? `err=${err}` : "saved=1");
+  const err = await attempt(async () => (await bookingService()).staffSetStatus(tenant.id, str(f, "id"), status, actor, doctorId));
+  revalidatePath(base, "layout");
+  back(f, `${base}/bookings`, err ? `err=${err}` : "saved=1");
 }
 
 export async function createBookingAction(f: FormData) {
-  const { tenant, actor } = await requireClient();
+  const { tenant, actor, doctorId, base } = await requireBookingUser();
   const svc = await bookingService();
+  const chosen = doctorId ?? str(f, "doctorId");
   let created: { bookingId: string } | undefined;
   const err = await attempt(async () => {
     created = await svc.bookAppointment(tenant.id, {
-      doctorId: str(f, "doctorId"), startsAt: str(f, "startsAt"), patientName: str(f, "patientName"), patientPhone: str(f, "patientPhone"),
-      service: str(f, "service") || undefined, notes: str(f, "notes") || undefined, source: "staff", actor,
+      doctorId: chosen, startsAt: str(f, "startsAt"), patientName: str(f, "patientName"), patientPhone: str(f, "patientPhone"),
+      service: str(f, "service") || undefined, notes: str(f, "notes") || undefined, source: doctorId ? "doctor" : "staff", actor,
     });
   });
-  revalidatePath("/app", "layout");
-  if (created) redirect(`/app/bookings/${created.bookingId}?created=1`);
-  const keep = new URLSearchParams({ doctor: str(f, "doctorId"), date: str(f, "date"), err: err ?? "unknown", name: str(f, "patientName"), phone: str(f, "patientPhone"), service: str(f, "service") });
-  redirect(`/app/bookings/new?${keep}`);
+  revalidatePath(base, "layout");
+  if (created) redirect(`${base}/bookings/${created.bookingId}?created=1`);
+  const keep = new URLSearchParams({ doctor: chosen, date: str(f, "date"), err: err ?? "unknown", name: str(f, "patientName"), phone: str(f, "patientPhone"), service: str(f, "service") });
+  redirect(`${base}/bookings/new?${keep}`);
 }
 
 export async function rescheduleBookingAction(f: FormData) {
-  const { tenant, actor } = await requireClient();
+  const { tenant, actor, doctorId, base } = await requireBookingUser();
   const id = str(f, "id");
-  const err = await attempt(async () => (await bookingService()).staffReschedule(tenant.id, id, str(f, "startsAt"), actor));
-  revalidatePath("/app", "layout");
-  redirect(`/app/bookings/${id}?${err ? `err=${err}` : "moved=1"}`);
+  const err = await attempt(async () => (await bookingService()).staffReschedule(tenant.id, id, str(f, "startsAt"), actor, doctorId));
+  revalidatePath(base, "layout");
+  redirect(`${base}/bookings/${id}?${err ? `err=${err}` : "moved=1"}`);
 }
 
 export async function saveBookingNotesAction(f: FormData) {
-  const { tenant, actor } = await requireClient();
+  const { tenant, actor, doctorId, base } = await requireBookingUser();
   const id = str(f, "id");
-  const err = await attempt(async () => (await bookingService()).staffSetNotes(tenant.id, id, String(f.get("notes") ?? ""), actor));
-  revalidatePath("/app", "layout");
-  redirect(`/app/bookings/${id}?${err ? `err=${err}` : "saved=1"}`);
+  const err = await attempt(async () => (await bookingService()).staffSetNotes(tenant.id, id, String(f.get("notes") ?? ""), actor, doctorId));
+  revalidatePath(base, "layout");
+  redirect(`${base}/bookings/${id}?${err ? `err=${err}` : "saved=1"}`);
 }
 
 export async function requestTopUpAction(f: FormData) {

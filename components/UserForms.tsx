@@ -7,7 +7,7 @@ import { Notice } from "./ui";
 
 export interface UserFormText {
   new: string; fullName: string; email: string; role: string; client: string; password: string; passwordHelp: string; create: string;
-  roleAdmin: string; roleManager: string; roleReceptionist: string;
+  roleAdmin: string; roleManager: string; roleReceptionist: string; roleDoctor: string; doctor: string; doctorHelp: string;
   credCreated: string; credReset: string; credNote: string; credEmail: string; credPassword: string; credSignIn: string; credCopy: string; credCopied: string; credWhatsapp: string; credMessage: string;
   reset: string;
   errors: Record<string, string>;
@@ -41,12 +41,15 @@ export function CredentialsCard({ c, text }: { c: NonNullable<UserActionState["c
 const initial: UserActionState = {};
 
 /** Create a person. `tenants` is given for admins (who pick the client); a client manager's form has no client or role choice. */
-export function CreateUserForm({ text, tenants, fixedTenantId, roles }: {
-  text: UserFormText; tenants?: { id: string; name: string }[]; fixedTenantId?: string; roles: ("admin" | "manager" | "receptionist")[];
+export function CreateUserForm({ text, tenants, fixedTenantId, roles, doctors = [] }: {
+  text: UserFormText; tenants?: { id: string; name: string }[]; fixedTenantId?: string; roles: ("admin" | "manager" | "receptionist" | "doctor")[];
+  /** The doctors a doctor sign-in can belong to. */
+  doctors?: { id: string; tenantId: string; name: string }[];
 }) {
   const [state, action] = useActionState(createUserAction, initial);
   const [role, setRole] = useState(roles[0]);
-  const label = { admin: text.roleAdmin, manager: text.roleManager, receptionist: text.roleReceptionist };
+  const [tenantId, setTenantId] = useState(fixedTenantId ?? tenants?.[0]?.id ?? doctors[0]?.tenantId ?? "");
+  const label = { admin: text.roleAdmin, manager: text.roleManager, receptionist: text.roleReceptionist, doctor: text.roleDoctor };
   return (
     <form action={action} className="card stack" style={{ maxWidth: 640 }}>
       <h2>{text.new}</h2>
@@ -66,7 +69,13 @@ export function CreateUserForm({ text, tenants, fixedTenantId, roles }: {
         {fixedTenantId && <input type="hidden" name="tenantId" value={fixedTenantId} />}
         {tenants && !fixedTenantId && role !== "admin" && (
           <label>{text.client}
-            <select name="tenantId" required>{tenants.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select>
+            <select name="tenantId" required value={tenantId} onChange={(e) => setTenantId(e.target.value)}>{tenants.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select>
+          </label>
+        )}
+        {role === "doctor" && (
+          <label>{text.doctor}
+            <select name="doctorId" required>{doctors.filter((d) => d.tenantId === tenantId).map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}</select>
+            <small className="muted">{text.doctorHelp}</small>
           </label>
         )}
         <label>{text.password}<input name="password" type="text" autoComplete="off" dir="ltr" placeholder="•••• •••• ••••" /><small className="muted">{text.passwordHelp}</small></label>

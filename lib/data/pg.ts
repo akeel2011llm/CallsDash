@@ -47,7 +47,7 @@ const packageOf = (r: Row): CatalogPackage => ({
   monthlyPriceBhd: num(r.monthly_price_bhd), pricePerCreditBhd: num(r.price_per_credit_bhd), rolloverCap: num(r.rollover_cap), archived: r.archived,
 });
 const profileOf = (r: Row): Profile => ({
-  id: r.id, tenantId: r.tenant_id ?? null, role: r.role, fullName: r.full_name ?? "", email: r.email ?? "",
+  id: r.id, tenantId: r.tenant_id ?? null, role: r.role, doctorId: r.doctor_id ?? null, fullName: r.full_name ?? "", email: r.email ?? "",
   disabled: Boolean(r.disabled), mustChangePassword: Boolean(r.must_change_password), createdAt: iso(r.created_at),
 });
 const sessionOf = (r: Row): ChatSession => ({ tenantId: r.tenant_id, channel: r.channel, externalId: r.external_id, conversationId: r.conversation_id, lastAt: iso(r.last_at) });
@@ -69,6 +69,8 @@ const ledgerOf = (r: Row): LedgerEntry => ({
 
 export const SCHEMA_ADDITIONS = [
   `alter table credit_batches add column if not exists plan_id text`,
+  `alter type user_role add value if not exists 'doctor'`,
+  `alter table profiles add column if not exists doctor_id uuid references doctors on delete set null`,
   `alter table bookings add column if not exists notes text`,
   `alter table bookings add column if not exists source text not null default 'ai'`,
   // "completed" is a new status; the original check only knew the first four
@@ -228,9 +230,9 @@ export function createPgData(db: Db): Data {
       if (dup[0]) throw new DuplicateError("email");
       const existed = (await run<Row>(`select 1 from profiles where id = $1`, [p.id])).length > 0;
       await run(
-        `insert into profiles (id, tenant_id, role, full_name, email, disabled, must_change_password) values ($1,$2,$3,$4,$5,$6,$7)
-         on conflict (id) do update set tenant_id = $2, role = $3, full_name = $4, email = $5, disabled = $6, must_change_password = $7`,
-        [p.id, p.tenantId, p.role, p.fullName, p.email, p.disabled, p.mustChangePassword]);
+        `insert into profiles (id, tenant_id, role, full_name, email, disabled, must_change_password, doctor_id) values ($1,$2,$3,$4,$5,$6,$7,$8)
+         on conflict (id) do update set tenant_id = $2, role = $3, full_name = $4, email = $5, disabled = $6, must_change_password = $7, doctor_id = $8`,
+        [p.id, p.tenantId, p.role, p.fullName, p.email, p.disabled, p.mustChangePassword, p.doctorId ?? null]);
       await audit(run, actor, `User ${existed ? "updated" : "created"}: ${p.email} (${p.role})`, p.tenantId ?? undefined);
     }),
     patchProfile: async (userId, patch, actor, note) => tx(async (run) => {

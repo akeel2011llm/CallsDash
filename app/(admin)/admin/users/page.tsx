@@ -13,6 +13,7 @@ export default async function Users({ searchParams }: { searchParams: Promise<{ 
   const { session } = await requireAdmin();
   const { c, saved, error } = await searchParams;
   const [{ t, locale }, tenants, audit] = await Promise.all([getT(), store.listTenants(), store.getAudit()]);
+  const doctors = (await Promise.all(tenants.map((x) => store.getDoctors(x.id)))).flat();
   const auth = authAdmin();
   const filter = c && tenants.some((x) => x.id === c) ? c : undefined;
   const people = auth ? await listUsers({ auth, data: store }, filter) : (await store.listProfiles(filter)).map((p) => ({ ...p, lastSignIn: undefined }));
@@ -26,7 +27,7 @@ export default async function Users({ searchParams }: { searchParams: Promise<{ 
       {!auth && <Notice tone="warn">{t("users.err.not_configured")}</Notice>}
       {saved && <Notice tone="ok">{t("users.saved")}</Notice>}
       {error && <Notice tone="warn">{t(`users.err.${error}` as "users.err.forbidden") ?? error}</Notice>}
-      {auth && <CreateUserForm text={userFormText(t)} tenants={tenants.map((x) => ({ id: x.id, name: names.get(x.id)! }))} roles={["manager", "receptionist", "admin"]} />}
+      {auth && <CreateUserForm text={userFormText(t)} tenants={tenants.map((x) => ({ id: x.id, name: names.get(x.id)! }))} roles={["manager", "receptionist", "doctor", "admin"]} doctors={doctors} />}
       <form className="row" method="get">
         <label className="inline">{t("users.client")}
           <select name="c" defaultValue={filter ?? ""} style={{ inlineSize: "auto" }}>

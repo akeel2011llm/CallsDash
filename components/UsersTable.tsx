@@ -49,7 +49,7 @@ export function UsersTable({ users, tenantNames, viewer, returnTo, t, locale }: 
                           <input type="hidden" name="userId" value={u.id} /><input type="hidden" name="disabled" value={u.disabled ? "0" : "1"} />{returnField}
                           <SubmitButton className="btn small ghost" type="submit">{u.disabled ? t("users.enable") : t("users.disable")}</SubmitButton>
                         </form>
-                        {viewer.role === "admin" && u.role !== "admin" && (
+                        {viewer.role === "admin" && u.role !== "admin" && u.role !== "doctor" && (
                           <form action={changeUserRoleAction} className="row" style={{ flexWrap: "nowrap" }}>
                             <input type="hidden" name="userId" value={u.id} />{returnField}
                             <select name="role" defaultValue={u.role} aria-label={t("users.setRole")} style={{ inlineSize: "auto", paddingBlock: ".28rem" }}>

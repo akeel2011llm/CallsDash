@@ -126,7 +126,7 @@ export default async function Setup({ params, searchParams }: { params: Promise<
           )}
           <small><Link href={`/admin/users?c=${id}`}>{t("users.title")}</Link></small>
         </div>
-        {auth ? <CreateUserForm text={userFormText(t)} fixedTenantId={id} roles={["manager", "receptionist"]} /> : <Notice tone="warn">{t("users.err.not_configured")}</Notice>}
+        {auth ? <CreateUserForm text={userFormText(t)} fixedTenantId={id} roles={["manager", "receptionist", "doctor"]} doctors={await store.getDoctors(id)} /> : <Notice tone="warn">{t("users.err.not_configured")}</Notice>}
       </section>
     </>
   );

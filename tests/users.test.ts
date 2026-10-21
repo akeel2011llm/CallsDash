@@ -169,4 +169,23 @@ describe("user management", () => {
     await setDisabled(deps, admin, u.profile.id, true);
     expect((await data.getProfile(u.profile.id))?.disabled).toBe(true); // lib/auth.ts getSession returns null for this
   });
+  it("creates a doctor sign-in tied to one doctor of the client, and a manager may do it for their own client", async () => {
+    const { deps, admin, a, b, data, pg } = await setup();
+    const docA = (await data.addDoctor(a.id, { name: "Dr. A", specialty: "" }, "admin")).id;
+    const docB = (await data.addDoctor(b.id, { name: "Dr. B", specialty: "" }, "admin")).id;
+    const r = await createUser(deps, admin, { email: "dr.a@a.bh", fullName: "Dr A", role: "doctor", tenantId: a.id, doctorId: docA });
+    expect(await data.getProfile(r.profile.id)).toMatchObject({ role: "doctor", tenantId: a.id, doctorId: docA });
+    await fails(createUser(deps, admin, { email: "x@a.bh", fullName: "X", role: "doctor", tenantId: a.id }), "doctor_missing");
+    await fails(createUser(deps, admin, { email: "x@a.bh", fullName: "X", role: "doctor", tenantId: a.id, doctorId: docB }), "doctor_missing"); // another client's doctor
+    await fails(createUser(deps, admin, { email: "y@a.bh", fullName: "Y", role: "doctor", tenantId: a.id, doctorId: docA }), "doctor_taken");
+    const manager: UserActor = { role: "manager", tenantId: a.id, label: "staff" };
+    const docA2 = (await data.addDoctor(a.id, { name: "Dr. A2", specialty: "" }, "admin")).id;
+    const m = await createUser(deps, manager, { email: "dr.a2@a.bh", fullName: "Dr A2", role: "doctor", doctorId: docA2 });
+    expect(m.profile.tenantId).toBe(a.id);
+    expect(canManage(manager, m.profile)).toBe(true);
+    await fails(changeRole(deps, admin, m.profile.id, "manager"), "role_invalid");
+    // removing the doctor leaves the sign-in without a doctor, which the session check refuses
+    await pg.query(`delete from doctors where id = $1`, [docA2]);
+    expect((await data.getProfile(m.profile.id))?.doctorId).toBeNull();
+  });
 });

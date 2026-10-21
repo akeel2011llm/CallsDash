@@ -224,7 +224,7 @@ export interface SiteScan {
   text: string;
 }
 
-export type Role = "admin" | "manager" | "receptionist";
+export type Role = "admin" | "manager" | "receptionist" | "doctor";
 
 /** A person who can sign in. The password itself lives only in Supabase Auth. */
 export interface Profile {
@@ -232,6 +232,8 @@ export interface Profile {
   /** Null for admins. */
   tenantId: string | null;
   role: Role;
+  /** For a doctor: which of the clinic's doctors this sign-in belongs to. */
+  doctorId?: string | null;
   fullName: string;
   email: string;
   /** A disabled person is refused at the next request even if their sign-in session is still valid. */
@@ -356,4 +358,5 @@ export interface Voice {
 
 export type Session =
   | { role: "admin"; viewAsTenantId?: string; userId?: string; mustChangePassword?: boolean }
-  | { role: "client"; tenantId: string; userId?: string; staffRole?: "manager" | "receptionist"; mustChangePassword?: boolean };
+  | { role: "client"; tenantId: string; userId?: string; staffRole?: "manager" | "receptionist"; mustChangePassword?: boolean }
+  | { role: "doctor"; tenantId: string; doctorId: string; userId?: string; mustChangePassword?: boolean };
