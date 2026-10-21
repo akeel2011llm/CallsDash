@@ -366,6 +366,23 @@ export async function adminSetCalendarAction(f: FormData) {
   back(f, `/admin/clients/${id}`);
 }
 
+export async function adminAddDoctorAction(f: FormData) {
+  const { actor } = await requireAdmin();
+  const id = str(f, "tenantId");
+  const name = str(f, "name").trim().slice(0, 120);
+  if (name) await store.addDoctor(id, { name, specialty: str(f, "specialty").trim().slice(0, 120) }, actor);
+  revalidatePath("/admin", "layout");
+  redirect(`/admin/clients/${id}#doctors`);
+}
+
+export async function adminRemoveDoctorAction(f: FormData) {
+  const { actor } = await requireAdmin();
+  const id = str(f, "tenantId");
+  await store.removeDoctor(id, str(f, "doctorId"), actor);
+  revalidatePath("/admin", "layout");
+  redirect(`/admin/clients/${id}#doctors`);
+}
+
 export async function adminTestCalendarAction(f: FormData) {
   await requireAdmin();
   const id = str(f, "tenantId");

@@ -176,4 +176,19 @@ describe("pg data layer", () => {
     await data.setAlertRules(t.id, { ...t.alertRules, lead: { enabled: false, keywords: [], notifyStaff: false } }, "staff");
     expect((await data.getTenant(t.id))!.alertRules.lead.enabled).toBe(false);
   });
+
+  it("adds and removes doctors, keeping the calendar-connected flag right", async () => {
+    const { data } = await setup();
+    const t = await data.createTenant({ name: "Docs", nameAr: "", color: "#112233", domain: "", planType: "package", actor: "admin" });
+    const a = await data.addDoctor(t.id, { name: "Dr. A", specialty: "GP" }, "admin");
+    const b = await data.addDoctor(t.id, { name: "Dr. B", specialty: "" }, "admin");
+    expect(a.color).not.toBe(b.color);
+    expect((await data.getDoctors(t.id)).map((d) => d.name)).toEqual(["Dr. A", "Dr. B"]);
+    await data.setDoctorCalendar(t.id, a.id, "a@group.calendar.google.com", "admin");
+    expect((await data.getTenant(t.id))?.calendarConnected).toBe(true);
+    await data.removeDoctor(t.id, a.id, "admin");
+    expect((await data.getTenant(t.id))?.calendarConnected).toBe(false);
+    expect((await data.getDoctors(t.id)).map((d) => d.name)).toEqual(["Dr. B"]);
+    await expect(data.removeDoctor(t.id, a.id, "admin")).rejects.toThrow("doctor not found");
+  });
 });

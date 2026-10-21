@@ -8,7 +8,7 @@ import { DEFAULT_OPENING_HOURS } from "./availability";
 import { seed, type DB, ELEVENLABS_USD_PER_MIN, ELEVENLABS_USD_PER_MSG } from "./seed";
 import type {
   NewConversation,
-  AgentSettings, Booking, BookingStatus, Channel, Conversation, ChatSession, Locale, Permissions, Profile, StaffRequest, Tenant, TenantSecrets,
+  AgentSettings, Booking, BookingStatus, Channel, Conversation, ChatSession, Doctor, Locale, Permissions, Profile, StaffRequest, Tenant, TenantSecrets,
 } from "./types";
 
 /**
@@ -330,6 +330,24 @@ export function setDoctorCalendar(tenantId: string, doctorId: string, calendarId
   doc.googleCalendarId = calendarId || undefined;
   getTenant(tenantId)!.calendarConnected = db().doctors.some((x) => x.tenantId === tenantId && x.googleCalendarId);
   audit(actor, `Calendar for ${doc.name} ${calendarId ? "linked" : "unlinked"}`, tenantId);
+}
+
+const DOCTOR_COLOURS = ["#0e7c86", "#d97706", "#be185d", "#7c3aed", "#c2410c", "#2563eb", "#15803d"];
+
+export function addDoctor(tenantId: string, input: { name: string; specialty: string }, actor: string): Doctor {
+  const doctors = db().doctors.filter((x) => x.tenantId === tenantId);
+  const doc: Doctor = { id: id("d"), tenantId, name: input.name, specialty: input.specialty, color: DOCTOR_COLOURS[doctors.length % DOCTOR_COLOURS.length] };
+  db().doctors.push(doc);
+  audit(actor, `Doctor added: ${doc.name}`, tenantId);
+  return doc;
+}
+
+export function removeDoctor(tenantId: string, doctorId: string, actor: string) {
+  const i = db().doctors.findIndex((x) => x.tenantId === tenantId && x.id === doctorId);
+  if (i < 0) throw new Error("doctor not found");
+  const [doc] = db().doctors.splice(i, 1);
+  getTenant(tenantId)!.calendarConnected = db().doctors.some((x) => x.tenantId === tenantId && x.googleCalendarId);
+  audit(actor, `Doctor removed: ${doc.name}`, tenantId);
 }
 
 export function setPermissions(tenantId: string, p: Permissions, actor: string) {

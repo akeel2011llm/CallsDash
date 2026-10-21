@@ -546,6 +546,21 @@ export function createPgData(db: Db): Data {
 
     addAlert: async (tenantId, severity, message) => { await q(`insert into alerts (tenant_id, severity, message) values ($1,$2,$3)`, [tenantId, severity, message]); },
 
+    addDoctor: async (tenantId, input, actor) => tx(async (run) => {
+      const colours = ["#0e7c86", "#d97706", "#be185d", "#7c3aed", "#c2410c", "#2563eb", "#15803d"];
+      const n = Number((await run<Row>(`select count(*)::int as n from doctors where tenant_id = $1`, [tenantId]))[0].n);
+      const r = await run<Row>(`insert into doctors (tenant_id, name, specialty, color) values ($1,$2,$3,$4) returning *`, [tenantId, input.name, input.specialty, colours[n % colours.length]]);
+      await audit(run, actor, `Doctor added: ${input.name}`, tenantId);
+      return { id: r[0].id, tenantId, name: r[0].name, specialty: r[0].specialty ?? "", color: r[0].color, googleCalendarId: r[0].google_calendar_id ?? undefined } as Doctor;
+    }),
+
+    removeDoctor: async (tenantId, doctorId, actor) => tx(async (run) => {
+      const r = await run<Row>(`delete from doctors where tenant_id = $1 and id = $2 returning name`, [tenantId, doctorId]);
+      if (!r[0]) throw new Error("doctor not found");
+      await run(`update tenants set calendar_connected = exists (select 1 from doctors where tenant_id = $1 and google_calendar_id is not null) where id = $1`, [tenantId]);
+      await audit(run, actor, `Doctor removed: ${r[0].name}`, tenantId);
+    }),
+
     setDoctorCalendar: async (tenantId, doctorId, calendarId, actor) => tx(async (run) => {
       const r = await run<Row>(`update doctors set google_calendar_id = $3 where tenant_id = $1 and id = $2 returning name`, [tenantId, doctorId, calendarId || null]);
       if (!r[0]) throw new Error("doctor not found");
