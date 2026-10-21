@@ -8,11 +8,21 @@ import { createSign } from "node:crypto";
 export interface Calendar {
   busy(calendarId: string, fromIso: string, toIso: string): Promise<{ start: string; end: string }[]>;
   createEvent(calendarId: string, e: EventInput): Promise<string>;
-  moveEvent(calendarId: string, eventId: string, startIso: string, endIso: string): Promise<void>;
+  updateEvent(calendarId: string, eventId: string, e: EventInput): Promise<void>;
   deleteEvent(calendarId: string, eventId: string): Promise<void>;
 }
 
-export interface EventInput { summary: string; description?: string; startIso: string; endIso: string }
+export interface Reminder { method: "popup" | "email"; minutes: number }
+export interface EventInput { summary: string; description?: string; startIso: string; endIso: string; reminders?: Reminder[] }
+
+/** A day before by email, then pop-ups an hour and 15 minutes before: reaches whoever owns the doctor's calendar. */
+export const DEFAULT_REMINDERS: Reminder[] = [{ method: "email", minutes: 1440 }, { method: "popup", minutes: 60 }, { method: "popup", minutes: 15 }];
+
+const eventBody = (e: EventInput) => ({
+  summary: e.summary, description: e.description,
+  start: { dateTime: e.startIso }, end: { dateTime: e.endIso },
+  reminders: { useDefault: false, overrides: e.reminders ?? DEFAULT_REMINDERS },
+});
 
 type Fetch = typeof fetch;
 const API = "https://www.googleapis.com/calendar/v3";
@@ -64,14 +74,11 @@ export function createGoogleCalendar(key: { client_email: string; private_key: s
       return c.busy ?? [];
     },
     async createEvent(calendarId, e) {
-      const res = await call("POST", `/calendars/${cal(calendarId)}/events`, {
-        summary: e.summary, description: e.description,
-        start: { dateTime: e.startIso }, end: { dateTime: e.endIso },
-      });
+      const res = await call("POST", `/calendars/${cal(calendarId)}/events`, eventBody(e));
       return ((await res.json()) as { id: string }).id;
     },
-    async moveEvent(calendarId, eventId, startIso, endIso) {
-      await call("PATCH", `/calendars/${cal(calendarId)}/events/${encodeURIComponent(eventId)}`, { start: { dateTime: startIso }, end: { dateTime: endIso } });
+    async updateEvent(calendarId, eventId, e) {
+      await call("PATCH", `/calendars/${cal(calendarId)}/events/${encodeURIComponent(eventId)}`, eventBody(e));
     },
     async deleteEvent(calendarId, eventId) {
       await call("DELETE", `/calendars/${cal(calendarId)}/events/${encodeURIComponent(eventId)}`);

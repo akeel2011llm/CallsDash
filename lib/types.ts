@@ -1,7 +1,8 @@
 export type Locale = "en" | "ar";
 export type Channel = "website" | "whatsapp" | "instagram" | "phone";
 export type Outcome = "booked" | "answered" | "handed_off" | "abandoned";
-export type BookingStatus = "confirmed" | "rescheduled" | "cancelled" | "no_show";
+export type BookingStatus = "confirmed" | "rescheduled" | "completed" | "cancelled" | "no_show";
+export type BookingSource = "ai" | "staff" | "doctor";
 export type ArabicStyle = "gulf" | "msa";
 export type BatchKind = "rollover" | "package" | "topup" | "payg";
 export type ZeroBalancePolicy = "pause" | "overdraft";
@@ -261,6 +262,10 @@ export interface Booking {
   status: BookingStatus;
   conversationId?: string;
   calendarEventId?: string;
+  /** Free text kept by staff or the doctor. Also written into the Google Calendar event. */
+  notes?: string;
+  /** Who made the booking. Bookings made before this field existed read as "ai". */
+  source?: BookingSource;
 }
 
 export interface TranscriptLine {
