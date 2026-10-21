@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { buildAgentConfig, knowledgeText, toolDefinitions, widgetHostnames } from "./agent-config";
+import { AGENT_VERSION, buildAgentConfig, knowledgeText, toolDefinitions, widgetHostnames } from "./agent-config";
 import { buildExtras, withExtras, type ExtraGroup } from "./agent-extras";
 import { ElevenLabsError, type ElevenLabsApi } from "./elevenlabs-api";
 import type { Data } from "./data/demo";
@@ -23,8 +23,10 @@ export interface ToolsSetting { ids: Record<string, string>; hash: string; url?:
 
 const toolsHash = (appUrl: string, secret: string) => createHash("sha256").update(JSON.stringify(toolDefinitions(appUrl, secret))).digest("hex");
 
+type ToolsDeps = Pick<SyncDeps, "api" | "appUrl" | "toolsSecret"> & { data: Pick<SyncDeps["data"], "getSetting" | "setSetting"> };
+
 /** The booking tools are shared by every client's agent, so they are created once and updated when their definition changes. */
-async function ensureTools(d: SyncDeps): Promise<string[]> {
+async function ensureTools(d: ToolsDeps): Promise<string[]> {
   const defs = toolDefinitions(d.appUrl, d.toolsSecret);
   const hash = toolsHash(d.appUrl, d.toolsSecret);
   const saved = (await d.data.getSetting(TOOLS_KEY)) as ToolsSetting | undefined;
@@ -37,6 +39,13 @@ async function ensureTools(d: SyncDeps): Promise<string[]> {
   if (stale || saved?.url !== d.appUrl || Object.keys(ids).length !== Object.keys(saved?.ids ?? {}).length) await d.data.setSetting(TOOLS_KEY, { ids, hash, url: d.appUrl } satisfies ToolsSetting);
   return Object.values(ids);
 }
+
+/**
+ * Brings the shared booking tools up to date without touching any client's agent. Used when a tool call shows ElevenLabs
+ * still holds an older definition (for example right after a release that added a field), so no one has to press Sync
+ * for every client first. Does nothing when the saved definition already matches.
+ */
+export const ensureSharedTools = (d: ToolsDeps) => ensureTools(d).then(() => undefined);
 
 /**
  * Applies the optional settings. First tries them all together with the core settings. If ElevenLabs refuses, the core
@@ -90,7 +99,7 @@ export async function syncAgent(d: SyncDeps, tenantId: string, actor: string): P
     }
     const warnings = await applyExtras(d.api, agentId, config, buildExtras({ tenant, doctors }));
     if (prevDoc && prevDoc !== newDoc?.id) await d.api.deleteKnowledge(prevDoc).catch(() => undefined); // the old copy is no longer attached
-    await d.data.setIntegrations(tenantId, { ...tenant.integrations, elevenlabs: { kbDocId: newDoc?.id, syncedAt: new Date().toISOString(), widgetHosts: widgetHostnames(tenant, d.appUrl), ...(warnings.length ? { warnings } : {}) } }, actor, created ? "Created the ElevenLabs agent" : "Synced the agent to ElevenLabs");
+    await d.data.setIntegrations(tenantId, { ...tenant.integrations, elevenlabs: { kbDocId: newDoc?.id, syncedAt: new Date().toISOString(), widgetHosts: widgetHostnames(tenant, d.appUrl), version: AGENT_VERSION, ...(warnings.length ? { warnings } : {}) } }, actor, created ? "Created the ElevenLabs agent" : "Synced the agent to ElevenLabs");
     if (tenant.allowedDomains.length) await d.data.setChannelStatus(tenantId, "website", "connected", actor);
     return { agentId, created, warnings };
   } catch (e) {

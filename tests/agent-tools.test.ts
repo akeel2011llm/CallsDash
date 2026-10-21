@@ -42,7 +42,7 @@ describe("what the agent sends to the booking tools", () => {
 
   it("books with a doctor's name and a local time, as a model often sends them", async () => {
     const { svc, t, hana } = await setup();
-    const b = await svc.bookAppointment(t.id, { doctorId: "Dr Hana", startsAt: "2026-10-21T10:00", patientName: "Fatima", patientPhone: "+973 3912 3456" });
+    const b = await svc.bookAppointment(t.id, { doctorId: "Dr Hana", startsAt: "2026-10-21T10:00", patientName: "Fatima", patientPhone: "+973 3912 3456", patientCpr: "850123456" });
     expect(b.start).toBe("2026-10-21T07:00:00.000Z");
     expect(b.doctor).toBe("Dr. Hana Ali");
     const again = await svc.checkAvailability(t.id, { doctorId: hana, days: 1 });
@@ -51,7 +51,7 @@ describe("what the agent sends to the booking tools", () => {
 
   it("books when the agent passes ElevenLabs' own conversation id (conv_...), which is not a uuid", async () => {
     const { svc, t, data } = await setup();
-    const b = await svc.bookAppointment(t.id, { doctorId: "Dr Hana", startsAt: "2026-10-21T10:30", patientName: "Fatima", patientPhone: "+973 3912 3456", conversationId: "conv_01jabc2x9k8qz5t7v3w4m6n1p0" });
+    const b = await svc.bookAppointment(t.id, { doctorId: "Dr Hana", startsAt: "2026-10-21T10:30", patientName: "Fatima", patientPhone: "+973 3912 3456", patientCpr: "850123456", conversationId: "conv_01jabc2x9k8qz5t7v3w4m6n1p0" });
     const saved = (await data.getBookings(t.id)).find((x) => x.id === b.bookingId);
     expect(saved?.conversationId).toBe("conv_01jabc2x9k8qz5t7v3w4m6n1p0");
   });
@@ -99,5 +99,13 @@ describe("agent prompt", () => {
     expect(p).not.toContain("Dr. Gone");
     expect(p).toContain("exactly as check_availability returned them");
     expect(buildPrompt(settings)).not.toContain("# Doctors");
+  });
+
+  it("asks for the CPR number to book, and for any question about an existing booking", async () => {
+    const { data, t } = await setup();
+    const p = buildPrompt(await data.getAgent(t.id));
+    expect(p).toMatch(/CPR number \(the 9-digit personal number on the Bahraini ID card\)/);
+    expect(p).toMatch(/first ask for their CPR number and call find_patient_booking/);
+    expect(p).toMatch(/no CPR number .*take_message/);
   });
 });

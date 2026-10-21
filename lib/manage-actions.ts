@@ -184,14 +184,14 @@ export async function removeClosureAction(f: FormData) {
 
 /* ---------- bookings ---------- */
 
-/** Patient name, phone and service; the clinic team can also give the booking to another doctor at the same time. */
+/** Patient name, phone, CPR number and service; the clinic team can also give the booking to another doctor at the same time. */
 export async function updateBookingDetailsAction(f: FormData) {
   const { tenant, actor, doctorId, base } = await requireBookingUser();
   const id = str(f, "id");
   let err: string | null = null;
   try {
     await (await bookingService()).staffUpdateDetails(tenant.id, id, {
-      patientName: str(f, "patientName"), patientPhone: str(f, "patientPhone"), service: str(f, "service"),
+      patientName: str(f, "patientName"), patientPhone: str(f, "patientPhone"), patientCpr: str(f, "patientCpr"), service: str(f, "service"),
       doctorId: doctorId ? undefined : str(f, "doctorId") || undefined,
     }, actor, doctorId);
   } catch (e) { if (e instanceof ToolError) err = e.code; else throw e; }

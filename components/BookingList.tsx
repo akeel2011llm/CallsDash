@@ -4,6 +4,7 @@ import { dayKey, fmtDateTime } from "@/lib/format";
 import { getBookings, getDoctors } from "@/lib/data";
 import { setBookingStatusAction } from "@/lib/actions";
 import { isBookingError } from "@/lib/booking-ui";
+import { asciiDigits } from "@/lib/cpr";
 import { Badge, Notice, PageHead, Stat } from "@/components/ui";
 import type { Tenant } from "@/lib/types";
 import { SubmitButton } from "@/components/SubmitButton";
@@ -24,12 +25,12 @@ export async function BookingList({ base, tenant, doctorId, sp }: BookingScope &
   const today = dayKey(new Date().toISOString());
   const nowMs = Date.now();
   const q = (sp.q ?? "").trim().toLowerCase();
-  const qDigits = q.replace(/\D/g, "");
+  const qDigits = asciiDigits(q).replace(/\D/g, "");
   const inView = (b: (typeof all)[number]) =>
     view === "all" ? true : view === "today" ? dayKey(b.startsAt) === today : view === "past" ? Date.parse(b.startsAt) < nowMs : dayKey(b.startsAt) >= today;
   const rows = all
     .filter((b) => inView(b) && (!sp.doctor || b.doctorId === sp.doctor) && (!sp.status || b.status === sp.status)
-      && (!q || b.patientName.toLowerCase().includes(q) || (qDigits.length >= 3 && b.patientPhone.replace(/\D/g, "").includes(qDigits))))
+      && (!q || b.patientName.toLowerCase().includes(q) || (qDigits.length >= 3 && (b.patientPhone.replace(/\D/g, "").includes(qDigits) || (b.patientCpr ?? "").includes(qDigits)))))
     .sort((a, b) => (view === "past" || view === "all" ? b.startsAt.localeCompare(a.startsAt) : a.startsAt.localeCompare(b.startsAt)));
   const todayLive = all.filter((b) => dayKey(b.startsAt) === today && live(b.status)).length;
   const upcomingLive = all.filter((b) => live(b.status) && Date.parse(b.startsAt) >= nowMs).length;
@@ -79,7 +80,7 @@ export async function BookingList({ base, tenant, doctorId, sp }: BookingScope &
             {rows.map((b) => (
               <tr key={b.id}>
                 <td><Link href={`${base}/bookings/${b.id}`}>{fmtDateTime(b.startsAt, locale)}</Link></td>
-                <td>{b.patientName}<br /><small className="muted" dir="ltr">{b.patientPhone}</small></td>
+                <td>{b.patientName}<br /><small className="muted" dir="ltr">{b.patientPhone}{b.patientCpr ? ` · ${t("bookings.cprShort")} ${b.patientCpr}` : ""}</small></td>
                 {!doctorId && <td>{docName.get(b.doctorId)}</td>}
                 <td>{b.service}</td>
                 <td><Badge tone={tone(b.status)}>{t(`booking.${b.status}` as "booking.confirmed")}</Badge></td>

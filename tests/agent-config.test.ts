@@ -98,6 +98,14 @@ describe("agent config", () => {
     expect(t.api_schema.request_headers.Authorization).toBe("Bearer sec");
     expect(t.api_schema.request_body_schema.properties.agent_id.dynamic_variable).toBe("system__agent_id");
     expect(t.api_schema.request_body_schema.required).toContain("patient_phone");
+    expect(t.api_schema.request_body_schema.required).toContain("patient_cpr");
+    // looking up, moving and cancelling a booking go by CPR number
+    for (const name of ["find_patient_booking", "cancel_appointment", "reschedule_appointment"]) {
+      const schema = (d[name] as { api_schema: { request_body_schema: { required: string[] } } }).api_schema.request_body_schema;
+      expect(schema.required).toContain("patient_cpr");
+      expect(schema.required).not.toContain("patient_phone");
+    }
+    expect(Object.keys((d.reschedule_appointment as { api_schema: { request_body_schema: { properties: object } } }).api_schema.request_body_schema.properties)).toContain("doctor_id");
   });
 });
 

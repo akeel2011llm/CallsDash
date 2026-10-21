@@ -13,6 +13,7 @@ import { Icon } from "@/components/icons";
 import { ReceptionArt } from "@/components/art";
 import { publicBranding } from "@/lib/brand-image";
 import { patternOf } from "@/lib/theme";
+import { TryAssistant } from "@/components/TryAssistant";
 
 const CHANNELS = ["website", "whatsapp", "instagram", "phone"] as const;
 
@@ -58,6 +59,7 @@ export default async function Home() {
         </section>
       )}
       {w.low && <Notice tone="warn">{t("home.lowBalance")} <Link href="/app/credits">{t("credits.request")}</Link></Notice>}
+      <TryAssistant tenant={tenant} />
       <div className="grid">
         <Stat icon="chat" label={t("home.conversations")} value={week.total} trend={trend.slice(-7).map((d) => d.value)}
           delta={delta === null ? undefined : { text: `${delta >= 0 ? "+" : ""}${delta}%`, up: delta >= 0 }} hint={t("home.last7")} />

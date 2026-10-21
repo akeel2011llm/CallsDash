@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { applyExtras, syncAgent, SyncError, type SyncDeps } from "@/lib/agent-sync";
+import { applyExtras, ensureSharedTools, syncAgent, SyncError, TOOLS_KEY, type SyncDeps, type ToolsSetting } from "@/lib/agent-sync";
+import { AGENT_VERSION } from "@/lib/agent-config";
 import { buildExtras, deepMerge, readableOn } from "@/lib/agent-extras";
 import { ElevenLabsError, createElevenLabsApi, type ElevenLabsApi } from "@/lib/elevenlabs-api";
 import { createPgData, type Db, type Q } from "@/lib/data/pg";
@@ -47,10 +48,25 @@ describe("agent sync", () => {
     const t = (await data.getTenant(tenant.id))!;
     expect(t.integrations.elevenlabs?.kbDocId).toMatch(/^kb_/);
     expect(t.integrations.elevenlabs?.syncedAt).toBeTruthy();
-    expect(t.integrations.elevenlabs?.widgetHosts).toContain("app.example"); // the admin Test page runs the widget on the app itself
+    expect(t.integrations.elevenlabs?.widgetHosts).toContain("app.example"); // the client screens run the widget on the app itself
+    expect(t.integrations.elevenlabs?.version).toBe(AGENT_VERSION); // the client screens stop asking for a Sync
     expect(t.channels.website).toBe("connected");
     const body = calls.find((c) => c.fn === "createAgent")!.args[0] as { conversation_config: { agent: { prompt: { tool_ids: string[] } } } };
     expect(body.conversation_config.agent.prompt.tool_ids).toHaveLength(7);
+  });
+  it("brings only the shared tools up to date when their saved definition is older, and does nothing when it is current", async () => {
+    const { deps, data, tenant, calls } = await setup();
+    await syncAgent(deps, tenant.id, "admin");
+    calls.length = 0;
+    await ensureSharedTools(deps);
+    expect(calls).toEqual([]); // already current
+    const saved = (await data.getSetting(TOOLS_KEY)) as ToolsSetting;
+    await data.setSetting(TOOLS_KEY, { ...saved, hash: "from-an-older-release" }); // ElevenLabs still holds the previous definitions
+    await ensureSharedTools(deps);
+    expect(names(calls)).toEqual(Array(7).fill("updateTool")); // no agent is touched
+    calls.length = 0;
+    await ensureSharedTools(deps);
+    expect(calls).toEqual([]);
   });
   it("updates in place the second time, reusing the tools and swapping the knowledge document", async () => {
     const { deps, data, tenant, calls } = await setup();

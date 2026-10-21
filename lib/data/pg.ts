@@ -34,7 +34,7 @@ const tenantOf = (r: Row): Tenant => ({
   onboarding: ((o) => ({ ...o, done: o.done ?? [] }))(r.onboarding == null ? {} : jsonish<Partial<Tenant["onboarding"]>>(r.onboarding)), createdAt: iso(r.created_at),
 });
 const bookingOf = (r: Row): Booking => ({
-  id: r.id, tenantId: r.tenant_id, doctorId: r.doctor_id, patientName: r.patient_name, patientPhone: r.patient_phone,
+  id: r.id, tenantId: r.tenant_id, doctorId: r.doctor_id, patientName: r.patient_name, patientPhone: r.patient_phone, patientCpr: r.patient_cpr ?? undefined,
   service: r.service ?? "", startsAt: iso(r.starts_at), durationMin: r.duration_min, status: r.status,
   conversationId: r.conversation_id ?? undefined, calendarEventId: r.calendar_event_id ?? undefined,
   notes: r.notes ?? undefined, source: r.source ?? "ai",
@@ -99,6 +99,9 @@ export const SCHEMA_ADDITIONS = [
      alter table credit_ledger add constraint credit_ledger_kind_v2 check (kind in ('topup', 'package_renewal', 'rollover', 'usage', 'expiry', 'adjustment'));
    end if; end $$`,
   `alter table bookings add column if not exists source text not null default 'ai'`,
+  // the patient's Bahraini CPR number; the agent finds a patient's bookings by it
+  `alter table bookings add column if not exists patient_cpr text`,
+  `create index if not exists bookings_patient_cpr on bookings (tenant_id, patient_cpr)`,
   // "completed" is a new status; the original check only knew the first four
   `do $$ begin if not exists (select 1 from pg_constraint where conname = 'bookings_status_v2') then
      alter table bookings drop constraint if exists bookings_status_check;
@@ -573,9 +576,9 @@ export function createPgData(db: Db): Data {
     createBooking: async (tenantId, b, actor) => tx(async (run) => {
       try {
         const r = await run<Row>(
-          `insert into bookings (tenant_id, doctor_id, patient_name, patient_phone, service, starts_at, duration_min, status, conversation_id, calendar_event_id, notes, source)
-           values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) returning *`,
-          [tenantId, b.doctorId, b.patientName, b.patientPhone, b.service, b.startsAt, b.durationMin, b.status, b.conversationId ?? null, b.calendarEventId ?? null, b.notes ?? null, b.source ?? "ai"]);
+          `insert into bookings (tenant_id, doctor_id, patient_name, patient_phone, service, starts_at, duration_min, status, conversation_id, calendar_event_id, notes, source, patient_cpr)
+           values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) returning *`,
+          [tenantId, b.doctorId, b.patientName, b.patientPhone, b.service, b.startsAt, b.durationMin, b.status, b.conversationId ?? null, b.calendarEventId ?? null, b.notes ?? null, b.source ?? "ai", b.patientCpr ?? null]);
         await audit(run, actor, `Booking ${r[0].id} created`, tenantId);
         return bookingOf(r[0]);
       } catch (e) {
@@ -588,10 +591,11 @@ export function createPgData(db: Db): Data {
       try {
         const r = await run<Row>(
           `update bookings set starts_at = coalesce($3, starts_at), status = coalesce($4, status), calendar_event_id = coalesce($5, calendar_event_id), notes = coalesce($6, notes),
-             patient_name = coalesce($7, patient_name), patient_phone = coalesce($8, patient_phone), service = coalesce($9, service), doctor_id = coalesce($10, doctor_id)
+             patient_name = coalesce($7, patient_name), patient_phone = coalesce($8, patient_phone), service = coalesce($9, service), doctor_id = coalesce($10, doctor_id),
+             patient_cpr = coalesce($11, patient_cpr)
            where tenant_id = $1 and id = $2 returning *`,
           [tenantId, bookingId, patch.startsAt ?? null, patch.status ?? null, patch.calendarEventId ?? null, patch.notes ?? null,
-           patch.patientName ?? null, patch.patientPhone ?? null, patch.service ?? null, patch.doctorId ?? null]);
+           patch.patientName ?? null, patch.patientPhone ?? null, patch.service ?? null, patch.doctorId ?? null, patch.patientCpr ?? null]);
         if (!r[0]) throw new Error("booking not found");
         await audit(run, actor, `Booking ${bookingId} updated`, tenantId);
         return bookingOf(r[0]);

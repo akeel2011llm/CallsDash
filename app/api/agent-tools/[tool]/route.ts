@@ -5,6 +5,10 @@ import { getData } from "@/lib/data";
 import { sharedCalendar } from "@/lib/booking-service";
 import { elevenLabsFromEnv } from "@/lib/elevenlabs-api";
 import { sendBookingConfirmation } from "@/lib/whatsapp";
+import { asciiDigits } from "@/lib/cpr";
+import { appUrl } from "@/lib/app-url";
+import { ensureSharedTools } from "@/lib/agent-sync";
+import { badHeaderSetting } from "@/lib/header-safe";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +19,24 @@ export const dynamic = "force-dynamic";
  */
 const same = (a: string, b: string) => a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
 const str = (v: unknown) => (typeof v === "string" ? v : "");
+
+/** The tools that need the patient's CPR number. A call without the field comes from a tool definition made before CPR numbers were asked. */
+const CPR_TOOLS = new Set(["book_appointment", "find_patient_booking", "cancel_appointment", "reschedule_appointment"]);
+let toolsCheckedAt = 0;
+
+/**
+ * Updates the shared booking tools in ElevenLabs after the answer is sent, so a release that adds a field reaches every
+ * client's agent without anyone pressing Sync. At most once a minute; does nothing when the keys or address are not usable.
+ */
+async function refreshSharedTools(data: Awaited<ReturnType<typeof getData>>) {
+  const api = elevenLabsFromEnv();
+  const toolsSecret = process.env.AGENT_TOOLS_SECRET;
+  if (!api || !toolsSecret || badHeaderSetting() || Date.now() - toolsCheckedAt < 60_000) return;
+  const url = await appUrl();
+  if (!url.startsWith("https://")) return;
+  toolsCheckedAt = Date.now();
+  after(() => ensureSharedTools({ api, data, appUrl: url, toolsSecret }).catch((e) => console.error("could not update the booking tools", e)));
+}
 
 export async function POST(req: Request, ctx: { params: Promise<{ tool: string }> }) {
   const secret = process.env.AGENT_TOOLS_SECRET;
@@ -43,6 +65,15 @@ export async function POST(req: Request, ctx: { params: Promise<{ tool: string }
     log(undefined, { ok: false, error: "unknown_agent", message: `No client has agent "${str(body.agent_id).slice(0, 60)}". Press Sync for the client.` });
     return NextResponse.json({ error: "unknown agent" }, { status: 404 });
   }
+  if (CPR_TOOLS.has(tool) && !("patient_cpr" in body)) {
+    await refreshSharedTools(data);
+    const res = {
+      ok: false, error: "tools_outdated",
+      message: "The booking tools are being updated and this call could not be completed. Do not try again. Apologise, and use take_message so the team can follow up on the booking.",
+    };
+    log(tenant.id, res);
+    return NextResponse.json(res);
+  }
   const res = await run(tool, body, data, tenant.id);
   if (!res) return NextResponse.json({ error: "unknown tool" }, { status: 404 });
   log(tenant.id, res);
@@ -70,7 +101,7 @@ async function run(tool: string, body: Record<string, unknown>, data: Awaited<Re
       case "book_appointment": {
         const booked = await svc.bookAppointment(tenant.id, {
           doctorId: str(body.doctor_id), startsAt: str(body.starts_at), patientName: str(body.patient_name),
-          patientPhone: str(body.patient_phone), service: str(body.service) || undefined, conversationId: str(body.conversation_id) || undefined,
+          patientPhone: str(body.patient_phone), patientCpr: str(body.patient_cpr), service: str(body.service) || undefined, conversationId: str(body.conversation_id) || undefined,
         });
         // The confirmation goes out after the agent has its answer, and a failure only leaves a note: it never undoes the booking.
         const api = elevenLabsFromEnv();
@@ -84,12 +115,25 @@ async function run(tool: string, body: Record<string, unknown>, data: Awaited<Re
         });
         return ok(booked);
       }
-      case "find_patient_booking":
-        return ok(await svc.findPatientBookings(tenant.id, { patientPhone: str(body.patient_phone) }));
+      case "find_patient_booking": {
+        const { bookings } = await svc.findPatientBookings(tenant.id, {
+          patientCpr: str(body.patient_cpr), patientPhone: str(body.patient_phone) || undefined, locale: body.language === "ar" ? "ar" : "en",
+        });
+        // Field names match cancel_appointment and reschedule_appointment's inputs, so the model copies booking_id and doctor_id across unchanged.
+        return ok({
+          bookings: bookings.map((b) => ({ booking_id: b.bookingId, doctor_id: b.doctorId, doctor: b.doctor, starts_at: b.start, label: b.label, service: b.service })),
+          ...(bookings.length ? {} : { message: str(body.patient_phone)
+            ? "No upcoming booking was found for this CPR number and phone number. Read the CPR number back to the patient to check it, then offer to book a new appointment or take a message."
+            : "No upcoming booking was found for this CPR number. Read the number back to the patient to check it. If they are sure they have a booking, ask for the phone number it was made with and call find_patient_booking again with both. Otherwise offer to book a new appointment or take a message." }),
+        });
+      }
       case "cancel_appointment":
-        return ok(await svc.cancelAppointment(tenant.id, { bookingId: str(body.booking_id), patientPhone: str(body.patient_phone) }));
+        return ok(await svc.cancelAppointment(tenant.id, { bookingId: str(body.booking_id), patientCpr: str(body.patient_cpr), patientPhone: str(body.patient_phone) || undefined }));
       case "reschedule_appointment":
-        return ok(await svc.rescheduleAppointment(tenant.id, { bookingId: str(body.booking_id), patientPhone: str(body.patient_phone), newStartsAt: str(body.new_starts_at) }));
+        return ok(await svc.rescheduleAppointment(tenant.id, {
+          bookingId: str(body.booking_id), patientCpr: str(body.patient_cpr), patientPhone: str(body.patient_phone) || undefined,
+          newStartsAt: str(body.new_starts_at), doctorId: str(body.doctor_id) || undefined,
+        }));
       case "take_message":
         return ok(await svc.takeMessage(tenant.id, {
           name: str(body.patient_name), phone: str(body.patient_phone), message: str(body.message),
@@ -112,16 +156,17 @@ async function run(tool: string, body: Record<string, unknown>, data: Awaited<Re
 
 const ok = (v: object): Record<string, unknown> => ({ ok: true, ...v });
 
-/** What the agent asked, for the log: the fields that decide a booking, with only the last 3 digits of a phone number. */
+/** What the agent asked, for the log: the fields that decide a booking, with only the last 3 digits of a phone or CPR number. */
 function summarize(body: Record<string, unknown>) {
-  const keys = ["doctor_id", "from_date", "days", "starts_at", "new_starts_at", "booking_id", "patient_name", "patient_phone", "service", "urgent"];
+  const keys = ["doctor_id", "from_date", "days", "starts_at", "new_starts_at", "booking_id", "patient_name", "patient_phone", "patient_cpr", "service", "urgent"];
   return keys.filter((k) => body[k] !== undefined && body[k] !== "").map((k) => {
     const v = String(body[k]).slice(0, 60);
-    return `${k}=${k === "patient_phone" ? `…${v.replace(/\D/g, "").slice(-3)}` : v}`;
+    return `${k}=${k === "patient_phone" || k === "patient_cpr" ? `…${asciiDigits(v).replace(/\D/g, "").slice(-3)}` : v}`;
   }).join(" ") || "(no details)";
 }
 
 function outcome(res: Record<string, unknown>) {
+  if (res.moved) return `moved to ${String(res.label ?? res.start ?? "")}${res.doctor ? ` with ${String(res.doctor)}` : ""}`;
   if (Array.isArray(res.slots)) return `${res.slots.length} free times${res.slots[0] ? `, first ${(res.slots[0] as { label?: string }).label}` : ""}`;
   if (res.bookingId) return `booked ${String(res.label ?? res.start ?? "")} (${String(res.bookingId)})${res.calendarSaved === false ? ", not on Google Calendar" : ""}`;
   if (Array.isArray(res.bookings)) return `${res.bookings.length} bookings found`;

@@ -52,6 +52,7 @@ export async function BookingDetailView({ base, tenant, doctorId, id, sp, canDel
         <div>{t("common.doctor")}: <strong>{doctor?.name}</strong></div>
         <div>{t("common.service")}: {booking.service}</div>
         <div>{t("common.phone")}: <a href={`tel:+${phoneDigits}`} dir="ltr">{booking.patientPhone}</a> · <a href={`https://wa.me/${phoneDigits}`} target="_blank" rel="noreferrer">WhatsApp</a></div>
+        <div>{t("bookings.patientCpr")}: {booking.patientCpr ? <span dir="ltr">{booking.patientCpr}</span> : <span className="muted">{t("bookings.noCpr")}</span>}</div>
         <small className="muted">{t("bookings.remindersNote")}</small>
         <div className="row">
           {active && status("completed", t("bookings.complete"), "btn small")}
@@ -67,6 +68,7 @@ export async function BookingDetailView({ base, tenant, doctorId, id, sp, canDel
           <div className="row">
             <label style={{ flex: 2, minWidth: 180 }}>{t("bookings.patient")}<input name="patientName" required maxLength={120} defaultValue={booking.patientName} /></label>
             <label style={{ flex: 1, minWidth: 150 }}>{t("common.phone")}<input name="patientPhone" required maxLength={30} defaultValue={booking.patientPhone} dir="ltr" inputMode="tel" /></label>
+            <label style={{ flex: 1, minWidth: 130 }}>{t("bookings.patientCpr")}<input name="patientCpr" maxLength={12} defaultValue={booking.patientCpr ?? ""} dir="ltr" inputMode="numeric" autoComplete="off" required={Boolean(booking.patientCpr)} /></label>
           </div>
           <label>{t("common.service")}<input name="service" maxLength={120} defaultValue={booking.service} /></label>
           {!doctorId && (

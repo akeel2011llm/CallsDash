@@ -458,3 +458,22 @@ pre { background: var(--surface-2); border: 1px solid var(--line); border-radius
   .checklist li > :last-child { grid-column: 1 / -1; }
   .cred dl { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* the assistant try-out chat on the client screens (components/AgentTry.tsx) */
+.try-grid { display: grid; gap: 1.2rem; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
+.try-widget { padding-inline-start: 1.2rem; border-inline-start: 1px solid var(--line); }
+.try-chat { block-size: 340px; overflow-y: auto; align-content: start; padding: .7rem; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-2); }
+.try-chat.empty { align-content: center; justify-items: center; }
+.try-chat .try-note { justify-self: center; text-align: center; }
+.try-chat .try-typing { justify-self: start; }
+.try-suggestions { display: flex; flex-wrap: wrap; gap: .4rem; }
+.try-send { flex-wrap: wrap; }
+.try-send input { flex: 1 1 14rem; min-inline-size: 0; }
+@media (max-width: 760px) {
+  .try-grid { grid-template-columns: minmax(0, 1fr); }
+  .try-widget { padding-inline-start: 0; border-inline-start: 0; }
+  .try-chat { block-size: 300px; }
+}
+/* the ElevenLabs widget's box (components/AgentTry.tsx); clicks pass through it, and the widget's own buttons take theirs */
+.widget-dock { position: fixed; inset: 0; z-index: 35; pointer-events: none; transform: translateZ(0); }
+@media (max-width: 860px) { .widget-dock { inset-block-end: calc(68px + env(safe-area-inset-bottom)); } }
