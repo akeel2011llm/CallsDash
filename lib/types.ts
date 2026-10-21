@@ -177,7 +177,7 @@ export interface Tenant {
 }
 
 export interface Integrations {
-  elevenlabs?: { kbDocId?: string; syncedAt?: string; error?: string; /** Extra settings ElevenLabs refused on the last sync; the agent still works without them. */ warnings?: { group: string; detail: string }[] };
+  elevenlabs?: { kbDocId?: string; syncedAt?: string; error?: string; /** Hostnames the widget was allowed on at the last sync. */ widgetHosts?: string[]; /** Extra settings ElevenLabs refused on the last sync; the agent still works without them. */ warnings?: { group: string; detail: string }[] };
   whatsapp?: { phoneNumberId?: string; displayNumber?: string; confirmTemplate?: string; confirmTemplateLang?: string };
   /** `accountId` is the Instagram business account id Meta sends in webhooks; `inboundUrl` is the custom channel address copied from ElevenLabs. */
   instagram?: { accountId?: string; username?: string; inboundUrl?: string };

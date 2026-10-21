@@ -67,8 +67,12 @@ export interface AgentConfigInput {
   llm?: string;
 }
 
-/** Hostnames the website widget may run on. */
-export const widgetHostnames = (t: Pick<Tenant, "allowedDomains">) => [...new Set(t.allowedDomains.map((d) => d.trim().toLowerCase()).filter(Boolean))];
+/** Hostnames the website widget may run on: the client's websites, plus this app so the admin Test page and the client's preview work. */
+export function widgetHostnames(t: Pick<Tenant, "allowedDomains">, appUrl?: string) {
+  let own = "";
+  try { own = appUrl ? new URL(appUrl).hostname.toLowerCase() : ""; } catch { /* not a URL: leave it out */ }
+  return [...new Set([...t.allowedDomains, own].map((d) => d.trim().toLowerCase()).filter(Boolean))];
+}
 
 // ElevenLabs requires the English-only v2 model for an agent whose main language is English; Arabic needs the multilingual v2.5 model, set on the Arabic preset.
 export const ENGLISH_TTS_MODEL = "eleven_flash_v2";
@@ -112,7 +116,7 @@ export function buildAgentConfig(i: AgentConfigInput) {
       conversation: { max_duration_seconds: 900 },
     },
     platform_settings: {
-      auth: { enable_auth: false, allowlist: widgetHostnames(tenant).map((hostname) => ({ hostname })) },
+      auth: { enable_auth: false, allowlist: widgetHostnames(tenant, i.appUrl).map((hostname) => ({ hostname })) },
       overrides: {
         enable_conversation_initiation_client_data_from_webhook: true,
         conversation_config_override: {

@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { requireAdmin } from "./auth";
 import * as store from "./data";
 import { appUrl } from "./app-url";
+import { safePath } from "./format";
 import { syncAgent, SyncError } from "./agent-sync";
 import { elevenLabsFromEnv } from "./elevenlabs-api";
 import { sendBookingConfirmation } from "./whatsapp";
@@ -37,7 +38,8 @@ export async function syncAgentAction(f: FormData) {
     q = `error=${e.code}`;
   }
   done(id);
-  redirect(page(id, q));
+  const back = safePath(f.get("returnTo"), "");
+  redirect(back ? `${back}${back.includes("?") ? "&" : "?"}${q}` : page(id, q));
 }
 
 export async function saveWhatsappAction(f: FormData) {

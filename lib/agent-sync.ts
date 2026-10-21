@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { buildAgentConfig, knowledgeText, toolDefinitions } from "./agent-config";
+import { buildAgentConfig, knowledgeText, toolDefinitions, widgetHostnames } from "./agent-config";
 import { buildExtras, withExtras, type ExtraGroup } from "./agent-extras";
 import { ElevenLabsError, type ElevenLabsApi } from "./elevenlabs-api";
 import type { Data } from "./data/demo";
@@ -86,7 +86,7 @@ export async function syncAgent(d: SyncDeps, tenantId: string, actor: string): P
     }
     const warnings = await applyExtras(d.api, agentId, config, buildExtras({ tenant, doctors: await d.data.getDoctors(tenantId) }));
     if (prevDoc && prevDoc !== newDoc?.id) await d.api.deleteKnowledge(prevDoc).catch(() => undefined); // the old copy is no longer attached
-    await d.data.setIntegrations(tenantId, { ...tenant.integrations, elevenlabs: { kbDocId: newDoc?.id, syncedAt: new Date().toISOString(), ...(warnings.length ? { warnings } : {}) } }, actor, created ? "Created the ElevenLabs agent" : "Synced the agent to ElevenLabs");
+    await d.data.setIntegrations(tenantId, { ...tenant.integrations, elevenlabs: { kbDocId: newDoc?.id, syncedAt: new Date().toISOString(), widgetHosts: widgetHostnames(tenant, d.appUrl), ...(warnings.length ? { warnings } : {}) } }, actor, created ? "Created the ElevenLabs agent" : "Synced the agent to ElevenLabs");
     if (tenant.allowedDomains.length) await d.data.setChannelStatus(tenantId, "website", "connected", actor);
     return { agentId, created, warnings };
   } catch (e) {
