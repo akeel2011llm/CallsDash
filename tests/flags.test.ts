@@ -44,3 +44,14 @@ describe("flag detection", () => {
     expect(rules.complaint).toEqual({ enabled: true, keywords: [], notifyStaff: false });
   });
 });
+
+describe("flags from ElevenLabs' analysis", () => {
+  const c = { summary: "Asked about opening hours", transcript: [{ role: "user", text: "when do you open" }], outcome: "answered" as const };
+  it("adds what the analysis found, even when no keyword matches", () => {
+    expect(detectFlags({ ...c, aiFlags: ["emergency"] }, DEFAULT_RULES)).toEqual(["emergency"]);
+  });
+  it("respects switched-off rules and does not call a booked conversation a lead", () => {
+    expect(detectFlags({ ...c, aiFlags: ["complaint"] }, { ...DEFAULT_RULES, complaint: { ...DEFAULT_RULES.complaint, enabled: false } })).toEqual([]);
+    expect(detectFlags({ ...c, outcome: "booked", aiFlags: ["lead"] }, DEFAULT_RULES)).toEqual([]);
+  });
+});

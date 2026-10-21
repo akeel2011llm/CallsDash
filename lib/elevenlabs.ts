@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import type { Channel, Conversation, Locale, Outcome, TranscriptLine } from "./types";
+import type { Channel, FlagKind, Locale, NewConversation, Outcome, TranscriptLine } from "./types";
 
 const TOLERANCE_SECONDS = 30 * 60;
 
@@ -21,7 +21,7 @@ type Json = Record<string, any>; // eslint-disable-line @typescript-eslint/no-ex
 export interface ParsedCall {
   agentId: string;
   externalId: string;
-  conversation: Omit<Conversation, "id" | "tenantId" | "creditsCharged" | "costUsd" | "flags" | "reviewed">;
+  conversation: NewConversation;
 }
 
 const hasArabic = (s: string) => /[؀-ۿ]/.test(s);
@@ -52,6 +52,16 @@ export function parsePostCall(body: Json): ParsedCall | null {
     transcript.length === 0 ? "abandoned"
     : (["booked", "answered", "handed_off", "abandoned"] as const).find((o) => o === collected) ?? "answered";
 
+  // ElevenLabs reads each conversation after it ends (see DATA_COLLECTION in lib/agent-extras.ts)
+  const result = (id: string): unknown => d.analysis?.data_collection_results?.[id]?.value;
+  const intent = String(result("intent") ?? "");
+  const aiFlags = ([
+    intent === "emergency" || result("urgent") === true ? "emergency" : null,
+    intent === "complaint" ? "complaint" : null,
+    intent === "lead" ? "lead" : null,
+  ].filter(Boolean)) as FlagKind[];
+  const sentiment = (["positive", "neutral", "negative"] as const).find((v) => v === result("caller_sentiment")) ?? "neutral";
+
   const language: Locale = String(meta.main_language ?? "").startsWith("ar") || hasArabic(transcript.map((t) => t.text).join(" ")) ? "ar" : "en";
   const startedSec = Number(meta.start_time_unix_secs);
   return {
@@ -63,8 +73,9 @@ export function parsePostCall(body: Json): ParsedCall | null {
       durationSec: Math.max(0, Math.round(Number(meta.call_duration_secs) || 0)),
       messages: mode === "text" ? transcript.length : 0,
       summary: String(d.analysis?.transcript_summary ?? "").slice(0, 1000),
-      sentiment: "neutral",
+      sentiment,
       elevenLabsConversationId: externalId,
+      ...(aiFlags.length ? { aiFlags } : {}),
     },
   };
 }

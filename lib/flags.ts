@@ -61,9 +61,10 @@ export function matches(text: string, phrase: string): boolean {
 }
 
 export function detectFlags(
-  c: { summary: string; transcript: { role: string; text: string }[]; outcome: Outcome },
+  c: { summary: string; transcript: { role: string; text: string }[]; outcome: Outcome; aiFlags?: FlagKind[] },
   rules: AlertRules,
 ): FlagKind[] {
+  // ElevenLabs' own reading of the conversation (aiFlags) counts as well as the keywords.
   // what the caller said plus the summary; the agent's own words are left out so its polite phrases do not trigger anything
   const text = fold([c.summary, ...c.transcript.filter((l) => l.role !== "agent").map((l) => l.text)].join(" \n "));
   const out: FlagKind[] = [];
@@ -71,7 +72,7 @@ export function detectFlags(
     const r = rules[kind];
     if (!r.enabled) continue;
     if (kind === "lead" && c.outcome === "booked") continue; // already converted
-    if ([...BUILT_IN_KEYWORDS[kind], ...r.keywords].some((k) => matches(text, k))) out.push(kind);
+    if (c.aiFlags?.includes(kind) || [...BUILT_IN_KEYWORDS[kind], ...r.keywords].some((k) => matches(text, k))) out.push(kind);
   }
   return out;
 }

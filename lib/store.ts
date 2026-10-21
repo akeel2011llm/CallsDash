@@ -7,6 +7,7 @@ import { findDuplicate, nameKey } from "./tenant-keys";
 import { DEFAULT_OPENING_HOURS } from "./availability";
 import { seed, type DB, ELEVENLABS_USD_PER_MIN, ELEVENLABS_USD_PER_MSG } from "./seed";
 import type {
+  NewConversation,
   AgentSettings, Booking, BookingStatus, Channel, Conversation, ChatSession, Locale, Permissions, Profile, StaffRequest, Tenant, TenantSecrets,
 } from "./types";
 
@@ -173,7 +174,8 @@ export function audit(actor: string, action: string, tenantId?: string) {
 }
 
 /** Credits for one finished conversation, deducted from the wallet. Returns whether the wallet ran dry. */
-export function recordConversation(tenantId: string, conv: Omit<Conversation, "id" | "tenantId" | "creditsCharged" | "costUsd" | "flags" | "reviewed">) {
+export function recordConversation(tenantId: string, input: NewConversation) {
+  const { aiFlags: _aiFlags, ...conv } = input;
   const d = db();
   const t = getTenant(tenantId);
   if (!t) throw new Error("unknown tenant");
@@ -185,7 +187,7 @@ export function recordConversation(tenantId: string, conv: Omit<Conversation, "i
   const mine = d.batches.filter((b) => b.tenantId === tenantId);
   const res = deduct(mine, credits, now());
   d.batches = [...d.batches.filter((b) => b.tenantId !== tenantId), ...res.batches];
-  const flags = detectFlags(conv, t.alertRules);
+  const flags = detectFlags(input, t.alertRules);
   const full: Conversation = {
     ...conv, id: id("c"), tenantId, creditsCharged: credits, flags, reviewed: false,
     costUsd: round2(conv.mode === "voice" ? (conv.durationSec / 60) * ELEVENLABS_USD_PER_MIN : conv.messages * ELEVENLABS_USD_PER_MSG),

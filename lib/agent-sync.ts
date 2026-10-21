@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { buildAgentConfig, knowledgeText, toolDefinitions } from "./agent-config";
+import { buildExtras, withExtras, type ExtraGroup } from "./agent-extras";
 import { ElevenLabsError, type ElevenLabsApi } from "./elevenlabs-api";
 import type { Data } from "./data/demo";
 
@@ -9,7 +10,7 @@ export class SyncError extends Error {
 
 export interface SyncDeps {
   api: ElevenLabsApi;
-  data: Pick<Data, "getTenant" | "getAgent" | "getKnowledge" | "saveAgent" | "getSetting" | "setSetting" | "setIntegrations" | "setChannelStatus">;
+  data: Pick<Data, "getTenant" | "getDoctors" | "getAgent" | "getKnowledge" | "saveAgent" | "getSetting" | "setSetting" | "setIntegrations" | "setChannelStatus">;
   /** Public address of this app, e.g. https://www.callsdash.com (no trailing slash). ElevenLabs calls back here. */
   appUrl: string;
   toolsSecret: string;
@@ -35,10 +36,35 @@ async function ensureTools(d: SyncDeps): Promise<string[]> {
 }
 
 /**
+ * Applies the optional settings. First tries them all together with the core settings. If ElevenLabs refuses, the core
+ * settings are applied alone and each group is added one by one, so one refused group costs only itself.
+ */
+export async function applyExtras(api: ElevenLabsApi, agentId: string, core: Record<string, unknown>, groups: ExtraGroup[]): Promise<{ group: string; detail: string }[]> {
+  try {
+    await api.updateAgent(agentId, withExtras(core, groups));
+    return [];
+  } catch {
+    /* find out which group it was */
+  }
+  await api.updateAgent(agentId, core); // the core agent must always be accepted
+  const accepted: ExtraGroup[] = [];
+  const warnings: { group: string; detail: string }[] = [];
+  for (const g of groups) {
+    try {
+      await api.updateAgent(agentId, withExtras(core, [...accepted, g]));
+      accepted.push(g);
+    } catch (e) {
+      warnings.push({ group: g.name, detail: (e instanceof Error ? e.message : "refused").slice(0, 300) });
+    }
+  }
+  return warnings;
+}
+
+/**
  * Makes the client's ElevenLabs agent match CallsDash: prompt and style, voices, booking tools, knowledge base and widget
  * allow-list. Creates the agent the first time. Safe to run again at any time.
  */
-export async function syncAgent(d: SyncDeps, tenantId: string, actor: string): Promise<{ agentId: string; created: boolean }> {
+export async function syncAgent(d: SyncDeps, tenantId: string, actor: string): Promise<{ agentId: string; created: boolean; warnings: { group: string; detail: string }[] }> {
   const tenant = await d.data.getTenant(tenantId);
   if (!tenant) throw new SyncError("unknown_client");
   const settings = await d.data.getAgent(tenantId);
@@ -54,15 +80,15 @@ export async function syncAgent(d: SyncDeps, tenantId: string, actor: string): P
     const config = buildAgentConfig({ tenant, settings, toolIds, knowledgeDoc: newDoc, appUrl: d.appUrl, initSecret: d.initSecret });
     let agentId = settings.elevenLabsAgentId;
     const created = !agentId;
-    if (agentId) await d.api.updateAgent(agentId, config);
-    else {
+    if (!agentId) {
       agentId = (await d.api.createAgent(config)).agent_id;
       await d.data.saveAgent(tenantId, { ...settings, elevenLabsAgentId: agentId }, actor, "Created the ElevenLabs agent");
     }
+    const warnings = await applyExtras(d.api, agentId, config, buildExtras({ tenant, doctors: await d.data.getDoctors(tenantId) }));
     if (prevDoc && prevDoc !== newDoc?.id) await d.api.deleteKnowledge(prevDoc).catch(() => undefined); // the old copy is no longer attached
-    await d.data.setIntegrations(tenantId, { ...tenant.integrations, elevenlabs: { kbDocId: newDoc?.id, syncedAt: new Date().toISOString() } }, actor, created ? "Created the ElevenLabs agent" : "Synced the agent to ElevenLabs");
+    await d.data.setIntegrations(tenantId, { ...tenant.integrations, elevenlabs: { kbDocId: newDoc?.id, syncedAt: new Date().toISOString(), ...(warnings.length ? { warnings } : {}) } }, actor, created ? "Created the ElevenLabs agent" : "Synced the agent to ElevenLabs");
     if (tenant.allowedDomains.length) await d.data.setChannelStatus(tenantId, "website", "connected", actor);
-    return { agentId, created };
+    return { agentId, created, warnings };
   } catch (e) {
     if (newDoc) await d.api.deleteKnowledge(newDoc.id).catch(() => undefined);
     const detail = e instanceof ElevenLabsError ? e.message : e instanceof Error ? e.message : "unknown error";
