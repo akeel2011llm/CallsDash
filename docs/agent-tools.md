@@ -27,21 +27,15 @@ The agent prompt lists the active doctors with their ids (lib/agent-config.ts).
 
 ## When a booking fails
 
-If the Test agent page says the secret "contains a character that cannot be sent", `AGENT_TOOLS_SECRET` (or
-`ELEVENLABS_INIT_SECRET` / `ELEVENLABS_API_KEY`) has a space, curly quote or hidden symbol from copy-paste. Sync saves it
-fine, but ElevenLabs cannot put it in a header, so every tool call fails. Use **Make a secret** (Channels or Test agent page;
-made in the browser, letters and digits only), paste it into Vercel, redeploy and press Sync.
+If a Sync says a secret "contains a character that cannot be sent", or the Channels page shows
+`AGENT_TOOLS_SECRET` (or `ELEVENLABS_INIT_SECRET` / `ELEVENLABS_API_KEY`) as Not valid, it has a space, curly quote or
+hidden symbol from copy-paste. Sync saves it fine, but ElevenLabs cannot put it in a header, so every tool call fails. Use
+**Make a secret** on the Channels page (made in the browser, letters and digits only), paste it into Vercel, redeploy and
+press Sync.
 
-Admin > **Test agent** shows three things for the chosen client:
-
-1. **Booking tools** in the checklist: whether ElevenLabs calls this app's current address with the current secret.
-   If not, press **Sync**. The app address is `NEXT_PUBLIC_SITE_URL`, else Vercel's production domain, so a sync from a
-   preview or deployment address never points the tools at a protected URL.
-2. **Test the booking tools** calls `check_availability` over the internet as ElevenLabs does and names the problem:
-   wrong secret, an address behind Vercel Deployment Protection, an agent no client owns, or the tool's own error.
-3. **Booking tool log** (table `agent_tool_calls`, 30 days): every call that reached CallsDash with what was asked and the
-   result. **What ElevenLabs saw** reads the agent's latest conversations from ElevenLabs with each tool call and answer,
-   so a call that never reached CallsDash (refused, timed out) still shows its error.
+Every tool call that reaches CallsDash is also written to the table `agent_tool_calls` (what was asked and the result; kept
+30 days, phone numbers cut to the last 3 digits), so a failed booking can be read there. Common causes seen so far: a secret
+with a hidden character, and a conversation id column that was a uuid while ElevenLabs sends text ids (`conv_...`).
 
 Add to the prompt: "Always call check_availability before offering times. Never invent slots. Confirm doctor, time, name and phone number
 back to the patient before calling book_appointment. If a tool returns ok:false, follow its message."

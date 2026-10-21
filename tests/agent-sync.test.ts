@@ -18,8 +18,6 @@ function fakeApi() {
     updateTool: log("updateTool", undefined),
     sendWhatsappTemplate: log("sendWhatsappTemplate", {}),
     transcribe: log("transcribe", { text: "" }),
-    listConversations: log("listConversations", { conversations: [] }),
-    getConversation: log("getConversation", {}),
   };
   return { api, calls };
 }
