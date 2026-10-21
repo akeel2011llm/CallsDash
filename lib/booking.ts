@@ -57,9 +57,10 @@ export function createBookingService(data: Data, calendar: Calendar | null, nowF
     return { tenant, doctors: picked };
   }
 
-  async function found(tenantId: string, bookingId: string) {
+  /** `onlyDoctorId` is set for a doctor's own sign-in: other doctors' bookings do not exist as far as they can tell. */
+  async function found(tenantId: string, bookingId: string, onlyDoctorId?: string) {
     const { tenant, doctors } = await context(tenantId);
-    const booking = (await data.getBookings(tenantId)).find((b) => b.id === bookingId);
+    const booking = (await data.getBookings(tenantId)).find((b) => b.id === bookingId && (!onlyDoctorId || b.doctorId === onlyDoctorId));
     const doctor = booking && doctors.find((d) => d.id === booking.doctorId);
     if (!booking || !doctor) throw new ToolError("not_found", "That booking was not found.");
     return { tenant, booking, doctor };
@@ -194,8 +195,8 @@ export function createBookingService(data: Data, calendar: Calendar | null, nowF
     },
 
     /** The clinic team (receptionist, manager or doctor) moves a booking. No phone check: they are signed in. */
-    async staffReschedule(tenantId: string, bookingId: string, newStartsAt: string, actor: string) {
-      const { booking, doctor } = await found(tenantId, bookingId);
+    async staffReschedule(tenantId: string, bookingId: string, newStartsAt: string, actor: string, onlyDoctorId?: string) {
+      const { booking, doctor } = await found(tenantId, bookingId, onlyDoctorId);
       if (!live(booking)) throw new ToolError("not_active", "Only an active booking can be moved. Restore it first.");
       return moveBooking(tenantId, booking, doctor, newStartsAt, actor);
     },
@@ -204,9 +205,9 @@ export function createBookingService(data: Data, calendar: Calendar | null, nowF
      * Completed, no-show and cancelled never block the doctor's time. Cancelling removes the Google Calendar event;
      * restoring a cancelled booking checks the time is still free and adds the event again.
      */
-    async staffSetStatus(tenantId: string, bookingId: string, status: BookingStatus, actor: string) {
+    async staffSetStatus(tenantId: string, bookingId: string, status: BookingStatus, actor: string, onlyDoctorId?: string) {
       if (!["confirmed", "completed", "no_show", "cancelled"].includes(status)) throw new ToolError("bad_status", "Unknown status.");
-      const { booking, doctor, tenant } = await found(tenantId, bookingId);
+      const { booking, doctor, tenant } = await found(tenantId, bookingId, onlyDoctorId);
       if (booking.status === status) return booking;
       const wasCancelled = booking.status === "cancelled";
       if (status === "confirmed" && wasCancelled) {
@@ -233,8 +234,8 @@ export function createBookingService(data: Data, calendar: Calendar | null, nowF
       return updated;
     },
 
-    async staffSetNotes(tenantId: string, bookingId: string, notes: string, actor: string) {
-      const { booking, doctor } = await found(tenantId, bookingId);
+    async staffSetNotes(tenantId: string, bookingId: string, notes: string, actor: string, onlyDoctorId?: string) {
+      const { booking, doctor } = await found(tenantId, bookingId, onlyDoctorId);
       const updated = await data.updateBooking(tenantId, booking.id, { notes: notes.trim().slice(0, 1000) }, actor);
       if (calendar && doctor.googleCalendarId && updated.calendarEventId && live(updated)) {
         try { await calendar.updateEvent(doctor.googleCalendarId, updated.calendarEventId, eventFor(updated)); }

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { getSession } from "@/lib/auth";
+import { getSession, homeFor } from "@/lib/auth";
 import { getProfile } from "@/lib/data";
 import { getT } from "@/lib/i18n";
 import { logout } from "@/lib/actions";
@@ -19,7 +19,7 @@ export default async function Account() {
   if (!s) redirect("/login");
   const { t, locale } = await getT();
   const me = s.userId ? await getProfile(s.userId) : undefined;
-  const home = s.role === "admin" ? "/admin" : "/app";
+  const home = homeFor(s);
   return (
     <main className="auth-page">
       <div className="card stack">

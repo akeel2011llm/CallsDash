@@ -113,6 +113,16 @@ describe("booking service", () => {
     await expect(svc.staffSetStatus(t.id, "00000000-0000-0000-0000-000000000000", "cancelled", "x")).rejects.toMatchObject({ code: "not_found" });
   });
 
+  it("keeps a doctor's own sign-in to their own bookings", async () => {
+    const { svc, t, doc, q } = await setup();
+    const other = (await q<{ id: string }>(`insert into doctors (tenant_id, name) values ($1,'Dr. B') returning id`, [t.id]))[0].id;
+    const mine = (await svc.bookAppointment(t.id, { doctorId: doc, startsAt: WED_10, patientName: "P", patientPhone: phone, source: "doctor", actor: "doctor:1" })).bookingId;
+    await expect(svc.staffSetStatus(t.id, mine, "completed", "doctor:2", other)).rejects.toMatchObject({ code: "not_found" });
+    await expect(svc.staffSetNotes(t.id, mine, "x", "doctor:2", other)).rejects.toMatchObject({ code: "not_found" });
+    await expect(svc.staffReschedule(t.id, mine, "2026-10-21T08:00:00Z", "doctor:2", other)).rejects.toMatchObject({ code: "not_found" });
+    expect((await svc.staffSetStatus(t.id, mine, "completed", "doctor:1", doc)).status).toBe("completed");
+  });
+
   it("never books blind when the calendar cannot be read", async () => {
     const { svc, t, doc, fail, data } = await setup();
     fail(true);

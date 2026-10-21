@@ -7,11 +7,11 @@ type T = (k: Key) => string;
 export const userFormText = (t: T): UserFormText => ({
   new: t("users.new"), fullName: t("users.fullName"), email: t("users.email"), role: t("users.role"), client: t("users.client"),
   password: t("users.password"), passwordHelp: t("users.password.help"), create: t("users.create"),
-  roleAdmin: t("users.role.admin"), roleManager: t("users.role.manager"), roleReceptionist: t("users.role.receptionist"),
+  roleAdmin: t("users.role.admin"), roleManager: t("users.role.manager"), roleReceptionist: t("users.role.receptionist"), roleDoctor: t("users.role.doctor"), doctor: t("users.doctor"), doctorHelp: t("users.doctor.help"),
   credCreated: t("users.cred.created"), credReset: t("users.cred.reset"), credNote: t("users.cred.note"), credEmail: t("users.cred.email"),
   credPassword: t("users.cred.password"), credSignIn: t("users.cred.signin"), credCopy: t("users.cred.copy"), credCopied: t("users.cred.copied"),
   credWhatsapp: t("users.cred.whatsapp"), credMessage: t("users.cred.message"), reset: t("users.reset"),
-  errors: Object.fromEntries((["email_invalid", "email_taken", "name_missing", "password_short", "password_weak", "forbidden", "unknown_client", "role_invalid", "last_admin", "self", "not_found", "not_configured"] as const)
+  errors: Object.fromEntries((["email_invalid", "email_taken", "name_missing", "password_short", "password_weak", "forbidden", "unknown_client", "doctor_missing", "doctor_taken", "role_invalid", "last_admin", "self", "not_found", "not_configured"] as const)
     .map((c) => [c, t(`users.err.${c}` as Key)])),
 });
 

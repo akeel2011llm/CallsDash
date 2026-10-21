@@ -16,7 +16,7 @@ export function googleKeyState(raw: string | undefined): GoogleKeyState {
 
 export const supabaseSecretSet = (env: Record<string, string | undefined> = process.env) => Boolean(env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_SECRET_KEY);
 
-export type CalendarCheck = "ok" | "no_id" | "no_key" | "key_rejected" | "not_shared" | "other";
+export type CalendarCheck = "ok" | "no_id" | "no_key" | "key_rejected" | "not_shared" | "timeout" | "other";
 
 /** Asks Google for the next hour of one calendar: proves the key works and the calendar is shared with it. Reads only. */
 export async function checkCalendar(cal: Calendar | null, calendarId: string | undefined, now = new Date()): Promise<CalendarCheck> {
@@ -27,6 +27,7 @@ export async function checkCalendar(cal: Calendar | null, calendarId: string | u
     return "ok";
   } catch (e) {
     const m = e instanceof Error ? e.message : "";
+    if (e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError")) return "timeout";
     if (/token request failed/.test(m)) return "key_rejected";
     if (/not shared/.test(m) || /failed: (404|403)/.test(m)) return "not_shared";
     return "other";

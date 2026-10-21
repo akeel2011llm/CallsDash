@@ -31,6 +31,17 @@ describe("checkCalendar", () => {
   const cal = (handler: (url: string) => Response) => createGoogleCalendar(key, (async (u: string) => handler(String(u))) as unknown as typeof fetch);
   const token = (u: string) => u.includes("oauth2") ? json({ access_token: "t", expires_in: 3600 }) : null;
 
+  it("gives up when Google does not answer, instead of hanging, and passes a time limit to every call", async () => {
+    const signals: (AbortSignal | undefined)[] = [];
+    const silent = createGoogleCalendar(key, (async (_u: string, init?: RequestInit) => {
+      signals.push(init?.signal ?? undefined);
+      throw Object.assign(new Error("The operation was aborted due to timeout"), { name: "TimeoutError" });
+    }) as unknown as typeof fetch);
+    expect(await checkCalendar(silent, "c1")).toBe("timeout");
+    expect(signals).toHaveLength(1);
+    expect(signals[0]).toBeInstanceOf(AbortSignal);
+  });
+
   it("covers the failure cases an admin can fix", async () => {
     expect(await checkCalendar(null, "x@group.calendar.google.com")).toBe("no_key");
     expect(await checkCalendar(cal(() => json({})), "")).toBe("no_id");

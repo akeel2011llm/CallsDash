@@ -26,6 +26,8 @@ const eventBody = (e: EventInput) => ({
 
 type Fetch = typeof fetch;
 const API = "https://www.googleapis.com/calendar/v3";
+/** A silent Google must not hang a page or a phone call: give up and say so. */
+const TIMEOUT_MS = 10_000;
 const b64 = (v: string | Buffer) => Buffer.from(v).toString("base64url");
 
 export function googleCalendarFromEnv(env: NodeJS.ProcessEnv = process.env, fetchImpl: Fetch = fetch): Calendar | null {
@@ -44,7 +46,7 @@ export function createGoogleCalendar(key: { client_email: string; private_key: s
     const head = b64(JSON.stringify({ alg: "RS256", typ: "JWT" }));
     const sig = createSign("RSA-SHA256").update(`${head}.${claim}`).sign(key.private_key, "base64url");
     const res = await f("https://oauth2.googleapis.com/token", {
-      method: "POST",
+      method: "POST", signal: AbortSignal.timeout(TIMEOUT_MS),
       headers: { "content-type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({ grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer", assertion: `${head}.${claim}.${sig}` }),
     });
@@ -56,7 +58,7 @@ export function createGoogleCalendar(key: { client_email: string; private_key: s
 
   async function call(method: string, path: string, body?: unknown): Promise<Response> {
     const res = await f(`${API}${path}`, {
-      method,
+      method, signal: AbortSignal.timeout(TIMEOUT_MS),
       headers: { authorization: `Bearer ${await accessToken()}`, "content-type": "application/json" },
       body: body === undefined ? undefined : JSON.stringify(body),
     });

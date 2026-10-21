@@ -10,7 +10,7 @@ export default async function manifest(): Promise<MetadataRoute.Manifest> {
   let name = "CallsDash", color = "#0e7c86";
   try {
     const s = await getSession();
-    const t = s?.role === "client" ? await getTenant(s.tenantId) : undefined;
+    const t = s && s.role !== "admin" ? await getTenant(s.tenantId) : undefined;
     if (t) {
       name = t.branding.displayName || name;
       color = themeVars(t.branding)["--brand"];

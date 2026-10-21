@@ -15,6 +15,7 @@ export default async function Team({ searchParams }: { searchParams: Promise<{ s
   const { saved, error } = await searchParams;
   const { t, locale } = await getT();
   const auth = authAdmin();
+  const doctors = await store.getDoctors(tenant.id);
   const people = auth ? await listUsers({ auth, data: store }, tenant.id) : (await store.listProfiles(tenant.id)).map((p) => ({ ...p, lastSignIn: undefined }));
   // an administrator previewing the client keeps full control; a real manager only manages receptionists
   const viewer: UserActor = viewingAsAdmin ? { role: "admin", label: "admin", userId } : { role: "manager", tenantId: tenant.id, label: `staff:${tenant.id}`, userId };
@@ -24,7 +25,7 @@ export default async function Team({ searchParams }: { searchParams: Promise<{ s
       {!auth && <Notice tone="warn">{t("users.err.not_configured")}</Notice>}
       {saved && <Notice tone="ok">{t("users.saved")}</Notice>}
       {error && <Notice tone="warn">{t(`users.err.${error}` as "users.err.forbidden")}</Notice>}
-      {auth && <CreateUserForm text={userFormText(t)} fixedTenantId={viewingAsAdmin ? tenant.id : undefined} roles={viewingAsAdmin ? ["receptionist", "manager"] : ["receptionist"]} />}
+      {auth && <CreateUserForm text={userFormText(t)} fixedTenantId={viewingAsAdmin ? tenant.id : undefined} roles={viewingAsAdmin ? ["receptionist", "doctor", "manager"] : ["receptionist", "doctor"]} doctors={doctors} />}
       {people.length === 0 ? <Notice>{t("users.empty")}</Notice>
         : <UsersTable users={people} viewer={viewer} returnTo="/app/team" t={t} locale={locale} />}
     </>
