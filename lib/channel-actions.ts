@@ -9,6 +9,7 @@ import { safePath } from "./format";
 import { syncAgent, SyncError, TOOLS_KEY, type ToolsSetting } from "./agent-sync";
 import { elevenLabsFromEnv } from "./elevenlabs-api";
 import { sendBookingConfirmation } from "./whatsapp";
+import { badHeaderSetting, headerSafe } from "./header-safe";
 import type { Channel, Integrations } from "./types";
 
 const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
@@ -30,6 +31,7 @@ export async function syncAgentAction(f: FormData) {
     if (!api) throw new SyncError("no_api_key");
     const tools = process.env.AGENT_TOOLS_SECRET;
     if (!tools) throw new SyncError("no_secret");
+    if (badHeaderSetting()) throw new SyncError("bad_secret", badHeaderSetting());
     if (!url.startsWith("https://")) throw new SyncError("no_app_url"); // ElevenLabs only calls https addresses
     const r = await syncAgent({ api, data: store, appUrl: url, toolsSecret: tools, initSecret: process.env.ELEVENLABS_INIT_SECRET || tools }, id, actor);
     if (r.created) q = "saved=created";
@@ -56,6 +58,7 @@ export async function testBookingToolsAction(f: FormData) {
   const base = saved?.url || (await appUrl());
   let q: string;
   if (!secret) q = "tools=nosecret";
+  else if (!headerSafe(secret)) q = "tools=badsecret";
   else if (!agentId) q = "tools=noagent";
   else {
     try {
