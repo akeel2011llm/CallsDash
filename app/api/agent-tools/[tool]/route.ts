@@ -2,7 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import { after, NextResponse } from "next/server";
 import { createBookingService, ToolError } from "@/lib/booking";
 import { getData } from "@/lib/data";
-import { googleCalendarFromEnv } from "@/lib/google-calendar";
+import { sharedCalendar } from "@/lib/booking-service";
 import { elevenLabsFromEnv } from "@/lib/elevenlabs-api";
 import { sendBookingConfirmation } from "@/lib/whatsapp";
 
@@ -32,7 +32,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ tool: string }
   const data = await getData();
   const tenant = await data.findTenantByAgent(str(body.agent_id));
   if (!tenant) return NextResponse.json({ error: "unknown agent" }, { status: 404 });
-  const svc = createBookingService(data, googleCalendarFromEnvCached());
+  const svc = createBookingService(data, sharedCalendar());
 
   try {
     switch (tool) {
@@ -85,6 +85,3 @@ export async function POST(req: Request, ctx: { params: Promise<{ tool: string }
 }
 
 const ok = (v: object) => NextResponse.json({ ok: true, ...v });
-
-const g = globalThis as unknown as { __callsdashCalendar?: ReturnType<typeof googleCalendarFromEnv> };
-const googleCalendarFromEnvCached = () => (g.__callsdashCalendar ??= googleCalendarFromEnv());

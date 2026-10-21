@@ -10,6 +10,8 @@ import * as store from "./data";
 import { DuplicateError } from "./errors";
 import { nameKey } from "./tenant-keys";
 import { googleCalendarFromEnv } from "./google-calendar";
+import { bookingService } from "./booking-service";
+import { ToolError } from "./booking";
 import { checkCalendar } from "./setup-check";
 import { cleanOpeningHours } from "./availability";
 import { cleanCatalogInput, type PlanInput } from "./plans";
@@ -136,13 +138,50 @@ export async function dismissUnansweredAction(f: FormData) {
   back(f, "/app/knowledge", "deleted=1");
 }
 
+/** Runs a booking change and turns the booking service's refusals into a code the page can explain. */
+async function attempt(fn: () => Promise<unknown>): Promise<string | null> {
+  try { await fn(); return null; }
+  catch (e) { if (e instanceof ToolError) return e.code; throw e; }
+}
+
 export async function setBookingStatusAction(f: FormData) {
   const { tenant, actor } = await requireClient();
   const status = str(f, "status") as BookingStatus;
-  if (!["cancelled", "no_show", "confirmed"].includes(status)) throw new Error("bad status");
-  await store.setBookingStatus(tenant.id, str(f, "id"), status, actor);
+  const err = await attempt(async () => (await bookingService()).staffSetStatus(tenant.id, str(f, "id"), status, actor));
   revalidatePath("/app", "layout");
-  back(f, "/app/bookings");
+  back(f, "/app/bookings", err ? `err=${err}` : "saved=1");
+}
+
+export async function createBookingAction(f: FormData) {
+  const { tenant, actor } = await requireClient();
+  const svc = await bookingService();
+  let created: { bookingId: string } | undefined;
+  const err = await attempt(async () => {
+    created = await svc.bookAppointment(tenant.id, {
+      doctorId: str(f, "doctorId"), startsAt: str(f, "startsAt"), patientName: str(f, "patientName"), patientPhone: str(f, "patientPhone"),
+      service: str(f, "service") || undefined, notes: str(f, "notes") || undefined, source: "staff", actor,
+    });
+  });
+  revalidatePath("/app", "layout");
+  if (created) redirect(`/app/bookings/${created.bookingId}?created=1`);
+  const keep = new URLSearchParams({ doctor: str(f, "doctorId"), date: str(f, "date"), err: err ?? "unknown", name: str(f, "patientName"), phone: str(f, "patientPhone"), service: str(f, "service") });
+  redirect(`/app/bookings/new?${keep}`);
+}
+
+export async function rescheduleBookingAction(f: FormData) {
+  const { tenant, actor } = await requireClient();
+  const id = str(f, "id");
+  const err = await attempt(async () => (await bookingService()).staffReschedule(tenant.id, id, str(f, "startsAt"), actor));
+  revalidatePath("/app", "layout");
+  redirect(`/app/bookings/${id}?${err ? `err=${err}` : "moved=1"}`);
+}
+
+export async function saveBookingNotesAction(f: FormData) {
+  const { tenant, actor } = await requireClient();
+  const id = str(f, "id");
+  const err = await attempt(async () => (await bookingService()).staffSetNotes(tenant.id, id, String(f.get("notes") ?? ""), actor));
+  revalidatePath("/app", "layout");
+  redirect(`/app/bookings/${id}?${err ? `err=${err}` : "saved=1"}`);
 }
 
 export async function requestTopUpAction(f: FormData) {
@@ -364,6 +403,23 @@ export async function adminSetCalendarAction(f: FormData) {
   await store.setDoctorCalendar(id, str(f, "doctorId"), str(f, "calendarId").slice(0, 300), actor);
   revalidatePath("/admin", "layout");
   back(f, `/admin/clients/${id}`);
+}
+
+export async function adminAddDoctorAction(f: FormData) {
+  const { actor } = await requireAdmin();
+  const id = str(f, "tenantId");
+  const name = str(f, "name").trim().slice(0, 120);
+  if (name) await store.addDoctor(id, { name, specialty: str(f, "specialty").trim().slice(0, 120) }, actor);
+  revalidatePath("/admin", "layout");
+  redirect(`/admin/clients/${id}#doctors`);
+}
+
+export async function adminRemoveDoctorAction(f: FormData) {
+  const { actor } = await requireAdmin();
+  const id = str(f, "tenantId");
+  await store.removeDoctor(id, str(f, "doctorId"), actor);
+  revalidatePath("/admin", "layout");
+  redirect(`/admin/clients/${id}#doctors`);
 }
 
 export async function adminTestCalendarAction(f: FormData) {

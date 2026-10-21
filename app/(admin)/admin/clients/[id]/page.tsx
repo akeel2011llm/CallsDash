@@ -7,7 +7,7 @@ import { planNames } from "@/lib/plans";
 import { PlanPicker } from "@/components/PlanPicker";
 import { getAgent, getAgentVersions, getDoctors, getAudit, getLedger, getTenant, getWallet, listPackages } from "@/lib/data";
 import {
-  adminPermissionsAction, adminRenewAction, adminSetCalendarAction, adminTestCalendarAction, adminRollbackAction, adminTenantSettingsAction, adminTopUpAction, adminDeleteTenantAction, adminAddPlanAction, adminEndPlanAction, viewAsClient,
+  adminPermissionsAction, adminRenewAction, adminSetCalendarAction, adminTestCalendarAction, adminAddDoctorAction, adminRemoveDoctorAction, adminRollbackAction, adminTenantSettingsAction, adminTopUpAction, adminDeleteTenantAction, adminAddPlanAction, adminEndPlanAction, viewAsClient,
 } from "@/lib/actions";
 import { Badge, Notice, PageHead, Stat } from "@/components/ui";
 import { SubmitButton } from "@/components/SubmitButton";
@@ -139,9 +139,17 @@ export default async function ClientAdmin({ params, searchParams }: { params: Pr
             <input name="calendarId" defaultValue={d.googleCalendarId ?? ""} placeholder="clinic@group.calendar.google.com" style={{ flex: 1, minWidth: 220 }} dir="ltr" />
             <SubmitButton className="btn small" type="submit">{t("common.save")}</SubmitButton>
             <SubmitButton className="btn small ghost" type="submit" formAction={adminTestCalendarAction}>{t("admin.cal.test")}</SubmitButton>
+            <SubmitButton className="btn small ghost" type="submit" formAction={adminRemoveDoctorAction}>{t("admin.doctor.remove")}</SubmitButton>
             {calResult?.doctorId === d.id && <Badge tone={calResult.result === "ok" ? "ok" : "warn"}>{t(`admin.cal.${calResult.result}` as Key)}</Badge>}
           </form>
         ))}
+        {doctors.length === 0 && <small className="muted">{t("admin.doctor.none")}</small>}
+        <form action={adminAddDoctorAction} className="row">
+          <input type="hidden" name="tenantId" value={id} />
+          <input name="name" required placeholder={t("admin.doctor.name")} style={{ minWidth: 180 }} />
+          <input name="specialty" placeholder={t("admin.doctor.specialty")} style={{ minWidth: 160 }} />
+          <SubmitButton className="btn small" type="submit">{t("admin.doctor.add")}</SubmitButton>
+        </form>
       </section>
 
       <section className="card stack">

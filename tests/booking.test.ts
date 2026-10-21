@@ -1,7 +1,7 @@
 import { generateKeyPairSync } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { createBookingService, ToolError } from "@/lib/booking";
-import { createGoogleCalendar, type Calendar } from "@/lib/google-calendar";
+import { createGoogleCalendar, DEFAULT_REMINDERS, type Calendar, type EventInput } from "@/lib/google-calendar";
 import { createPgData, type Db, type Q } from "@/lib/data/pg";
 import { makeDb } from "./helpers/pgdb";
 
@@ -15,16 +15,18 @@ async function setup() {
   const t = await data.createTenant({ name: "Cal Clinic", nameAr: "", color: "#112233", domain: "", planType: "package", actor: "x" });
   const doc = (await q<{ id: string }>(`insert into doctors (tenant_id, name, google_calendar_id) values ($1,'Dr. A','cal-a') returning id`, [t.id]))[0].id;
   const events: Record<string, { start: string; end: string }> = {};
+  const full: Record<string, EventInput> = {};
+  let nextEvent = 0;
   const blocked: { start: string; end: string }[] = [];
   let failBusy = false;
   const calendar: Calendar = {
     async busy() { if (failBusy) throw new Error("403"); return blocked; },
-    async createEvent(_c, e) { const id = `ev${Object.keys(events).length + 1}`; events[id] = { start: e.startIso, end: e.endIso }; return id; },
-    async moveEvent(_c, id, s, e) { events[id] = { start: s, end: e }; },
+    async createEvent(_c, e) { const id = `ev${++nextEvent}`; events[id] = { start: e.startIso, end: e.endIso }; full[id] = e; return id; },
+    async updateEvent(_c, id, e) { events[id] = { start: e.startIso, end: e.endIso }; full[id] = e; },
     async deleteEvent(_c, id) { delete events[id]; },
   };
   const svc = createBookingService(data, calendar, () => NOW);
-  return { data, t, doc, svc, events, blocked, fail: (v: boolean) => (failBusy = v), q };
+  return { data, t, doc, svc, events, full, blocked, fail: (v: boolean) => (failBusy = v), q };
 }
 const WED_10 = "2026-10-21T07:00:00.000Z"; // 10:00 local
 const phone = "+973 3912 3456";
@@ -76,6 +78,41 @@ describe("booking service", () => {
     await svc.bookAppointment(t.id, { doctorId: doc, startsAt: "2026-10-21T08:00:00Z", patientName: "C", patientPhone: "+973 3555 4444" });
   });
 
+  it("lets staff book, move, complete, cancel and restore, keeping the doctor's calendar in step", async () => {
+    const { svc, t, doc, events, full, data } = await setup();
+    const made = await svc.bookAppointment(t.id, { doctorId: doc, startsAt: WED_10, patientName: "Maryam", patientPhone: phone, service: "Check-up", notes: "Prefers a female nurse", source: "staff", actor: "reception@x" });
+    expect(made.calendarSaved).toBe(true);
+    const id = made.bookingId;
+    expect((await data.getBookings(t.id))[0]).toMatchObject({ source: "staff", notes: "Prefers a female nurse" });
+    expect(Object.values(full)[0].description).toMatch(/Notes: Prefers a female nurse[\s\S]*Booked by the clinic team/);
+
+    const moved = await svc.staffReschedule(t.id, id, "2026-10-21T08:00:00Z", "reception@x");
+    expect(moved).toMatchObject({ status: "rescheduled", startsAt: "2026-10-21T08:00:00.000Z" });
+    expect(Object.values(events)).toEqual([{ start: "2026-10-21T08:00:00.000Z", end: "2026-10-21T08:30:00.000Z" }]);
+    await svc.bookAppointment(t.id, { doctorId: doc, startsAt: WED_10, patientName: "Other", patientPhone: "+973 3777 8888", source: "staff" });
+    await expect(svc.staffReschedule(t.id, id, WED_10, "x")).rejects.toMatchObject({ code: "slot_taken" });
+
+    await svc.staffSetNotes(t.id, id, "Bring insurance card", "reception@x");
+    expect(Object.values(full).some((e) => /Notes: Bring insurance card/.test(e.description ?? ""))).toBe(true);
+
+    expect((await svc.staffSetStatus(t.id, id, "cancelled", "reception@x")).status).toBe("cancelled");
+    expect(Object.keys(events)).toHaveLength(1); // only the other patient's event is left
+    await expect(svc.staffReschedule(t.id, id, "2026-10-21T09:00:00Z", "x")).rejects.toMatchObject({ code: "not_active" });
+    const restored = await svc.staffSetStatus(t.id, id, "confirmed", "reception@x");
+    expect(restored.status).toBe("confirmed");
+    expect(restored.calendarEventId).toBeTruthy();
+    expect(Object.keys(events)).toHaveLength(2);
+
+    // a cancelled booking cannot come back onto a time somebody else has taken since
+    await svc.staffSetStatus(t.id, id, "cancelled", "x");
+    await svc.bookAppointment(t.id, { doctorId: doc, startsAt: "2026-10-21T08:00:00Z", patientName: "Third", patientPhone: "+973 3000 1111", source: "staff" });
+    await expect(svc.staffSetStatus(t.id, id, "confirmed", "x")).rejects.toMatchObject({ code: "slot_taken" });
+
+    await svc.staffSetStatus(t.id, (await svc.bookAppointment(t.id, { doctorId: doc, startsAt: "2026-10-21T09:00:00Z", patientName: "Z", patientPhone: "+973 3222 3333" })).bookingId, "completed", "x");
+    await expect(svc.staffSetStatus(t.id, id, "bogus" as never, "x")).rejects.toMatchObject({ code: "bad_status" });
+    await expect(svc.staffSetStatus(t.id, "00000000-0000-0000-0000-000000000000", "cancelled", "x")).rejects.toMatchObject({ code: "not_found" });
+  });
+
   it("never books blind when the calendar cannot be read", async () => {
     const { svc, t, doc, fail, data } = await setup();
     fail(true);
@@ -87,7 +124,7 @@ describe("booking service", () => {
 
   it("keeps the booking and raises an alert if only the calendar write fails", async () => {
     const { data, t, doc } = await setup();
-    const broken: Calendar = { busy: async () => [], createEvent: async () => { throw new Error("quota"); }, moveEvent: async () => {}, deleteEvent: async () => {} };
+    const broken: Calendar = { busy: async () => [], createEvent: async () => { throw new Error("quota"); }, updateEvent: async () => {}, deleteEvent: async () => {} };
     const svc = createBookingService(data, broken, () => NOW);
     await svc.bookAppointment(t.id, { doctorId: doc, startsAt: WED_10, patientName: "A", patientPhone: phone });
     expect(await data.getBookings(t.id)).toHaveLength(1);
@@ -110,6 +147,8 @@ describe("google calendar client", () => {
     const cal = createGoogleCalendar({ client_email: "svc@p.iam", private_key: pem }, fake, () => 1_800_000_000_000);
     expect(await cal.busy("cal@x", "2026-10-21T00:00:00Z", "2026-10-22T00:00:00Z")).toEqual([{ start: "a", end: "b" }]);
     expect(await cal.createEvent("cal@x", { summary: "s", startIso: "x", endIso: "y" })).toBe("evt1");
+    const eventCall = calls.find((x) => x.url.endsWith("/events"))!;
+    expect(JSON.parse(String(eventCall.init.body)).reminders).toEqual({ useDefault: false, overrides: DEFAULT_REMINDERS });
 
     const form = new URLSearchParams(String(calls[0].init.body));
     const [h, c, sig] = form.get("assertion")!.split(".");
