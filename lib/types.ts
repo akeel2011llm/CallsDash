@@ -174,7 +174,7 @@ export interface Tenant {
 }
 
 export interface Integrations {
-  elevenlabs?: { kbDocId?: string; syncedAt?: string; error?: string };
+  elevenlabs?: { kbDocId?: string; syncedAt?: string; error?: string; /** Extra settings ElevenLabs refused on the last sync; the agent still works without them. */ warnings?: { group: string; detail: string }[] };
   whatsapp?: { phoneNumberId?: string; displayNumber?: string; confirmTemplate?: string; confirmTemplateLang?: string };
   /** `accountId` is the Instagram business account id Meta sends in webhooks; `inboundUrl` is the custom channel address copied from ElevenLabs. */
   instagram?: { accountId?: string; username?: string; inboundUrl?: string };
@@ -291,6 +291,12 @@ export interface Conversation {
   /** A person has looked at the flags. */
   reviewed: boolean;
 }
+
+/** A finished conversation as it arrives from ElevenLabs, before it is charged and stored. */
+export type NewConversation = Omit<Conversation, "id" | "tenantId" | "creditsCharged" | "costUsd" | "flags" | "reviewed"> & {
+  /** Flags ElevenLabs' own post-call analysis raised (the intent and urgency it read from the conversation). */
+  aiFlags?: FlagKind[];
+};
 
 export interface KnowledgeItem {
   id: string;

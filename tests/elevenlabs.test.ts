@@ -44,4 +44,14 @@ describe("parsePostCall", () => {
     const r = parsePostCall({ ...payload, data: { ...payload.data, transcript: [] } })!;
     expect(r.conversation.outcome).toBe("abandoned");
   });
+  it("reads ElevenLabs' own analysis: intent, urgency and mood", () => {
+    const d = (r: Record<string, unknown>) => ({ ...payload, data: { ...payload.data, analysis: { transcript_summary: "x", data_collection_results: r } } });
+    const emergency = parsePostCall(d({ outcome: { value: "handed_off" }, intent: { value: "complaint" }, urgent: { value: true }, caller_sentiment: { value: "negative" } }))!;
+    expect(emergency.conversation.aiFlags).toEqual(["emergency", "complaint"]);
+    expect(emergency.conversation.sentiment).toBe("negative");
+    expect(parsePostCall(d({ intent: { value: "lead" } }))!.conversation.aiFlags).toEqual(["lead"]);
+    const plain = parsePostCall(d({ intent: { value: "question" }, urgent: { value: false } }))!;
+    expect(plain.conversation.aiFlags).toBeUndefined();
+    expect(plain.conversation.sentiment).toBe("neutral");
+  });
 });

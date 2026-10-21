@@ -48,10 +48,17 @@ export default async function Channels({ params, searchParams }: { params: Promi
         </div>
         <p className="muted">{t("channels.agent.help")}</p>
         {el?.error && <Notice tone="warn"><strong>{t("channels.agent.error")}:</strong> <span dir="ltr">{el.error}</span></Notice>}
+        {el?.warnings?.length ? (
+          <Notice tone="warn">
+            <strong>{t("channels.agent.warnings")}</strong>
+            <ul>{el.warnings.map((w) => <li key={w.group}>{t(`channels.group.${w.group}` as Key)}: <span dir="ltr">{w.detail}</span></li>)}</ul>
+          </Notice>
+        ) : null}
         <dl className="scan-grid">
           {agent.elevenLabsAgentId && <><dt>ID</dt><dd dir="ltr"><code>{agent.elevenLabsAgentId}</code> · <a href={`https://elevenlabs.io/app/agents`} target="_blank" rel="noreferrer">{t("channels.agent.open")}</a></dd></>}
           {el?.syncedAt && <><dt>{t("channels.agent.synced")}</dt><dd>{fmtDateTime(el.syncedAt, locale)}</dd></>}
         </dl>
+        <small className="muted">{t("channels.agent.extras")}</small>
         <form action={syncAgentAction}>{hidden}<SubmitButton className="btn" type="submit">{agent.elevenLabsAgentId ? t("channels.agent.sync") : t("channels.agent.create")}</SubmitButton></form>
       </section>
 

@@ -74,6 +74,11 @@ export const widgetHostnames = (t: Pick<Tenant, "allowedDomains">) => [...new Se
 export const ENGLISH_TTS_MODEL = "eleven_flash_v2";
 export const ARABIC_TTS_MODEL = "eleven_flash_v2_5";
 
+export const OUTCOME_ITEM = {
+  type: "string", enum: ["booked", "answered", "handed_off", "abandoned"],
+  description: "How the conversation ended: booked (an appointment was booked or changed), answered (questions answered), handed_off (staff will follow up or a message was taken), abandoned (the person left without a request).",
+};
+
 /** The body for creating or updating the client's agent in ElevenLabs. Updating sends the same body, so the agent always matches CallsDash. */
 export function buildAgentConfig(i: AgentConfigInput) {
   const { tenant, settings } = i;
@@ -123,12 +128,7 @@ export function buildAgentConfig(i: AgentConfigInput) {
         },
       },
       // lib/elevenlabs.ts reads this to record how each conversation ended
-      data_collection: {
-        outcome: {
-          type: "string", enum: ["booked", "answered", "handed_off", "abandoned"],
-          description: "How the conversation ended: booked (an appointment was booked or changed), answered (questions answered), handed_off (staff will follow up or a message was taken), abandoned (the person left without a request).",
-        },
-      },
+      data_collection: { outcome: OUTCOME_ITEM },
     },
   };
 }
