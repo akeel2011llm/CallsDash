@@ -1,20 +1,22 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getT } from "@/lib/i18n";
+import { getT, type Key } from "@/lib/i18n";
 import { fmtDate, fmtDateTime, fmtNum } from "@/lib/format";
 import { addMonths } from "@/lib/credits";
 import { planNames } from "@/lib/plans";
 import { PlanPicker } from "@/components/PlanPicker";
 import { getAgent, getAgentVersions, getDoctors, getAudit, getLedger, getTenant, getWallet, listPackages } from "@/lib/data";
 import {
-  adminPermissionsAction, adminRenewAction, adminSetCalendarAction, adminRollbackAction, adminTenantSettingsAction, adminTopUpAction, adminDeleteTenantAction, adminAddPlanAction, adminEndPlanAction, viewAsClient,
+  adminPermissionsAction, adminRenewAction, adminSetCalendarAction, adminTestCalendarAction, adminRollbackAction, adminTenantSettingsAction, adminTopUpAction, adminDeleteTenantAction, adminAddPlanAction, adminEndPlanAction, viewAsClient,
 } from "@/lib/actions";
 import { Badge, Notice, PageHead, Stat } from "@/components/ui";
 import { SubmitButton } from "@/components/SubmitButton";
 
-export default async function ClientAdmin({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ saved?: string; error?: string }> }) {
+export default async function ClientAdmin({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ saved?: string; error?: string; cal?: string }> }) {
   const { id } = await params;
-  const { saved, error } = await searchParams;
+  const { saved, error, cal } = await searchParams;
+  const [calDoctor, calOutcome] = (cal ?? "").split(":");
+  const calResult = calOutcome && ["ok", "no_id", "no_key", "key_rejected", "not_shared", "other"].includes(calOutcome) ? { doctorId: calDoctor, result: calOutcome } : null;
   const tenant = await getTenant(id);
   if (!tenant) notFound();
   const [{ t, locale }, w, agent, versions, doctors, ledger, audit, catalogue] = await Promise.all([
@@ -136,6 +138,8 @@ export default async function ClientAdmin({ params, searchParams }: { params: Pr
             <span style={{ minWidth: 180 }}>{d.name}</span>
             <input name="calendarId" defaultValue={d.googleCalendarId ?? ""} placeholder="clinic@group.calendar.google.com" style={{ flex: 1, minWidth: 220 }} dir="ltr" />
             <SubmitButton className="btn small" type="submit">{t("common.save")}</SubmitButton>
+            <SubmitButton className="btn small ghost" type="submit" formAction={adminTestCalendarAction}>{t("admin.cal.test")}</SubmitButton>
+            {calResult?.doctorId === d.id && <Badge tone={calResult.result === "ok" ? "ok" : "warn"}>{t(`admin.cal.${calResult.result}` as Key)}</Badge>}
           </form>
         ))}
       </section>
