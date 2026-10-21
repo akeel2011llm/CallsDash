@@ -46,7 +46,7 @@ export function saveProfile(p: Profile, actor: string) {
   audit(actor, `User ${i >= 0 ? "updated" : "created"}: ${p.email} (${p.role})`, p.tenantId ?? undefined);
 }
 
-export function patchProfile(userId: string, patch: Partial<Pick<Profile, "role" | "fullName" | "disabled" | "mustChangePassword">>, actor: string, note: string) {
+export function patchProfile(userId: string, patch: Partial<Pick<Profile, "role" | "fullName" | "disabled" | "mustChangePassword" | "email" | "doctorId">>, actor: string, note: string) {
   const p = db().profiles.find((x) => x.id === userId);
   if (!p) return;
   Object.assign(p, patch);
@@ -308,13 +308,14 @@ export function createBooking(tenantId: string, b: Omit<Booking, "id" | "tenantI
   return booking;
 }
 
-export function updateBooking(tenantId: string, bookingId: string, patch: Partial<Pick<Booking, "startsAt" | "status" | "calendarEventId" | "notes">>, actor: string): Booking {
+export function updateBooking(tenantId: string, bookingId: string, patch: Partial<Pick<Booking, "startsAt" | "status" | "calendarEventId" | "notes" | "patientName" | "patientPhone" | "service" | "doctorId">>, actor: string): Booking {
   const d = db();
   const b = d.bookings.find((x) => x.tenantId === tenantId && x.id === bookingId);
   if (!b) throw new Error("booking not found");
   const startsAt = patch.startsAt ?? b.startsAt;
-  if (d.bookings.some((x) => x.id !== b.id && x.doctorId === b.doctorId && x.startsAt === startsAt && (x.status === "confirmed" || x.status === "rescheduled"))
-    && (patch.startsAt || patch.status === "confirmed")) throw new SlotTakenError();
+  const doctorId = patch.doctorId ?? b.doctorId;
+  if (d.bookings.some((x) => x.id !== b.id && x.doctorId === doctorId && x.startsAt === startsAt && (x.status === "confirmed" || x.status === "rescheduled"))
+    && (patch.startsAt || patch.doctorId || patch.status === "confirmed")) throw new SlotTakenError();
   Object.assign(b, patch);
   audit(actor, `Booking ${bookingId} updated`, tenantId);
   return b;
@@ -355,11 +356,11 @@ export function setPermissions(tenantId: string, p: Permissions, actor: string) 
   audit(actor, "Client permissions changed", tenantId);
 }
 
-export function updateTenant(tenantId: string, patch: Partial<Pick<Tenant, "zeroBalancePolicy" | "status" | "allowedDomains" | "lowBalanceThreshold">> & { branding?: Partial<Tenant["branding"]> }, actor: string) {
+export function updateTenant(tenantId: string, patch: Partial<Pick<Tenant, "zeroBalancePolicy" | "status" | "allowedDomains" | "lowBalanceThreshold" | "name" | "retentionDays" | "closures">> & { branding?: Partial<Tenant["branding"]> }, actor: string) {
   const t = getTenant(tenantId)!;
   const { branding, ...rest } = patch;
-  if (patch.allowedDomains) {
-    const clash = findDuplicate(db().tenants.filter((x) => x.id !== tenantId), { domains: patch.allowedDomains });
+  if (patch.allowedDomains || patch.name) {
+    const clash = findDuplicate(db().tenants.filter((x) => x.id !== tenantId), { name: patch.name, domains: patch.allowedDomains ?? [] });
     if (clash) throw new DuplicateError(clash);
   }
   Object.assign(t, rest);
@@ -458,4 +459,75 @@ export function creditsOwed() {
 
 export function findTenantByAgent(agentId: string) {
   return db().tenants.find((t) => db().agents[t.id]?.elevenLabsAgentId === agentId);
+}
+
+/* ---------- edit and delete everywhere ---------- */
+
+export function updateDoctor(tenantId: string, doctorId: string, patch: Partial<Pick<Doctor, "name" | "specialty" | "color" | "active" | "hours" | "timeOff">>, actor: string): Doctor {
+  const doc = db().doctors.find((x) => x.tenantId === tenantId && x.id === doctorId);
+  if (!doc) throw new Error("doctor not found");
+  Object.assign(doc, patch);
+  audit(actor, `Doctor updated: ${doc.name}`, tenantId);
+  return doc;
+}
+
+export function deleteBooking(tenantId: string, bookingId: string, actor: string) {
+  const d = db();
+  const b = d.bookings.find((x) => x.tenantId === tenantId && x.id === bookingId);
+  if (!b) throw new Error("booking not found");
+  d.bookings = d.bookings.filter((x) => x !== b);
+  audit(actor, `Booking deleted: ${b.patientName} ${b.startsAt}`, tenantId);
+}
+
+export function updateKnowledge(tenantId: string, itemId: string, p: { question: string; answer: string; language: Locale }, actor: string) {
+  const k = db().knowledge.find((x) => x.tenantId === tenantId && x.id === itemId);
+  if (!k) return;
+  Object.assign(k, p);
+  audit(actor, "Knowledge item edited", tenantId);
+}
+
+export function deleteStaffRequest(tenantId: string, requestId: string, actor: string) {
+  const d = db();
+  const before = d.staffRequests.length;
+  d.staffRequests = d.staffRequests.filter((x) => !(x.tenantId === tenantId && x.id === requestId));
+  if (d.staffRequests.length < before) audit(actor, "Message deleted", tenantId);
+}
+
+/** Removes the transcript and summary (a patient's deletion request). The credits it used stay in the ledger. */
+export function deleteConversation(tenantId: string, conversationId: string, actor: string) {
+  const d = db();
+  const before = d.conversations.length;
+  d.conversations = d.conversations.filter((x) => !(x.tenantId === tenantId && x.id === conversationId));
+  if (d.conversations.length < before) audit(actor, "Conversation deleted", tenantId);
+}
+
+/** A manual correction: positive adds a top-up batch, negative takes credits away (oldest first). */
+export function adjustCredits(tenantId: string, credits: number, note: string, actor: string) {
+  const d = db();
+  const t = getTenant(tenantId)!;
+  if (credits > 0) d.batches = addTopUp(d.batches, { id: id("cb"), tenantId, amount: credits, now: now(), kind: topUpKind(t.plans), note });
+  else {
+    const mine = d.batches.filter((b) => b.tenantId === tenantId);
+    const res = deduct(mine, -credits, now());
+    d.batches = [...d.batches.filter((b) => b.tenantId !== tenantId), ...res.batches];
+  }
+  d.ledger.push({ id: id("l"), tenantId, at: now().toISOString(), kind: "adjustment", credits, note });
+  audit(actor, `Credit adjustment ${credits > 0 ? "+" : ""}${credits}: ${note}`, tenantId);
+}
+
+export function declineTopUpRequest(requestId: string, actor: string) {
+  const r = db().topUpRequests.find((x) => x.id === requestId && x.status === "open");
+  if (!r) return;
+  r.status = "done";
+  audit(actor, `Declined a top-up request of ${r.credits} credits`, r.tenantId);
+}
+
+/** Only a package no client has ever been given can be deleted; otherwise archive it. */
+export function deletePackage(packageId: string, actor: string): boolean {
+  const d = db();
+  if (d.tenants.some((t) => t.plans.some((p) => p.packageId === packageId))) return false;
+  const pkg = d.packages.find((x) => x.id === packageId);
+  d.packages = d.packages.filter((x) => x.id !== packageId);
+  if (pkg) audit(actor, `Deleted package "${pkg.name}"`);
+  return true;
 }

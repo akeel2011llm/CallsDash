@@ -120,6 +120,43 @@ export async function changeRole(d: UserDeps, actor: UserActor, userId: string, 
   await d.data.patchProfile(p.id, { role }, actor.label, `Role changed to ${role}`);
 }
 
+export interface UpdateUserInput { fullName?: string; email?: string; /** Doctors only: which of the clinic's doctors this sign-in is. */ doctorId?: string | null }
+
+/**
+ * Fixes a person's name, sign-in email or (for a doctor) the doctor they are linked to. The sign-in is changed first,
+ * so a refused email leaves both sides as they were.
+ */
+export async function updateUser(d: UserDeps, actor: UserActor, userId: string, input: UpdateUserInput) {
+  const p = await target(d, actor, userId);
+  const patch: { fullName?: string; email?: string; doctorId?: string | null } = {};
+  if (input.fullName !== undefined) {
+    const fullName = input.fullName.trim().replace(/\s+/g, " ").slice(0, 120);
+    if (!fullName) throw new UserError("name_missing");
+    if (fullName !== p.fullName) patch.fullName = fullName;
+  }
+  if (input.email !== undefined) {
+    const email = normalizeEmail(input.email);
+    if (!EMAIL.test(email)) throw new UserError("email_invalid");
+    if (email !== p.email.toLowerCase()) {
+      if ((await d.data.listProfiles()).some((x) => x.id !== p.id && x.email.toLowerCase() === email)) throw new UserError("email_taken");
+      patch.email = email;
+    }
+  }
+  if (p.role === "doctor" && input.doctorId !== undefined && input.doctorId !== p.doctorId) {
+    const doctorId = input.doctorId || null;
+    if (!doctorId || !(await d.data.getDoctors(p.tenantId!)).some((x) => x.id === doctorId)) throw new UserError("doctor_missing");
+    if ((await d.data.listProfiles(p.tenantId!)).some((x) => x.id !== p.id && x.role === "doctor" && x.doctorId === doctorId)) throw new UserError("doctor_taken");
+    patch.doctorId = doctorId;
+  }
+  if (Object.keys(patch).length === 0) return;
+  if (patch.email || patch.fullName) {
+    try { await d.auth.updateUser(p.id, { email: patch.email, fullName: patch.fullName }); }
+    catch (e) { if (e instanceof EmailTakenError) throw new UserError("email_taken"); throw e; }
+  }
+  try { await d.data.patchProfile(p.id, patch, actor.label, "User details changed"); }
+  catch (e) { if (e instanceof DuplicateError) throw new UserError("email_taken"); throw e; }
+}
+
 export async function deleteUser(d: UserDeps, actor: UserActor, userId: string) {
   const p = await target(d, actor, userId);
   if (p.id === actor.userId) throw new UserError("self");

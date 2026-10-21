@@ -5,11 +5,14 @@ import { getT } from "@/lib/i18n";
 import { fmtDate, fmtDateTime, fmtDuration, fmtNum } from "@/lib/format";
 import { getConversation } from "@/lib/data";
 import { reviewConversationAction } from "@/lib/actions";
+import { deleteConversationAction } from "@/lib/manage-actions";
+import { ConfirmDelete } from "@/components/Confirm";
 import { SubmitButton } from "@/components/SubmitButton";
 import { Badge, Flag, Notice, PageHead } from "@/components/ui";
 
-export default async function ConversationPage({ params }: { params: Promise<{ id: string }> }) {
-  const { tenant } = await requireClient();
+export default async function ConversationPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ err?: string }> }) {
+  const { tenant, staffRole } = await requireClient();
+  const { err } = await searchParams;
   const { id } = await params;
   const c = await getConversation(tenant.id, id);
   if (!c) notFound();
@@ -18,6 +21,7 @@ export default async function ConversationPage({ params }: { params: Promise<{ i
   return (
     <>
       <PageHead title={t("conversations.title")} actions={<Link className="btn ghost" href="/app/conversations">{t("common.back")}</Link>} />
+      {err === "confirm" && <Notice tone="warn">{t("doctors.n.confirm")}</Notice>}
       {c.flags.length > 0 && (
         <section className="card attn-item" style={{ gap: ".6rem" }}>
           <div className="row" style={{ justifyContent: "space-between" }}>
@@ -59,6 +63,12 @@ export default async function ConversationPage({ params }: { params: Promise<{ i
           ))}
         </div>
       </section>
+      {staffRole === "manager" && (
+        <section className="card danger-zone">
+          <ConfirmDelete action={deleteConversationAction} summary={t("conversations.delete")} warning={t("conversations.delete.warn")}
+            tick={t("common.confirmTick")} button={t("conversations.delete")} fields={{ id: c.id }} />
+        </section>
+      )}
     </>
   );
 }

@@ -15,7 +15,7 @@ const live = (s: string) => s === "confirmed" || s === "rescheduled";
 
 export interface BookingScope { base: "/app" | "/doctor"; tenant: Tenant; /** Set for a doctor: they only ever see their own bookings. */ doctorId?: string }
 
-export async function BookingList({ base, tenant, doctorId, sp }: BookingScope & { sp: { doctor?: string; status?: string; view?: string; q?: string; err?: string } }) {
+export async function BookingList({ base, tenant, doctorId, sp }: BookingScope & { sp: { doctor?: string; status?: string; view?: string; q?: string; err?: string; deleted?: string } }) {
   const { t, locale } = await getT();
   const view: View = (VIEWS as readonly string[]).includes(sp.view ?? "") ? (sp.view as View) : "upcoming";
   const doctors = await getDoctors(tenant.id);
@@ -43,6 +43,7 @@ export async function BookingList({ base, tenant, doctorId, sp }: BookingScope &
     <>
       <PageHead title={t("bookings.title")} actions={<><Link className="btn" href={`${base}/bookings/new`}>{t("bookings.new")}</Link>{base === "/app" && <Link className="btn ghost" href="/app/calendar">{t("nav.calendar")}</Link>}</>} />
       {isBookingError(sp.err) && <Notice tone="warn">{t(`bookings.err.${sp.err}` as "bookings.err.slot_taken")}</Notice>}
+      {sp.deleted && <Notice tone="ok">{t("bookings.deleted")}</Notice>}
       <div className="grid">
         <Stat label={t("bookings.todayCount")} value={todayLive} />
         <Stat label={t("home.bookings")} value={upcomingLive} />

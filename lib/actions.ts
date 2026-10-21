@@ -9,10 +9,9 @@ import { supabaseConfigured, supabaseServer } from "./supabase";
 import * as store from "./data";
 import { DuplicateError } from "./errors";
 import { nameKey } from "./tenant-keys";
-import { googleCalendarFromEnv } from "./google-calendar";
 import { bookingService } from "./booking-service";
+import { autoSync } from "./auto-sync";
 import { ToolError } from "./booking";
-import { checkCalendar } from "./setup-check";
 import { cleanOpeningHours } from "./availability";
 import { cleanCatalogInput, type PlanInput } from "./plans";
 import { FLAG_KINDS, normalizeRules } from "./flags";
@@ -114,7 +113,7 @@ export async function saveAgentAction(f: FormData) {
     next.voiceAr = str(f, "voiceAr");
     changed.push("voice");
   }
-  if (changed.length) await store.saveAgent(tenant.id, next, actor, changed.join(", "));
+  if (changed.length) { await store.saveAgent(tenant.id, next, actor, changed.join(", ")); await autoSync(tenant.id, actor); }
   revalidatePath("/app", "layout");
   back(f, "/app/agent");
 }
@@ -126,6 +125,7 @@ export async function addKnowledgeAction(f: FormData) {
   if (q && a) await store.addKnowledge(tenant.id, q.slice(0, 500), a.slice(0, 2000), str(f, "language") === "ar" ? "ar" : "en", actor);
   const fromUnanswered = str(f, "unansweredId");
   if (fromUnanswered) await store.dismissUnanswered(tenant.id, fromUnanswered);
+  await autoSync(tenant.id, actor);
   revalidatePath("/app/knowledge");
   back(f, "/app/knowledge");
 }
@@ -134,6 +134,7 @@ export async function deleteKnowledgeAction(f: FormData) {
   const { tenant, actor } = await requireClient();
   if (!tenant.permissions.editKnowledge) throw new Error("forbidden");
   await store.deleteKnowledge(tenant.id, str(f, "id"), actor);
+  await autoSync(tenant.id, actor);
   revalidatePath("/app/knowledge");
   back(f, "/app/knowledge", "deleted=1");
 }
@@ -216,6 +217,7 @@ export async function setOpeningHoursAction(f: FormData) {
   const hours = cleanOpeningHours(raw);
   if (!hours) redirect("/app/calendar?hours=invalid#hours");
   await store.setOpeningHours(tenant.id, hours, actor);
+  await autoSync(tenant.id, actor);
   revalidatePath("/app", "layout");
   redirect("/app/calendar?hours=saved#hours");
 }
@@ -357,6 +359,7 @@ export async function adminTenantSettingsAction(f: FormData) {
     if (e instanceof DuplicateError) redirect(`/admin/clients/${id}?error=${e.field}`);
     throw e;
   }
+  await autoSync(id, actor);
   revalidatePath("/admin", "layout");
   back(f, `/admin/clients/${id}`);
 }
@@ -404,43 +407,6 @@ export async function adminBrandingAction(f: FormData) {
   revalidatePath("/admin", "layout");
   revalidatePath("/app", "layout");
   redirect(`/admin/clients/${id}/branding?${logoError ? "logo=bad" : "saved=1"}`);
-}
-
-export async function adminSetCalendarAction(f: FormData) {
-  const { actor } = await requireAdmin();
-  const id = str(f, "tenantId");
-  await store.setDoctorCalendar(id, str(f, "doctorId"), str(f, "calendarId").slice(0, 300), actor);
-  revalidatePath("/admin", "layout");
-  back(f, `/admin/clients/${id}`);
-}
-
-export async function adminAddDoctorAction(f: FormData) {
-  const { actor } = await requireAdmin();
-  const id = str(f, "tenantId");
-  const name = str(f, "name").trim().slice(0, 120);
-  if (name) await store.addDoctor(id, { name, specialty: str(f, "specialty").trim().slice(0, 120) }, actor);
-  revalidatePath("/admin", "layout");
-  redirect(`/admin/clients/${id}#doctors`);
-}
-
-export async function adminRemoveDoctorAction(f: FormData) {
-  const { actor } = await requireAdmin();
-  const id = str(f, "tenantId");
-  await store.removeDoctor(id, str(f, "doctorId"), actor);
-  revalidatePath("/admin", "layout");
-  redirect(`/admin/clients/${id}#doctors`);
-}
-
-export async function adminTestCalendarAction(f: FormData) {
-  await requireAdmin();
-  const id = str(f, "tenantId");
-  const doctorId = str(f, "doctorId");
-  const calendarId = str(f, "calendarId").slice(0, 300);
-  let cal = null;
-  try { cal = googleCalendarFromEnv(); } catch { /* unreadable key shows as key_rejected below */ }
-  const keyBroken = !cal && Boolean(process.env.GOOGLE_SERVICE_ACCOUNT_JSON);
-  const result = keyBroken ? "key_rejected" : await checkCalendar(cal, calendarId);
-  redirect(`/admin/clients/${id}?cal=${encodeURIComponent(doctorId)}:${result}#doctors`);
 }
 
 export async function adminRollbackAction(f: FormData) {

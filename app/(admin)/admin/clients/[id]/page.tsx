@@ -1,27 +1,28 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getT, type Key } from "@/lib/i18n";
+import { getT } from "@/lib/i18n";
 import { fmtDate, fmtDateTime, fmtNum } from "@/lib/format";
 import { addMonths } from "@/lib/credits";
 import { planNames } from "@/lib/plans";
 import { PlanPicker } from "@/components/PlanPicker";
-import { getAgent, getAgentVersions, getDoctors, getAudit, getLedger, getTenant, getWallet, listPackages } from "@/lib/data";
+import { getAgent, getAgentVersions, getBookings, getDoctors, getAudit, getLedger, getTenant, getTopUpRequests, getWallet, listPackages, listProfiles } from "@/lib/data";
 import {
-  adminPermissionsAction, adminRenewAction, adminSetCalendarAction, adminTestCalendarAction, adminAddDoctorAction, adminRemoveDoctorAction, adminRollbackAction, adminTenantSettingsAction, adminTopUpAction, adminDeleteTenantAction, adminAddPlanAction, adminEndPlanAction, viewAsClient,
+  adminPermissionsAction, adminRenewAction, adminRollbackAction, adminTenantSettingsAction, adminTopUpAction, adminDeleteTenantAction, adminAddPlanAction, adminEndPlanAction, viewAsClient,
 } from "@/lib/actions";
+import { adminAdjustCreditsAction, adminClientProfileAction, adminDeclineTopUpAction } from "@/lib/manage-actions";
+import { DoctorsManager } from "@/components/DoctorsManager";
 import { Badge, Notice, PageHead, Stat } from "@/components/ui";
 import { SubmitButton } from "@/components/SubmitButton";
 
-export default async function ClientAdmin({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ saved?: string; error?: string; cal?: string }> }) {
+export default async function ClientAdmin({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ saved?: string; error?: string; cal?: string; doc?: string; clash?: string }> }) {
   const { id } = await params;
-  const { saved, error, cal } = await searchParams;
-  const [calDoctor, calOutcome] = (cal ?? "").split(":");
-  const calResult = calOutcome && ["ok", "no_id", "no_key", "key_rejected", "not_shared", "other"].includes(calOutcome) ? { doctorId: calDoctor, result: calOutcome } : null;
+  const { saved, error, cal, doc, clash } = await searchParams;
   const tenant = await getTenant(id);
   if (!tenant) notFound();
-  const [{ t, locale }, w, agent, versions, doctors, ledger, audit, catalogue] = await Promise.all([
-    getT(), getWallet(id), getAgent(id), getAgentVersions(id), getDoctors(id), getLedger(id), getAudit(id), listPackages(),
+  const [{ t, locale }, w, agent, versions, doctors, ledger, audit, catalogue, bookings, logins, requests] = await Promise.all([
+    getT(), getWallet(id), getAgent(id), getAgentVersions(id), getDoctors(id), getLedger(id), getAudit(id), listPackages(), getBookings(id), listProfiles(id), getTopUpRequests(),
   ]);
+  const asked = requests.filter((r) => r.tenantId === id);
   const returnTo = `/admin/clients/${id}`;
   const perms = [
     ["editPrompt", "admin.perm.editPrompt"], ["editVoice", "admin.perm.editVoice"],
@@ -41,7 +42,27 @@ export default async function ClientAdmin({ params, searchParams }: { params: Pr
           </>
         }
       />
-      {(error === "name" || error === "domain" || error === "confirm" || error === "plan" || error === "lastPlan") && <Notice tone="warn">{t(`admin.err.${error}` as "admin.err.name")}</Notice>}
+      {(error === "name" || error === "domain" || error === "confirm" || error === "plan" || error === "lastPlan" || error === "adjust" || error === "adjustTooMuch") && <Notice tone="warn">{t(`admin.err.${error}` as "admin.err.name")}</Notice>}
+      {asked.length > 0 && (
+        <Notice tone="warn">
+          {asked.map((r) => (
+            <span key={r.id} className="row" style={{ justifyContent: "space-between" }}>
+              <span>{t("admin.request.line").replace("{n}", fmtNum(r.credits, locale, 0)).replace("{date}", fmtDate(r.at, locale))}</span>
+              <span className="row">
+                <form action={adminTopUpAction}>
+                  <input type="hidden" name="tenantId" value={id} /><input type="hidden" name="returnTo" value={returnTo} />
+                  <input type="hidden" name="credits" value={r.credits} /><input type="hidden" name="note" value="Top-up request" />
+                  <SubmitButton className="btn small" type="submit">{t("admin.request.approve").replace("{n}", fmtNum(r.credits, locale, 0))}</SubmitButton>
+                </form>
+                <form action={adminDeclineTopUpAction}>
+                  <input type="hidden" name="requestId" value={r.id} /><input type="hidden" name="returnTo" value={returnTo} />
+                  <SubmitButton className="btn small ghost" type="submit">{t("admin.request.decline")}</SubmitButton>
+                </form>
+              </span>
+            </span>
+          ))}
+        </Notice>
+      )}
       {saved && <Notice tone="ok">{t("agent.saved").split(".")[0]}.</Notice>}
       <div className="grid">
         <Stat label={t("admin.balance")} value={fmtNum(w.balance, locale, 1)} tone={w.low ? "warn" : undefined} hint={planNames(tenant.plans)} />
@@ -50,7 +71,7 @@ export default async function ClientAdmin({ params, searchParams }: { params: Pr
       </div>
 
       <div className="grid two">
-        <section className="card stack">
+        <section className="card stack" id="wallet">
           <h2>{t("admin.wallet")}</h2>
           <div className="table-wrap">
             <table>
@@ -73,6 +94,39 @@ export default async function ClientAdmin({ params, searchParams }: { params: Pr
             <SubmitButton className="btn" type="submit">{t("admin.grant")}</SubmitButton>
           </form>
           <small className="muted">{t("admin.grantHelp")}</small>
+          <details>
+            <summary style={{ cursor: "pointer" }}>{t("admin.adjust")}</summary>
+            <form action={adminAdjustCreditsAction} className="row" style={{ marginBlockStart: ".5rem", alignItems: "end" }}>
+              <input type="hidden" name="tenantId" value={id} /><input type="hidden" name="returnTo" value={returnTo} />
+              <label style={{ flex: 1 }}>{t("admin.adjust.credits")}<input name="credits" type="number" step="0.01" required placeholder="-50" /></label>
+              <label style={{ flex: 2 }}>{t("admin.adjust.reason")}<input name="note" required maxLength={120} placeholder={t("admin.adjust.reasonPh")} /></label>
+              <SubmitButton className="btn ghost" type="submit">{t("admin.adjust.apply")}</SubmitButton>
+            </form>
+            <small className="muted">{t("admin.adjust.help")}</small>
+          </details>
+        </section>
+
+        <section className="card" id="profile">
+          <form action={adminClientProfileAction} className="stack">
+            <input type="hidden" name="tenantId" value={id} /><input type="hidden" name="returnTo" value={returnTo} />
+            <h2>{t("admin.profile")}</h2>
+            <label>{t("admin.profile.name")}<input name="name" required maxLength={120} defaultValue={tenant.name} /></label>
+            <label>{t("common.status")}
+              <select name="status" defaultValue={tenant.status === "suspended" ? "suspended" : "live"}>
+                <option value="live">{t("admin.profile.active")}</option>
+                <option value="suspended">{t("admin.profile.suspended")}</option>
+              </select>
+            </label>
+            <small className="muted">{t("admin.profile.suspendHelp")}</small>
+            <label>{t("admin.profile.retention")}
+              <select name="retentionDays" defaultValue={String(tenant.retentionDays)}>
+                {[30, 60, 90, 180, 365].map((d) => <option key={d} value={d}>{t("admin.profile.days").replace("{n}", String(d))}</option>)}
+              </select>
+            </label>
+            <label>{t("admin.profile.low")}<input name="lowBalancePercent" type="number" min="0" max="90" step="1" defaultValue={Math.round(tenant.lowBalanceThreshold * 100)} /></label>
+            <small className="muted">{t("admin.profile.lowHelp")}</small>
+            <SubmitButton className="btn" type="submit">{t("common.save")}</SubmitButton>
+          </form>
         </section>
 
         <section className="card">
@@ -129,28 +183,7 @@ export default async function ClientAdmin({ params, searchParams }: { params: Pr
         </section>
       </div>
 
-      <section className="card stack" id="doctors">
-        <h2>{t("admin.doctors")}</h2>
-        <small className="muted">{t("admin.doctors.help")}</small>
-        {doctors.map((d) => (
-          <form key={d.id} action={adminSetCalendarAction} className="row">
-            <input type="hidden" name="tenantId" value={id} /><input type="hidden" name="doctorId" value={d.id} /><input type="hidden" name="returnTo" value={returnTo} />
-            <span style={{ minWidth: 180 }}>{d.name}</span>
-            <input name="calendarId" defaultValue={d.googleCalendarId ?? ""} placeholder="clinic@group.calendar.google.com" style={{ flex: 1, minWidth: 220 }} dir="ltr" />
-            <SubmitButton className="btn small" type="submit">{t("common.save")}</SubmitButton>
-            <SubmitButton className="btn small ghost" type="submit" formAction={adminTestCalendarAction}>{t("admin.cal.test")}</SubmitButton>
-            <SubmitButton className="btn small ghost" type="submit" formAction={adminRemoveDoctorAction}>{t("admin.doctor.remove")}</SubmitButton>
-            {calResult?.doctorId === d.id && <Badge tone={calResult.result === "ok" ? "ok" : "warn"}>{t(`admin.cal.${calResult.result}` as Key)}</Badge>}
-          </form>
-        ))}
-        {doctors.length === 0 && <small className="muted">{t("admin.doctor.none")}</small>}
-        <form action={adminAddDoctorAction} className="row">
-          <input type="hidden" name="tenantId" value={id} />
-          <input name="name" required placeholder={t("admin.doctor.name")} style={{ minWidth: 180 }} />
-          <input name="specialty" placeholder={t("admin.doctor.specialty")} style={{ minWidth: 160 }} />
-          <SubmitButton className="btn small" type="submit">{t("admin.doctor.add")}</SubmitButton>
-        </form>
-      </section>
+      <DoctorsManager tenant={tenant} doctors={doctors} bookings={bookings} logins={logins} returnTo={returnTo} sp={{ doc, cal, clash }} t={t} locale={locale} />
 
       <section className="card stack">
         <h2>{t("credits.history")}</h2>

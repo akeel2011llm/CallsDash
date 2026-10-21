@@ -32,7 +32,7 @@ export default async function ClientLayout({ children }: { children: React.React
         { href: "/app/voice", label: t("nav.voice"), icon: "mic" },
         { href: "/app/website", label: t("nav.website"), icon: "globe" },
         { href: "/app/credits", label: t("nav.credits"), icon: "wallet", badge: w.low ? "!" : undefined, group: t("nav.g.account") },
-        ...(staffRole === "manager" ? [{ href: "/app/team", label: t("nav.team"), icon: "users" }] : []),
+        ...(staffRole === "manager" ? [{ href: "/app/doctors", label: t("nav.doctors"), icon: "user" }, { href: "/app/team", label: t("nav.team"), icon: "users" }] : []),
       ]}
     >
       {children}

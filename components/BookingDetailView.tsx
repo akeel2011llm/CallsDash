@@ -9,15 +9,19 @@ import { rescheduleBookingAction, saveBookingNotesAction, setBookingStatusAction
 import { Badge, Notice, PageHead } from "@/components/ui";
 import { SubmitButton } from "@/components/SubmitButton";
 import type { BookingScope } from "@/components/BookingList";
+import { deleteBookingAction, updateBookingDetailsAction } from "@/lib/manage-actions";
+import { ConfirmDelete } from "@/components/Confirm";
 
 export type BookingDetailParams = { date?: string; err?: string; created?: string; moved?: string; saved?: string };
 const tone = (s: string) => (s === "confirmed" || s === "completed" ? "ok" : s === "cancelled" ? "bad" : s === "no_show" ? "warn" : "info");
 
-export async function BookingDetailView({ base, tenant, doctorId, id, sp }: BookingScope & { id: string; sp: BookingDetailParams }) {
+/** `canDelete`: the clinic's manager. Everyone else cancels, which keeps the record. */
+export async function BookingDetailView({ base, tenant, doctorId, id, sp, canDelete = false }: BookingScope & { id: string; sp: BookingDetailParams; canDelete?: boolean }) {
   const { t, locale } = await getT();
   const booking = (await getBookings(tenant.id)).find((b) => b.id === id && (!doctorId || b.doctorId === doctorId));
   if (!booking) notFound();
-  const doctor = (await getDoctors(tenant.id)).find((d) => d.id === booking.doctorId);
+  const doctors = await getDoctors(tenant.id);
+  const doctor = doctors.find((d) => d.id === booking.doctorId);
   const active = booking.status === "confirmed" || booking.status === "rescheduled";
   const date = /^\d{4}-\d{2}-\d{2}$/.test(sp.date ?? "") ? sp.date! : dayKey(booking.startsAt);
   const slots = active && sp.date && doctor ? await daySlots(await bookingService(), tenant.id, doctor.id, date) : null;
@@ -33,6 +37,7 @@ export async function BookingDetailView({ base, tenant, doctorId, id, sp }: Book
     <>
       <PageHead title={booking.patientName} subtitle={fmtDateTime(booking.startsAt, locale)} actions={<Link className="btn ghost" href={`${base}/bookings`}>{t("common.back")}</Link>} />
       {isBookingError(sp.err) && <Notice tone="warn">{t(`bookings.err.${sp.err}` as "bookings.err.slot_taken")}</Notice>}
+      {sp.err === "confirm" && <Notice tone="warn">{t("doctors.n.confirm")}</Notice>}
       {sp.created && <Notice tone="ok">{t("bookings.created")}</Notice>}
       {sp.moved && <Notice tone="ok">{t("bookings.moved")}</Notice>}
       {sp.saved && <Notice tone="ok">{t("bookings.saved")}</Notice>}
@@ -55,6 +60,26 @@ export async function BookingDetailView({ base, tenant, doctorId, id, sp }: Book
           {!active && status("confirmed", t("bookings.restore"))}
         </div>
       </section>
+      <details className="card">
+        <summary style={{ cursor: "pointer" }}><strong>{t("bookings.editDetails")}</strong></summary>
+        <form action={updateBookingDetailsAction} className="stack" style={{ marginBlockStart: ".6rem" }}>
+          <input type="hidden" name="id" value={booking.id} />
+          <div className="row">
+            <label style={{ flex: 2, minWidth: 180 }}>{t("bookings.patient")}<input name="patientName" required maxLength={120} defaultValue={booking.patientName} /></label>
+            <label style={{ flex: 1, minWidth: 150 }}>{t("common.phone")}<input name="patientPhone" required maxLength={30} defaultValue={booking.patientPhone} dir="ltr" inputMode="tel" /></label>
+          </div>
+          <label>{t("common.service")}<input name="service" maxLength={120} defaultValue={booking.service} /></label>
+          {!doctorId && (
+            <label>{t("common.doctor")}
+              <select name="doctorId" defaultValue={booking.doctorId}>
+                {doctors.filter((d) => d.active !== false || d.id === booking.doctorId).map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+              </select>
+            </label>
+          )}
+          {!doctorId && <small className="muted">{t("bookings.changeDoctorHelp")}</small>}
+          <div><SubmitButton className="btn small" type="submit">{t("common.save")}</SubmitButton></div>
+        </form>
+      </details>
       <form action={saveBookingNotesAction} className="card stack">
         <input type="hidden" name="id" value={booking.id} />
         <label>{t("bookings.notes")}<textarea name="notes" rows={4} maxLength={1000} defaultValue={booking.notes ?? ""} /></label>
@@ -76,6 +101,12 @@ export async function BookingDetailView({ base, tenant, doctorId, id, sp }: Book
                 <SubmitButton className="btn small" type="submit">{t("bookings.moveHere")}</SubmitButton>
               </form>
             ))}
+        </section>
+      )}
+      {canDelete && (
+        <section className="card danger-zone">
+          <ConfirmDelete action={deleteBookingAction} summary={t("bookings.delete")} warning={t("bookings.delete.warn")}
+            tick={t("common.confirmTick")} button={t("bookings.delete")} fields={{ id: booking.id }} />
         </section>
       )}
     </>

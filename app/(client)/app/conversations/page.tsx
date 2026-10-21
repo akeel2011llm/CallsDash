@@ -3,11 +3,11 @@ import { requireClient } from "@/lib/auth";
 import { getT } from "@/lib/i18n";
 import { fmtDateTime, fmtDuration } from "@/lib/format";
 import { getConversations } from "@/lib/data";
-import { Badge, Flag, PageHead } from "@/components/ui";
+import { Badge, Flag, Notice, PageHead } from "@/components/ui";
 import { FLAG_KINDS } from "@/lib/flags";
 import { SubmitButton } from "@/components/SubmitButton";
 
-type SP = { q?: string; channel?: string; outcome?: string; lang?: string; flag?: string };
+type SP = { q?: string; channel?: string; outcome?: string; lang?: string; flag?: string; deleted?: string };
 
 export default async function ConversationsPage({ searchParams }: { searchParams: Promise<SP> }) {
   const { tenant } = await requireClient();
@@ -20,6 +20,7 @@ export default async function ConversationsPage({ searchParams }: { searchParams
   return (
     <>
       <PageHead title={t("conversations.title")} />
+      {sp.deleted && <Notice tone="ok">{t("conversations.deleted")}</Notice>}
       <form className="filters card" method="get">
         <label style={{ flex: 1, minWidth: 220 }}>{t("common.search")}<input name="q" defaultValue={sp.q ?? ""} placeholder={t("conversations.search")} /></label>
         <label>{t("common.channel")}

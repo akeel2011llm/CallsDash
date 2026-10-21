@@ -27,7 +27,7 @@ export default async function Team({ searchParams }: { searchParams: Promise<{ s
       {error && <Notice tone="warn">{t(`users.err.${error}` as "users.err.forbidden")}</Notice>}
       {auth && <CreateUserForm text={userFormText(t)} fixedTenantId={viewingAsAdmin ? tenant.id : undefined} roles={viewingAsAdmin ? ["receptionist", "doctor", "manager"] : ["receptionist", "doctor"]} doctors={doctors} />}
       {people.length === 0 ? <Notice>{t("users.empty")}</Notice>
-        : <UsersTable users={people} viewer={viewer} returnTo="/app/team" t={t} locale={locale} />}
+        : <UsersTable users={people} viewer={viewer} returnTo="/app/team" t={t} locale={locale} doctors={doctors} />}
     </>
   );
 }

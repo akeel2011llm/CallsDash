@@ -1,20 +1,22 @@
 import Link from "next/link";
 import { requireClient } from "@/lib/auth";
 import { getT } from "@/lib/i18n";
-import { dayKey, fmtTime } from "@/lib/format";
+import { dayKey, fmtDate, fmtTime } from "@/lib/format";
 import { getBookings, getDoctors } from "@/lib/data";
 import { Notice, PageHead } from "@/components/ui";
 import { setOpeningHoursAction } from "@/lib/actions";
 import { SubmitButton } from "@/components/SubmitButton";
+import { HoursFields } from "@/components/HoursFields";
+import { addClosureAction, removeClosureAction } from "@/lib/manage-actions";
 
 const FIRST_HOUR = 8;
 const HOURS = 12; // 08:00 to 20:00
 const ROW = 56;
 const LOCAL_OFFSET_MS = 3 * 3_600_000; // Asia/Bahrain, no DST
 
-export default async function CalendarPage({ searchParams }: { searchParams: Promise<{ w?: string; hours?: string }> }) {
-  const { tenant } = await requireClient();
-  const { w, hours } = await searchParams;
+export default async function CalendarPage({ searchParams }: { searchParams: Promise<{ w?: string; hours?: string; closure?: string; clash?: string }> }) {
+  const { tenant, staffRole } = await requireClient();
+  const { w, hours, closure, clash } = await searchParams;
   const { t, locale } = await getT();
   const offset = Math.max(-52, Math.min(52, Number(w) || 0));
   const local = new Date(Date.now() + LOCAL_OFFSET_MS);
@@ -83,22 +85,34 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
         {hours === "saved" && <Notice tone="ok">{t("hours.saved")}</Notice>}
         {hours === "invalid" && <Notice tone="warn">{t("hours.invalid")}</Notice>}
         <form action={setOpeningHoursAction} className="stack">
-          {[6, 0, 1, 2, 3, 4, 5].map((d) => {
-            const day = tenant.openingHours[String(d)] ?? [];
-            return (
-              <div key={d} className="row" style={{ alignItems: "end" }}>
-                <strong style={{ minInlineSize: 110 }}>{t(`day.${d}` as "day.0")}</strong>
-                {(["a", "b"] as const).map((r, i) => (
-                  <span key={r} className="row" dir="ltr">
-                    <label>{i === 0 ? t("hours.from") : ""}<input type="time" name={`open${d}${r}`} defaultValue={day[i]?.[0] ?? ""} /></label>
-                    <label>{i === 0 ? t("hours.to") : ""}<input type="time" name={`close${d}${r}`} defaultValue={day[i]?.[1] ?? ""} /></label>
-                  </span>
-                ))}
-              </div>
-            );
-          })}
+          <HoursFields hours={tenant.openingHours} t={t} />
           <div><SubmitButton className="btn" type="submit">{t("common.save")}</SubmitButton></div>
         </form>
+        {staffRole === "manager" && <small><Link href="/app/doctors">{t("calendar.doctorHours")}</Link></small>}
+      </section>
+      <section id="closures" className="card stack">
+        <h2>{t("closures.title")}</h2>
+        <p className="muted">{t("closures.help")}</p>
+        {closure === "saved" && <Notice tone="ok">{t("closures.saved")}</Notice>}
+        {closure === "invalid" && <Notice tone="warn">{t("closures.invalid")}</Notice>}
+        {Number(clash) > 0 && <Notice tone="warn">{t("doctors.clash").replace("{n}", String(Number(clash)))}</Notice>}
+        {(tenant.closures ?? []).filter((r) => r.to >= todayKey).length === 0 && <small className="muted">{t("closures.none")}</small>}
+        {(tenant.closures ?? []).filter((r) => r.to >= todayKey).map((r) => (
+          <form key={`${r.from}-${r.to}`} action={removeClosureAction} className="row">
+            <input type="hidden" name="tenantId" value={tenant.id} /><input type="hidden" name="from" value={r.from} /><input type="hidden" name="to" value={r.to} />
+            <span>{fmtDate(`${r.from}T12:00:00Z`, locale)}{r.to !== r.from ? ` – ${fmtDate(`${r.to}T12:00:00Z`, locale)}` : ""}{r.note ? <span className="muted"> · {r.note}</span> : null}</span>
+            {staffRole === "manager" && <SubmitButton className="btn small ghost" type="submit">{t("common.remove")}</SubmitButton>}
+          </form>
+        ))}
+        {staffRole === "manager" && (
+          <form action={addClosureAction} className="row" style={{ alignItems: "end" }}>
+            <input type="hidden" name="tenantId" value={tenant.id} />
+            <label>{t("doctors.leave.from")}<input type="date" name="from" min={todayKey} required /></label>
+            <label>{t("doctors.leave.to")}<input type="date" name="to" min={todayKey} /></label>
+            <label style={{ flex: 1, minWidth: 160 }}>{t("doctors.leave.note")}<input name="note" maxLength={120} placeholder={t("closures.notePh")} /></label>
+            <SubmitButton className="btn small" type="submit">{t("common.add")}</SubmitButton>
+          </form>
+        )}
       </section>
     </>
   );

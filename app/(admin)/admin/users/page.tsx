@@ -38,7 +38,7 @@ export default async function Users({ searchParams }: { searchParams: Promise<{ 
         <button className="btn small ghost" type="submit">{t("common.apply")}</button>
       </form>
       {people.length === 0 ? <Notice>{t("users.empty")}</Notice>
-        : <UsersTable users={people} tenantNames={names} viewer={viewer} returnTo={returnTo} t={t} locale={locale} />}
+        : <UsersTable users={people} tenantNames={names} viewer={viewer} returnTo={returnTo} t={t} locale={locale} doctors={doctors} />}
       {activity.length > 0 && (
         <section className="card stack">
           <h2>{t("users.activity")}</h2>

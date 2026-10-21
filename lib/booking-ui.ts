@@ -15,6 +15,6 @@ export async function daySlots(svc: BookingService, tenantId: string, doctorId: 
   }
 }
 
-export const BOOKING_ERRORS = ["slot_taken", "missing_details", "bad_time", "bad_date", "calendar_unavailable", "not_found", "not_active", "bad_status", "unknown_doctor"] as const;
+export const BOOKING_ERRORS = ["slot_taken", "missing_details", "bad_time", "bad_date", "calendar_unavailable", "not_found", "not_active", "bad_status", "unknown_doctor", "doctor_unavailable", "not_allowed"] as const;
 export type BookingError = (typeof BOOKING_ERRORS)[number];
 export const isBookingError = (v: unknown): v is BookingError => (BOOKING_ERRORS as readonly string[]).includes(String(v));
