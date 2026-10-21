@@ -9,8 +9,9 @@ import { saveInstagramAction, savePhoneAction, saveWhatsappAction, syncAgentActi
 import { Badge, Notice, PageHead } from "@/components/ui";
 import { SubmitButton } from "@/components/SubmitButton";
 import type { Channel } from "@/lib/types";
+import { googleKeyState, supabaseSecretSet } from "@/lib/setup-check";
 
-const ENV = ["ELEVENLABS_API_KEY", "AGENT_TOOLS_SECRET", "ELEVENLABS_WEBHOOK_SECRET", "META_APP_SECRET", "META_VERIFY_TOKEN", "NEXT_PUBLIC_SITE_URL"] as const;
+const ENV = ["SUPABASE_SERVICE_ROLE_KEY", "GOOGLE_SERVICE_ACCOUNT_JSON", "ELEVENLABS_API_KEY", "AGENT_TOOLS_SECRET", "ELEVENLABS_WEBHOOK_SECRET", "META_APP_SECRET", "META_VERIFY_TOKEN", "NEXT_PUBLIC_SITE_URL"] as const;
 const TONE = { off: "neutral", pending: "warn", connected: "ok" } as const;
 
 export default async function Channels({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ saved?: string; error?: string; wa?: string }> }) {
@@ -151,12 +152,18 @@ export default async function Channels({ params, searchParams }: { params: Promi
         <p className="muted">{t("channels.env.help")}</p>
         <ul className="checklist">
           {ENV.map((name) => {
-            const set = Boolean(process.env[name]);
+            const google = name === "GOOGLE_SERVICE_ACCOUNT_JSON" ? googleKeyState(process.env[name]) : null;
+            const set = name === "SUPABASE_SERVICE_ROLE_KEY" ? supabaseSecretSet() : google ? google.state === "ok" : Boolean(process.env[name]);
+            const bad = google?.state === "invalid";
             return (
               <li key={name} className={set ? "done" : undefined}>
                 <span className="mark" aria-hidden>✓</span>
-                <div><span className="title" dir="ltr">{name}</span><small>{t(`channels.env.${name}` as Key)}</small></div>
-                <Badge tone={set ? "ok" : "warn"}>{set ? t("channels.env.set") : t("channels.env.missing")}</Badge>
+                <div>
+                  <span className="title" dir="ltr">{name}</span><small>{t(`channels.env.${name}` as Key)}</small>
+                  {google?.state === "ok" && <small>{t("channels.env.googleShare")} <code dir="ltr">{google.email}</code></small>}
+                  {bad && <small>{t("channels.env.googleInvalid")}</small>}
+                </div>
+                <Badge tone={set ? "ok" : "warn"}>{set ? t("channels.env.set") : bad ? t("channels.env.invalid") : t("channels.env.missing")}</Badge>
               </li>
             );
           })}

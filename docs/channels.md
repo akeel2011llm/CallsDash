@@ -2,6 +2,8 @@
 
 Admin, client, **Channels** (`/admin/clients/<id>/channels`) is the one place to connect a clinic. Each section shows its status and the exact values to copy.
 
+Channels, Server settings lists which keys are set (never their values) and prints the Google service account email to share calendars with. Each doctor on the client page has a **Test** button that asks Google for that calendar.
+
 ## 1. ElevenLabs receptionist (all channels share it)
 
 Set `ELEVENLABS_API_KEY`, `NEXT_PUBLIC_SITE_URL`, `AGENT_TOOLS_SECRET` in Vercel. Press **Sync to ElevenLabs**. It:
