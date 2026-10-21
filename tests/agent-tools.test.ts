@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { createBookingService, matchDoctor, parseStart } from "@/lib/booking";
-import { inspectConversation } from "@/lib/agent-inspect";
 import { buildPrompt } from "@/lib/agent-config";
 import { createPgData, type Db, type Q } from "@/lib/data/pg";
 import { seed } from "@/lib/seed";
@@ -85,26 +84,6 @@ describe("tool call log", () => {
   it("works in the demo store too", async () => {
     const db = seed();
     expect(db.toolCalls).toEqual([]);
-  });
-});
-
-describe("ElevenLabs conversation view", () => {
-  it("pairs each tool call with its answer and marks failures", () => {
-    const c = inspectConversation({
-      conversation_id: "conv_1", status: "done", metadata: { start_time_unix_secs: 1792540800, call_duration_secs: 64 },
-      transcript: [
-        { role: "user", message: "I want to book with Dr Hana tomorrow" },
-        { role: "agent", tool_calls: [{ request_id: "r1", tool_name: "check_availability", params_as_json: "{\"days\":1}" }] },
-        { role: "agent", tool_results: [{ request_id: "r1", tool_name: "check_availability", result_value: "{\"ok\":true,\"slots\":[]}", is_error: false }] },
-        { role: "agent", tool_calls: [{ request_id: "r2", tool_name: "book_appointment", params_as_json: "{}" }] },
-        { role: "agent", tool_results: [{ request_id: "r2", tool_name: "book_appointment", result_value: "Request failed with status code 401", is_error: true }] },
-        { role: "agent", tool_results: [{ tool_name: "take_message", result_value: "{\"ok\":false,\"error\":\"missing_details\"}" }] },
-      ],
-    });
-    expect(c.opening).toContain("Dr Hana");
-    expect(c.seconds).toBe(64);
-    expect(c.tools.map((x) => [x.name, x.ok])).toEqual([["check_availability", true], ["book_appointment", false], ["take_message", false]]);
-    expect(c.tools[1].answer).toContain("401");
   });
 });
 

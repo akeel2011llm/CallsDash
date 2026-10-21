@@ -28,19 +28,15 @@ export interface ElevenLabsApi {
     phoneNumberId: string; userId: string; templateName: string; languageCode: string; params: WhatsappTemplateParams[];
     agentId: string; dynamicVariables?: Record<string, string>;
   }): Promise<{ conversation_id?: string }>;
-  /** The agent's latest conversations, newest first (ElevenLabs' own history, including ones CallsDash never heard about). */
-  listConversations(agentId: string, pageSize: number): Promise<{ conversations?: Json[] }>;
-  /** One conversation with its transcript, including each tool call and the answer it got. */
-  getConversation(conversationId: string): Promise<Json>;
   /** Speech to text for a voice note. */
   transcribe(audio: Uint8Array, filename: string, mime: string): Promise<{ text: string; language?: string }>;
 }
 
 export function createElevenLabsApi(apiKey: string, fetchImpl: FetchLike = fetch): ElevenLabsApi {
-  async function call<T>(method: string, path: string, body?: Json | FormData, timeoutMs?: number): Promise<T> {
+  async function call<T>(method: string, path: string, body?: Json | FormData): Promise<T> {
     const isForm = body instanceof FormData;
     const res = await fetchImpl(`${BASE}${path}`, {
-      method, ...(timeoutMs ? { signal: AbortSignal.timeout(timeoutMs) } : {}),
+      method,
       headers: { "xi-api-key": apiKey, ...(body && !isForm ? { "content-type": "application/json" } : {}) },
       body: body ? (isForm ? body : JSON.stringify(body)) : undefined,
     });
@@ -61,9 +57,6 @@ export function createElevenLabsApi(apiKey: string, fetchImpl: FetchLike = fetch
         template_language_code: i.languageCode, template_params: i.params, agent_id: i.agentId,
         ...(i.dynamicVariables ? { conversation_initiation_client_data: { dynamic_variables: i.dynamicVariables } } : {}),
       }),
-    listConversations: (agentId, pageSize) =>
-      call("GET", `/v1/convai/conversations?agent_id=${encodeURIComponent(agentId)}&page_size=${pageSize}`, undefined, 8000),
-    getConversation: (id) => call("GET", `/v1/convai/conversations/${encodeURIComponent(id)}`, undefined, 8000),
     transcribe: async (audio, filename, mime) => {
       const form = new FormData();
       form.set("model_id", "scribe_v1");

@@ -21,13 +21,12 @@ Safe to run again; run it after any change. Failures are stored and shown on the
 
 ## 2. Website widget
 
-Snippet is on the Channels page. The page's domain must be in the clinic's allowed websites. After the visitor consents,
-`widget.js` opens CallsDash's own conversation page (`/w/<slug>`) in a frame on the clinic's site, with the dynamic
-variables from the server. That page (components/AgentConsole.tsx, also used on Admin > Test agent) talks to the agent with
-`@elevenlabs/client` instead of ElevenLabs' embedded widget, because phones lower a call's voice while the microphone is on
-and the embedded widget cannot raise it: the console runs the voice through a speaker boost and a limiter (100-400%,
-default 200%, remembered per browser). The frame page refuses sites outside the allowed websites (referrer on the server,
-`location.ancestorOrigins` in the browser).
+Snippet is on the Channels page. The page's domain must be in the clinic's allowed websites. The widget passes the dynamic variables from `/api/widget/config`.
+
+Phones play a call's voice quietly while the microphone is on (iPhone Safari switches to its in-call audio level), and
+ElevenLabs' embedded widget has no volume control. If a client reports a quiet voice, the fix is to talk through our own
+console built on `@elevenlabs/client` (output gain plus a limiter); it was built and tested once and is in git history
+(PR #18) if it is needed again.
 
 ## 3. WhatsApp
 

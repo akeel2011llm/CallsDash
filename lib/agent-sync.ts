@@ -23,16 +23,6 @@ export interface ToolsSetting { ids: Record<string, string>; hash: string; url?:
 
 const toolsHash = (appUrl: string, secret: string) => createHash("sha256").update(JSON.stringify(toolDefinitions(appUrl, secret))).digest("hex");
 
-/**
- * Whether the booking tools in ElevenLabs match this app: created, calling `appUrl`, with today's secret and definitions.
- * When `current` is false, ElevenLabs is still calling an old address or sending an old secret until the next Sync.
- */
-export async function toolsStatus(data: Pick<Data, "getSetting">, appUrl: string, secret: string | undefined) {
-  const saved = (await data.getSetting(TOOLS_KEY)) as ToolsSetting | undefined;
-  const created = Boolean(saved && Object.keys(saved.ids).length);
-  return { created, url: saved?.url, current: Boolean(created && secret && saved?.hash === toolsHash(appUrl, secret)) };
-}
-
 /** The booking tools are shared by every client's agent, so they are created once and updated when their definition changes. */
 async function ensureTools(d: SyncDeps): Promise<string[]> {
   const defs = toolDefinitions(d.appUrl, d.toolsSecret);

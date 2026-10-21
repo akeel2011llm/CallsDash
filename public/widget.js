@@ -3,9 +3,8 @@
  * Usage: <script src="https://YOUR-HOST/widget.js" data-tenant="clinic-slug" async></script>
  * Optional: data-lang="en|ar" to force the language.
  *
- * Flow: launcher button -> consent notice (Bahrain requires consent before recording) -> the conversation, in a frame
- * served by CallsDash (/w/<slug>), which talks to the clinic's ElevenLabs agent and keeps the voice loud on phones.
- * Nothing is loaded from ElevenLabs before consent.
+ * Flow: launcher button -> consent notice (Bahrain requires consent before recording) -> ElevenLabs
+ * conversational widget for the clinic's agent. Nothing is loaded from ElevenLabs before consent.
  */
 (function () {
   var script = document.currentScript;
@@ -60,25 +59,13 @@
       return b;
     }
 
-    var frame = null;
-    window.addEventListener("message", function (e) {
-      if (e.origin !== base || !e.data || e.data.callsdash !== "close" || !frame) return;
-      frame.parentNode.removeChild(frame);
-      frame = null;
-      launcher.style.display = "";
-    });
-
     function start() {
       panel.style.display = "none";
-      if (!cfg.agentId) { show([text("Demo: the ElevenLabs agent is not connected yet.")]); return; }
       launcher.style.display = "none";
-      frame = el("iframe", {
-        src: base + "/w/" + encodeURIComponent(tenant) + "?lang=" + lang,
-        title: s["widget.open"], allow: "microphone; autoplay; screen-wake-lock",
-        style: { width: "370px", height: "560px", maxWidth: "calc(100vw - 24px)", maxHeight: "calc(100vh - 40px)", border: "0",
-          borderRadius: "14px", boxShadow: "0 8px 30px rgba(0,0,0,.28)", background: "#fff", display: "block" },
-      });
-      root.insertBefore(frame, launcher);
+      if (!cfg.agentId) { show([text("Demo: the ElevenLabs agent is not connected yet.")]); return; }
+      var loader = el("script", { src: "https://unpkg.com/@elevenlabs/convai-widget-embed", async: "", type: "text/javascript" });
+      document.head.appendChild(loader);
+      document.body.appendChild(el("elevenlabs-convai", { "agent-id": cfg.agentId, "dynamic-variables": JSON.stringify(cfg.dynamicVariables || {}) }));
     }
 
     function consentCard() {
