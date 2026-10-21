@@ -17,7 +17,7 @@ import { AgentConsole } from "@/components/AgentConsole";
 import { SubmitButton } from "@/components/SubmitButton";
 import { Badge, Notice, PageHead } from "@/components/ui";
 
-type SP = { c?: string; lang?: string; saved?: string; error?: string; tools?: string; n?: string; code?: string };
+type SP = { c?: string; lang?: string; saved?: string; error?: string; tools?: string; n?: string; code?: string; why?: string; at?: string };
 const TOOL_RESULTS = ["ok", "secret", "protected", "agent", "nosecret", "noagent", "unreachable", "error", "http"] as const;
 const SCENARIOS = ["hours", "faq", "book", "change", "message", "human", "arabic", "unknown"] as const;
 
@@ -101,7 +101,7 @@ export default async function TestAgentPage({ searchParams }: { searchParams: Pr
           <small className="muted" id="tools">{t("test.syncHelp")} {t("test.tools.help")}</small>
           {toolResult && (
             <Notice tone={toolResult === "ok" ? "ok" : "warn"}>
-              {t(`test.tools.${toolResult}` as Key).replace("{n}", String(Number(sp.n) || 0)).replace("{code}", (sp.code ?? "").slice(0, 40))}
+              {t(`test.tools.${toolResult}` as Key).replace("{n}", String(Number(sp.n) || 0)).replace("{code}", (sp.code ?? "").slice(0, 40)).replace("{why}", (sp.why ?? "").slice(0, 80)).replace("{url}", (sp.at ?? "").slice(0, 120))}
             </Notice>
           )}
         </section>
