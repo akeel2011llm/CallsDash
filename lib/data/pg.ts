@@ -76,6 +76,8 @@ const ledgerOf = (r: Row): LedgerEntry => ({
 export const schemaVersion = () => createHash("sha1").update(SCHEMA_ADDITIONS.join("\n")).digest("hex");
 
 export const SCHEMA_ADDITIONS = [
+  // ElevenLabs conversation ids look like "conv_01j..." and are not uuids; the agent passes one with every booking
+  `alter table bookings alter column conversation_id type text using conversation_id::text`,
   `alter table credit_batches add column if not exists plan_id text`,
   `create table if not exists agent_tool_calls (
      id uuid primary key default gen_random_uuid(),
