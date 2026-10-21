@@ -69,11 +69,13 @@ describe("agent config", () => {
   it("builds the body ElevenLabs needs", () => {
     const c = buildAgentConfig({ tenant: tenant(), settings, toolIds: ["tool_1", "tool_2"], knowledgeDoc: { id: "kb1", name: "Knowledge" }, appUrl: "https://www.callsdash.com", initSecret: "s3" });
     expect(c.name).toBe("CallsDash: Al Noor Medical Center");
+    // ElevenLabs: English agents need the v2 model; the Arabic preset carries the multilingual v2.5 one
+    expect(c.conversation_config.tts.model_id).toBe("eleven_flash_v2");
+    expect(c.conversation_config.language_presets.ar.overrides.tts.model_id).toBe("eleven_flash_v2_5");
     expect(c.conversation_config.agent.prompt.tool_ids).toEqual(["tool_1", "tool_2"]);
     expect(c.conversation_config.agent.prompt.temperature).toBe(0.4);
     expect(c.conversation_config.agent.prompt.knowledge_base).toEqual([{ type: "text", name: "Knowledge", id: "kb1", usage_mode: "auto" }]);
     expect(c.conversation_config.language_presets.ar.overrides.agent.language).toBe("ar");
-    expect(c.conversation_config.tts.model_id).toBe("eleven_flash_v2_5");
     expect(c.platform_settings.auth.allowlist).toEqual([{ hostname: "alnoor.example.bh" }]);
     expect(c.platform_settings.workspace_overrides.conversation_initiation_client_data_webhook).toEqual({
       url: "https://www.callsdash.com/api/webhooks/elevenlabs/init", request_headers: { Authorization: "Bearer s3" },

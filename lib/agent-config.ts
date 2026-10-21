@@ -70,6 +70,10 @@ export interface AgentConfigInput {
 /** Hostnames the website widget may run on. */
 export const widgetHostnames = (t: Pick<Tenant, "allowedDomains">) => [...new Set(t.allowedDomains.map((d) => d.trim().toLowerCase()).filter(Boolean))];
 
+// ElevenLabs requires the English-only v2 model for an agent whose main language is English; Arabic needs the multilingual v2.5 model, set on the Arabic preset.
+export const ENGLISH_TTS_MODEL = "eleven_flash_v2";
+export const ARABIC_TTS_MODEL = "eleven_flash_v2_5";
+
 /** The body for creating or updating the client's agent in ElevenLabs. Updating sends the same body, so the agent always matches CallsDash. */
 export function buildAgentConfig(i: AgentConfigInput) {
   const { tenant, settings } = i;
@@ -95,11 +99,11 @@ export function buildAgentConfig(i: AgentConfigInput) {
         ar: {
           overrides: {
             agent: { first_message: greeting(tenant, "ar", style), language: "ar" },
-            tts: { voice_id: resolveVoiceId(settings.voiceAr, "ar") },
+            tts: { voice_id: resolveVoiceId(settings.voiceAr, "ar"), model_id: ARABIC_TTS_MODEL },
           },
         },
       },
-      tts: { voice_id: resolveVoiceId(settings.voiceEn, "en"), model_id: "eleven_flash_v2_5" },
+      tts: { voice_id: resolveVoiceId(settings.voiceEn, "en"), model_id: ENGLISH_TTS_MODEL },
       conversation: { max_duration_seconds: 900 },
     },
     platform_settings: {
