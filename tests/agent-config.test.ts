@@ -76,7 +76,8 @@ describe("agent config", () => {
     expect(c.conversation_config.agent.prompt.temperature).toBe(0.4);
     expect(c.conversation_config.agent.prompt.knowledge_base).toEqual([{ type: "text", name: "Knowledge", id: "kb1", usage_mode: "auto" }]);
     expect(c.conversation_config.language_presets.ar.overrides.agent.language).toBe("ar");
-    expect(c.platform_settings.auth.allowlist).toEqual([{ hostname: "alnoor.example.bh" }]);
+    // the app itself is allowed too, so the admin Test page and the client preview can run the widget
+    expect(c.platform_settings.auth.allowlist).toEqual([{ hostname: "alnoor.example.bh" }, { hostname: "www.callsdash.com" }]);
     expect(c.platform_settings.workspace_overrides.conversation_initiation_client_data_webhook).toEqual({
       url: "https://www.callsdash.com/api/webhooks/elevenlabs/init", request_headers: { Authorization: "Bearer s3" },
     });

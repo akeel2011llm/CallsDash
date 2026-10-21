@@ -62,6 +62,7 @@ export default async function AdminHome() {
                   <td>
                     <div className="row">
                     <Link className="btn small ghost" href={`/admin/clients/${c.id}`}>{t("admin.manage")}</Link>
+                    <Link className="btn small ghost" href={`/admin/test?c=${c.id}`}>{t("test.short")}</Link>
                     <form action={viewAsClient}>
                       <input type="hidden" name="tenantId" value={c.id} />
                       <SubmitButton className="btn small" type="submit">{t("admin.viewAs")}</SubmitButton>

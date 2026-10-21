@@ -75,7 +75,8 @@ export async function viewAsClient(f: FormData) {
   const id = str(f, "tenantId");
   if (!await store.getTenant(id)) redirect("/admin");
   (await cookies()).set("cd_view", id, cookieOpts);
-  redirect("/app");
+  const next = safePath(f.get("next"), "/app");
+  redirect(next.startsWith("/app") ? next : "/app");
 }
 
 export async function exitViewAs() {

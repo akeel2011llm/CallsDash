@@ -47,6 +47,7 @@ describe("agent sync", () => {
     const t = (await data.getTenant(tenant.id))!;
     expect(t.integrations.elevenlabs?.kbDocId).toMatch(/^kb_/);
     expect(t.integrations.elevenlabs?.syncedAt).toBeTruthy();
+    expect(t.integrations.elevenlabs?.widgetHosts).toContain("app.example"); // the admin Test page runs the widget on the app itself
     expect(t.channels.website).toBe("connected");
     const body = calls.find((c) => c.fn === "createAgent")!.args[0] as { conversation_config: { agent: { prompt: { tool_ids: string[] } } } };
     expect(body.conversation_config.agent.prompt.tool_ids).toHaveLength(7);
