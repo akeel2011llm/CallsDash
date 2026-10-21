@@ -21,3 +21,10 @@ Reminders on every event (`DEFAULT_REMINDERS` in `lib/google-calendar.ts`): an e
 A doctor gets their own sign-in (role `doctor`, tied to one of the clinic's doctors). It is created in Users (admin) or Team (clinic manager): choose Doctor, then pick which doctor it is. They land on **My day**: today's visits with one-tap Completed or No-show, the next patient, and the coming week. **Bookings** lists only their own bookings (search, today / upcoming / past); a booking opens to notes, reschedule, complete, no-show, cancel and restore. They can also add a booking for themselves (marked "Booked by doctor").
 
 A doctor never sees other doctors' bookings, credits, conversations or settings: the portal pages and the booking actions are limited to their own doctor id on the server, and `/app` sends them back to `/doctor`. A doctor sign-in whose doctor is removed is refused at the next request.
+
+## Managing doctors, hours, leave and holidays
+- **Doctors page** (`/app/doctors` for the clinic manager, and the Doctors section of the admin client page): edit name, specialty, colour and Google Calendar ID, test the calendar, pause a doctor ("Taking new bookings" off: existing bookings stay, nobody can book them), set the doctor's own weekly hours or use the clinic's, add and remove leave (whole days), and remove the doctor (tick-box confirmation; refused while they have upcoming bookings or their own sign-in).
+- **Clinic closed days** (Calendar page): public holidays when nobody can book.
+- Availability (`lib/booking.ts`) uses the doctor's own hours when set, and treats leave and closed days as busy. Adding leave or a closed day says how many existing bookings fall on those days, so staff can move them.
+- **Booking edits**: patient name, phone and service; the clinic team can hand a booking to another doctor at the same time if that doctor is free (the Google event moves calendars). A doctor can fix details on their own bookings but cannot change the doctor.
+- **Delete booking** (manager only, tick-box confirmation): removes the booking and its Google event with no record. Everyone else cancels, which keeps the record.

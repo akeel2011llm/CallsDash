@@ -164,6 +164,8 @@ export interface Tenant {
   lowBalanceThreshold: number; // fraction, 0.15
   retentionDays: number;
   calendarConnected: boolean;
+  /** Days the whole clinic is closed (public holidays). No one can book on them. */
+  closures?: DateRange[];
   /** Local (Bahrain) opening intervals per weekday, keys "0" (Sunday) to "6" (Saturday), as ["HH:MM", "HH:MM"]. */
   openingHours: Record<string, [string, string][]>;
   channels: Record<Channel, "connected" | "pending" | "off">;
@@ -243,6 +245,9 @@ export interface Profile {
   createdAt: string;
 }
 
+/** Whole local days, inclusive, as YYYY-MM-DD. Used for doctors' leave and clinic closures (holidays). */
+export interface DateRange { from: string; to: string; note?: string }
+
 export interface Doctor {
   id: string;
   tenantId: string;
@@ -250,6 +255,11 @@ export interface Doctor {
   specialty: string;
   color: string;
   googleCalendarId?: string;
+  /** False while the doctor takes no new bookings (left, long leave). Existing bookings stay. Missing = true. */
+  active?: boolean;
+  /** The doctor's own weekly hours. Missing = the clinic's opening hours. */
+  hours?: Record<string, [string, string][]> | null;
+  timeOff?: DateRange[];
 }
 
 export interface Booking {
@@ -324,7 +334,7 @@ export interface LedgerEntry {
   id: string;
   tenantId: string;
   at: string;
-  kind: "topup" | "package_renewal" | "rollover" | "usage" | "expiry";
+  kind: "topup" | "package_renewal" | "rollover" | "usage" | "expiry" | "adjustment";
   credits: number; // positive adds, negative deducts
   channel?: Channel;
   conversationId?: string;

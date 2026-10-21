@@ -23,6 +23,16 @@ function supabaseAuthAdmin(): AuthAdmin {
       }
       return { id: data.user.id };
     },
+    async updateUser(id, { email, fullName }) {
+      const { error } = await sb.auth.admin.updateUserById(id, {
+        ...(email ? { email, email_confirm: true } : {}),
+        ...(fullName ? { user_metadata: { full_name: fullName } } : {}),
+      });
+      if (error) {
+        if (/already|registered|exists/i.test(error.message)) throw new EmailTakenError();
+        throw new Error(error.message);
+      }
+    },
     async setPassword(id, password) { fail((await sb.auth.admin.updateUserById(id, { password })).error); },
     async setBanned(id, banned) { fail((await sb.auth.admin.updateUserById(id, { ban_duration: banned ? BAN_FOREVER : "none" })).error); },
     async deleteUser(id) { fail((await sb.auth.admin.deleteUser(id)).error); },

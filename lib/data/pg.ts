@@ -28,6 +28,7 @@ const tenantOf = (r: Row): Tenant => ({
   id: r.id, slug: r.slug, name: r.name, status: r.status, branding: jsonish(r.branding), plans: normalizePlans(jsonish(r.plan)), alertRules: normalizeRules(r.alert_rules == null ? undefined : jsonish(r.alert_rules)),
   permissions: jsonish(r.permissions), allowedDomains: r.allowed_domains ?? [], zeroBalancePolicy: r.zero_balance_policy,
   lowBalanceThreshold: num(r.low_balance_threshold), retentionDays: r.retention_days, calendarConnected: r.calendar_connected,
+  closures: r.closures == null ? [] : jsonish(r.closures),
   channels: jsonish(r.channels), openingHours: jsonish(r.opening_hours),
   integrations: r.integrations == null ? {} : jsonish<Tenant["integrations"]>(r.integrations),
   onboarding: ((o) => ({ ...o, done: o.done ?? [] }))(r.onboarding == null ? {} : jsonish<Partial<Tenant["onboarding"]>>(r.onboarding)), createdAt: iso(r.created_at),
@@ -49,6 +50,10 @@ const packageOf = (r: Row): CatalogPackage => ({
 const profileOf = (r: Row): Profile => ({
   id: r.id, tenantId: r.tenant_id ?? null, role: r.role, doctorId: r.doctor_id ?? null, fullName: r.full_name ?? "", email: r.email ?? "",
   disabled: Boolean(r.disabled), mustChangePassword: Boolean(r.must_change_password), createdAt: iso(r.created_at),
+});
+const doctorOf = (r: Row): Doctor => ({
+  id: r.id, tenantId: r.tenant_id, name: r.name, specialty: r.specialty ?? "", color: r.color, googleCalendarId: r.google_calendar_id ?? undefined,
+  active: r.active ?? true, hours: r.hours == null ? null : jsonish(r.hours), timeOff: r.time_off == null ? [] : jsonish(r.time_off),
 });
 const sessionOf = (r: Row): ChatSession => ({ tenantId: r.tenant_id, channel: r.channel, externalId: r.external_id, conversationId: r.conversation_id, lastAt: iso(r.last_at) });
 const staffRequestOf = (r: Row): StaffRequest => ({
@@ -75,6 +80,14 @@ export const SCHEMA_ADDITIONS = [
   `alter type user_role add value if not exists 'doctor'`,
   `alter table profiles add column if not exists doctor_id uuid references doctors on delete set null`,
   `alter table bookings add column if not exists notes text`,
+  `alter table doctors add column if not exists active boolean not null default true`,
+  `alter table doctors add column if not exists hours jsonb`,
+  `alter table doctors add column if not exists time_off jsonb not null default '[]'`,
+  `alter table tenants add column if not exists closures jsonb not null default '[]'`,
+  `alter table credit_ledger drop constraint if exists credit_ledger_kind_check`,
+  `do $$ begin if not exists (select 1 from pg_constraint where conname = 'credit_ledger_kind_v2') then
+     alter table credit_ledger add constraint credit_ledger_kind_v2 check (kind in ('topup', 'package_renewal', 'rollover', 'usage', 'expiry', 'adjustment'));
+   end if; end $$`,
   `alter table bookings add column if not exists source text not null default 'ai'`,
   // "completed" is a new status; the original check only knew the first four
   `do $$ begin if not exists (select 1 from pg_constraint where conname = 'bookings_status_v2') then
@@ -249,8 +262,10 @@ export function createPgData(db: Db): Data {
       if (!r[0]) return;
       const cur = profileOf(r[0]);
       const next = { ...cur, ...patch };
-      await run(`update profiles set role = $2, full_name = $3, disabled = $4, must_change_password = $5 where id = $1`,
-        [userId, next.role, next.fullName, next.disabled, next.mustChangePassword]);
+      if (patch.email && patch.email.toLowerCase() !== cur.email.toLowerCase()
+        && (await run<Row>(`select 1 from profiles where lower(email) = lower($1) and id <> $2`, [patch.email, userId])).length) throw new DuplicateError("email");
+      await run(`update profiles set role = $2, full_name = $3, disabled = $4, must_change_password = $5, email = $6, doctor_id = $7 where id = $1`,
+        [userId, next.role, next.fullName, next.disabled, next.mustChangePassword, next.email, next.doctorId ?? null]);
       await audit(run, actor, `${note}: ${cur.email}`, cur.tenantId ?? undefined);
     }),
     removeProfile: async (userId, actor) => tx(async (run) => {
@@ -313,8 +328,7 @@ export function createPgData(db: Db): Data {
       (await q<Row>(`select * from agent_versions where tenant_id = $1 order by created_at desc`, [tenantId])).map((r): AgentVersion => ({
         id: r.id, tenantId: r.tenant_id, createdAt: iso(r.created_at), author: r.author, summary: r.summary, settings: jsonish(r.settings) })),
     getDoctors: async (tenantId) =>
-      (await q<Row>(`select * from doctors where tenant_id = $1 order by name`, [tenantId])).map((r): Doctor => ({
-        id: r.id, tenantId: r.tenant_id, name: r.name, specialty: r.specialty ?? "", color: r.color, googleCalendarId: r.google_calendar_id ?? undefined })),
+      (await ensureSchema(), await q<Row>(`select * from doctors where tenant_id = $1 order by name`, [tenantId])).map(doctorOf),
     getBookings: async (tenantId) =>
       (await q<Row>(`select * from bookings where tenant_id = $1 order by starts_at`, [tenantId])).map(bookingOf),
     getConversations: async (tenantId) =>
@@ -551,9 +565,11 @@ export function createPgData(db: Db): Data {
     updateBooking: async (tenantId, bookingId, patch, actor) => tx(async (run) => {
       try {
         const r = await run<Row>(
-          `update bookings set starts_at = coalesce($3, starts_at), status = coalesce($4, status), calendar_event_id = coalesce($5, calendar_event_id), notes = coalesce($6, notes)
+          `update bookings set starts_at = coalesce($3, starts_at), status = coalesce($4, status), calendar_event_id = coalesce($5, calendar_event_id), notes = coalesce($6, notes),
+             patient_name = coalesce($7, patient_name), patient_phone = coalesce($8, patient_phone), service = coalesce($9, service), doctor_id = coalesce($10, doctor_id)
            where tenant_id = $1 and id = $2 returning *`,
-          [tenantId, bookingId, patch.startsAt ?? null, patch.status ?? null, patch.calendarEventId ?? null, patch.notes ?? null]);
+          [tenantId, bookingId, patch.startsAt ?? null, patch.status ?? null, patch.calendarEventId ?? null, patch.notes ?? null,
+           patch.patientName ?? null, patch.patientPhone ?? null, patch.service ?? null, patch.doctorId ?? null]);
         if (!r[0]) throw new Error("booking not found");
         await audit(run, actor, `Booking ${bookingId} updated`, tenantId);
         return bookingOf(r[0]);
@@ -570,7 +586,7 @@ export function createPgData(db: Db): Data {
       const n = Number((await run<Row>(`select count(*)::int as n from doctors where tenant_id = $1`, [tenantId]))[0].n);
       const r = await run<Row>(`insert into doctors (tenant_id, name, specialty, color) values ($1,$2,$3,$4) returning *`, [tenantId, input.name, input.specialty, colours[n % colours.length]]);
       await audit(run, actor, `Doctor added: ${input.name}`, tenantId);
-      return { id: r[0].id, tenantId, name: r[0].name, specialty: r[0].specialty ?? "", color: r[0].color, googleCalendarId: r[0].google_calendar_id ?? undefined } as Doctor;
+      return doctorOf(r[0]);
     }),
 
     removeDoctor: async (tenantId, doctorId, actor) => tx(async (run) => {
@@ -578,6 +594,63 @@ export function createPgData(db: Db): Data {
       if (!r[0]) throw new Error("doctor not found");
       await run(`update tenants set calendar_connected = exists (select 1 from doctors where tenant_id = $1 and google_calendar_id is not null) where id = $1`, [tenantId]);
       await audit(run, actor, `Doctor removed: ${r[0].name}`, tenantId);
+    }),
+
+    updateDoctor: async (tenantId, doctorId, patch, actor) => tx(async (run) => {
+      const cur = await run<Row>(`select * from doctors where tenant_id = $1 and id = $2 for update`, [tenantId, doctorId]);
+      if (!cur[0]) throw new Error("doctor not found");
+      const d = { ...doctorOf(cur[0]), ...patch };
+      const r = await run<Row>(`update doctors set name = $3, specialty = $4, color = $5, active = $6, hours = $7, time_off = $8 where tenant_id = $1 and id = $2 returning *`,
+        [tenantId, doctorId, d.name, d.specialty, d.color, d.active !== false, d.hours ? JSON.stringify(d.hours) : null, JSON.stringify(d.timeOff ?? [])]);
+      await audit(run, actor, `Doctor updated: ${d.name}`, tenantId);
+      return doctorOf(r[0]);
+    }),
+
+    deleteBooking: async (tenantId, bookingId, actor) => tx(async (run) => {
+      const r = await run<Row>(`delete from bookings where tenant_id = $1 and id = $2 returning patient_name, starts_at`, [tenantId, bookingId]);
+      if (!r[0]) throw new Error("booking not found");
+      await audit(run, actor, `Booking deleted: ${r[0].patient_name} ${iso(r[0].starts_at)}`, tenantId);
+    }),
+
+    updateKnowledge: async (tenantId, id, p, actor) => tx(async (run) => {
+      const r = await run(`update knowledge_items set question = $3, answer = $4, language = $5 where tenant_id = $1 and id = $2 returning id`, [tenantId, id, p.question, p.answer, p.language]);
+      if (r[0]) await audit(run, actor, "Knowledge item edited", tenantId);
+    }),
+
+    deleteStaffRequest: async (tenantId, requestId, actor) => tx(async (run) => {
+      const r = await run(`delete from staff_requests where tenant_id = $1 and id = $2 returning id`, [tenantId, requestId]);
+      if (r[0]) await audit(run, actor, "Message deleted", tenantId);
+    }),
+
+    deleteConversation: async (tenantId, conversationId, actor) => tx(async (run) => {
+      // the ledger keeps the credits it used; staff requests and bookings only lose their link to it
+      await run(`update staff_requests set conversation_id = null where tenant_id = $1 and conversation_id = $2`, [tenantId, conversationId]);
+      const r = await run(`delete from conversations where tenant_id = $1 and id = $2 returning id`, [tenantId, conversationId]);
+      if (r[0]) await audit(run, actor, "Conversation deleted", tenantId);
+    }),
+
+    adjustCredits: async (tenantId, credits, note, actor) => tx(async (run) => {
+      const t = await lockTenant(run, tenantId);
+      const before = await loadBatches(run, tenantId);
+      const after = credits > 0
+        ? addTopUp(before, { id: randomUUID(), tenantId, amount: credits, now: new Date(), kind: topUpKind(t.plans), note })
+        : deduct(before, -credits, new Date()).batches;
+      await saveBatches(run, before, after);
+      await ledger(run, { tenantId, kind: "adjustment", credits, note });
+      await audit(run, actor, `Credit adjustment ${credits > 0 ? "+" : ""}${credits}: ${note}`, tenantId);
+    }),
+
+    declineTopUpRequest: async (requestId, actor) => tx(async (run) => {
+      const r = await run<Row>(`update top_up_requests set status = 'done' where id = $1 and status = 'open' returning tenant_id, credits`, [requestId]);
+      if (r[0]) await audit(run, actor, `Declined a top-up request of ${r[0].credits} credits`, r[0].tenant_id);
+    }),
+
+    deletePackage: async (packageId, actor) => tx(async (run) => {
+      const used = await run(`select 1 from tenants where exists (select 1 from jsonb_array_elements(case when jsonb_typeof(plan) = 'array' then plan else '[]'::jsonb end) e where e->>'packageId' = $1)`, [packageId]);
+      if (used.length) return false;
+      const r = await run<Row>(`delete from packages where id::text = $1 returning name`, [packageId]);
+      if (r[0]) await audit(run, actor, `Deleted package "${r[0].name}"`);
+      return true;
     }),
 
     setDoctorCalendar: async (tenantId, doctorId, calendarId, actor) => tx(async (run) => {
@@ -593,17 +666,18 @@ export function createPgData(db: Db): Data {
     }),
 
     updateTenant: async (tenantId, patch, actor) => tx(async (run) => {
-      if (patch.allowedDomains) await lockTenantDirectory(run);
+      if (patch.allowedDomains || patch.name) await lockTenantDirectory(run);
       const t = await lockTenant(run, tenantId);
-      if (patch.allowedDomains) {
+      if (patch.allowedDomains || patch.name) {
         const others = (await run<Row>(`select * from tenants where id <> $1`, [tenantId])).map(tenantOf);
-        const clash = findDuplicate(others, { domains: patch.allowedDomains });
+        const clash = findDuplicate(others, { name: patch.name, domains: patch.allowedDomains ?? [] });
         if (clash) throw new DuplicateError(clash);
       }
       await run(
-        `update tenants set zero_balance_policy = $2, allowed_domains = $3, low_balance_threshold = $4, status = $5, branding = $6 where id = $1`,
+        `update tenants set zero_balance_policy = $2, allowed_domains = $3, low_balance_threshold = $4, status = $5, branding = $6, name = $7, retention_days = $8, closures = $9 where id = $1`,
         [tenantId, patch.zeroBalancePolicy ?? t.zeroBalancePolicy, patch.allowedDomains ?? t.allowedDomains, patch.lowBalanceThreshold ?? t.lowBalanceThreshold,
-         patch.status ?? t.status, JSON.stringify({ ...t.branding, ...(patch.branding ?? {}) })]);
+         patch.status ?? t.status, JSON.stringify({ ...t.branding, ...(patch.branding ?? {}) }), patch.name ?? t.name, patch.retentionDays ?? t.retentionDays,
+         JSON.stringify(patch.closures ?? t.closures ?? [])]);
       await audit(run, actor, "Client settings changed", tenantId);
     }),
 

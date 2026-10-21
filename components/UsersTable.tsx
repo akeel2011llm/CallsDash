@@ -1,8 +1,8 @@
-import { changeUserRoleAction, deleteUserAction, setUserDisabledAction } from "@/lib/user-actions";
+import { changeUserRoleAction, deleteUserAction, setUserDisabledAction, updateUserAction } from "@/lib/user-actions";
 import { canManage, type UserActor } from "@/lib/users";
 import { fmtDateTime } from "@/lib/format";
 import type { Key } from "@/lib/i18n";
-import type { Locale, Profile } from "@/lib/types";
+import type { Doctor, Locale, Profile } from "@/lib/types";
 import { userFormText } from "@/lib/user-text";
 import { ResetPasswordForm } from "./UserForms";
 import { SubmitButton } from "./SubmitButton";
@@ -11,9 +11,10 @@ import { Badge } from "./ui";
 type Row = Profile & { lastSignIn?: string };
 
 /** The people list used by the admin Users page and the client Team page. What each row offers depends on who is looking. */
-export function UsersTable({ users, tenantNames, viewer, returnTo, t, locale }: {
-  users: Row[]; tenantNames?: Map<string, string>; viewer: UserActor; returnTo: string; t: (k: Key) => string; locale: Locale;
+export function UsersTable({ users, tenantNames, viewer, returnTo, t, locale, doctors = [] }: {
+  users: Row[]; tenantNames?: Map<string, string>; viewer: UserActor; returnTo: string; t: (k: Key) => string; locale: Locale; doctors?: Doctor[];
 }) {
+  const doctorName = new Map(doctors.map((d) => [d.id, d.name]));
   const text = userFormText(t);
   return (
     <div className="card table-wrap">
@@ -33,7 +34,10 @@ export function UsersTable({ users, tenantNames, viewer, returnTo, t, locale }: 
               <tr key={u.id}>
                 <td><strong>{u.fullName || u.email}</strong><br /><small className="muted" dir="ltr">{u.email}</small></td>
                 {tenantNames && <td>{u.tenantId ? tenantNames.get(u.tenantId) ?? "" : "CallsDash"}</td>}
-                <td><Badge tone={u.role === "admin" ? "info" : "neutral"}>{t(`users.role.${u.role}` as Key)}</Badge></td>
+                <td>
+                  <Badge tone={u.role === "admin" ? "info" : "neutral"}>{t(`users.role.${u.role}` as Key)}</Badge>
+                  {u.role === "doctor" && <><br /><small className="muted">{u.doctorId ? doctorName.get(u.doctorId) ?? t("users.doctorGone") : t("users.doctorGone")}</small></>}
+                </td>
                 <td>
                   {u.disabled ? <Badge tone="bad">{t("users.status.disabled")}</Badge>
                     : u.mustChangePassword ? <Badge tone="warn">{t("users.status.mustChange")}</Badge>
@@ -43,6 +47,24 @@ export function UsersTable({ users, tenantNames, viewer, returnTo, t, locale }: 
                 <td>
                   {manage && (
                     <div className="stack" style={{ gap: ".5rem", minWidth: 220 }}>
+                      <details>
+                        <summary className="muted" style={{ cursor: "pointer" }}>{t("users.edit")}</summary>
+                        <form action={updateUserAction} className="stack" style={{ gap: ".4rem", marginBlockStart: ".5rem" }}>
+                          <input type="hidden" name="userId" value={u.id} />{returnField}
+                          <label>{t("users.fullName")}<input name="fullName" required maxLength={120} defaultValue={u.fullName} /></label>
+                          <label>{t("users.email")}<input name="email" type="email" required defaultValue={u.email} dir="ltr" /></label>
+                          {u.role === "doctor" && (
+                            <label>{t("users.doctor")}
+                              <select name="doctorId" defaultValue={u.doctorId ?? ""} required>
+                                <option value="" disabled>{t("bookings.pickDoctor")}</option>
+                                {doctors.filter((d) => d.tenantId === u.tenantId).map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                              </select>
+                            </label>
+                          )}
+                          <small className="muted">{t("users.edit.help")}</small>
+                          <div><SubmitButton className="btn small" type="submit">{t("common.save")}</SubmitButton></div>
+                        </form>
+                      </details>
                       <ResetPasswordForm userId={u.id} text={text} />
                       <div className="row">
                         <form action={setUserDisabledAction}>

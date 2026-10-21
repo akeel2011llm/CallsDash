@@ -79,6 +79,12 @@ export async function setUserDisabledAction(f: FormData) {
   await change(f, "/admin/users", ({ deps, actor }) => users.setDisabled(deps, actor, str(f, "userId"), f.get("disabled") === "1"));
 }
 
+export async function updateUserAction(f: FormData) {
+  await change(f, "/admin/users", ({ deps, actor }) => users.updateUser(deps, actor, str(f, "userId"), {
+    fullName: str(f, "fullName"), email: str(f, "email"), doctorId: f.has("doctorId") ? str(f, "doctorId") || null : undefined,
+  }));
+}
+
 export async function changeUserRoleAction(f: FormData) {
   await change(f, "/admin/users", ({ deps, actor }) => users.changeRole(deps, actor, str(f, "userId"), str(f, "role") as Role));
 }

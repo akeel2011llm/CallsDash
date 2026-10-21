@@ -27,7 +27,7 @@ export async function NewBookingView({ base, tenant, doctorId, sp }: BookingScop
           <label>{t("common.doctor")}
             <select name="doctor" defaultValue={doctor?.id ?? ""} required>
               <option value="" disabled>{t("bookings.pickDoctor")}</option>
-              {doctors.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+              {doctors.filter((d) => d.active !== false).map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
           </label>
         )}

@@ -2,7 +2,7 @@ import { computeSlots, describeSlot, isOpenAt, isSlotFree, nextOpening, type Bus
 import { SlotTakenError } from "./errors";
 import type { Calendar, EventInput } from "./google-calendar";
 import type { Data } from "./data/demo";
-import type { Booking, BookingSource, BookingStatus, Doctor, Tenant } from "./types";
+import type { Booking, BookingSource, BookingStatus, DateRange, Doctor, Tenant } from "./types";
 
 /** Error with a message safe to read back to the caller (the agent turns it into speech). */
 export class ToolError extends Error {
@@ -13,6 +13,14 @@ const SLOT_MIN = 30;
 const HORIZON_DAYS = 30;
 const live = (b: Booking) => b.status === "confirmed" || b.status === "rescheduled";
 const lastDigits = (p: string) => p.replace(/\D/g, "").slice(-8);
+const DAY_MS = 86_400_000;
+/** A doctor with their own hours works those; otherwise the clinic's opening hours. */
+export const hoursFor = (tenant: Tenant, doctor: Doctor) => doctor.hours ?? tenant.openingHours;
+export const isActive = (d: Doctor) => d.active !== false;
+/** Whole local days (Bahrain, UTC+3) of leave and clinic closures, as busy time. */
+const dayRanges = (ranges: DateRange[] | undefined): Busy[] =>
+  (ranges ?? []).map((r) => ({ start: Date.parse(`${r.from}T00:00:00+03:00`), end: Date.parse(`${r.to}T00:00:00+03:00`) + DAY_MS }))
+    .filter((r) => !Number.isNaN(r.start) && !Number.isNaN(r.end));
 
 const WHO: Record<BookingSource, string> = { ai: "Booked by the AI receptionist", staff: "Booked by the clinic team", doctor: "Booked by the doctor" };
 
@@ -35,6 +43,7 @@ export function createBookingService(data: Data, calendar: Calendar | null, nowF
     const busy: Busy[] = (await data.getBookings(tenant.id))
       .filter((b) => b.doctorId === doctor.id && live(b) && b.id !== ignoreBookingId)
       .map((b) => ({ start: Date.parse(b.startsAt), end: Date.parse(b.startsAt) + b.durationMin * 60_000 }));
+    busy.push(...dayRanges(doctor.timeOff), ...dayRanges(tenant.closures));
     if (calendar && doctor.googleCalendarId) {
       try {
         for (const x of await calendar.busy(doctor.googleCalendarId, new Date(fromMs).toISOString(), new Date(toMs).toISOString()))
@@ -72,7 +81,7 @@ export function createBookingService(data: Data, calendar: Calendar | null, nowF
     const startMs = Date.parse(newStartsAt);
     if (Number.isNaN(startMs)) throw new ToolError("bad_time", "The start time must be an ISO date-time.");
     const busy = await busyFor(tenant, doctor, startMs, startMs + booking.durationMin * 60_000, booking.id);
-    if (!isSlotFree({ openingHours: tenant.openingHours, busy, startMs, durationMin: booking.durationMin, nowMs: nowFn().getTime() }))
+    if (!isSlotFree({ openingHours: hoursFor(tenant, doctor), busy, startMs, durationMin: booking.durationMin, nowMs: nowFn().getTime() }))
       throw new ToolError("slot_taken", "That time is not available. Offer other slots.");
     let updated: Booking;
     try {
@@ -91,7 +100,9 @@ export function createBookingService(data: Data, calendar: Calendar | null, nowF
   return {
     /** Free slots for one doctor (or every doctor) over the next days, soonest first. */
     async checkAvailability(tenantId: string, p: { doctorId?: string; fromDate?: string; days?: number; locale?: "en" | "ar"; limit?: number }) {
-      const { tenant, doctors } = await context(tenantId, p.doctorId);
+      const { tenant, doctors: all } = await context(tenantId, p.doctorId);
+      const doctors = all.filter(isActive);
+      if (p.doctorId && doctors.length === 0) throw new ToolError("doctor_unavailable", "That doctor is not taking bookings. Offer another doctor.");
       const now = nowFn();
       const from = p.fromDate && /^\d{4}-\d{2}-\d{2}$/.test(p.fromDate) ? Date.parse(`${p.fromDate}T00:00:00+03:00`) : now.getTime();
       if (Number.isNaN(from)) throw new ToolError("bad_date", "The date must be YYYY-MM-DD.");
@@ -100,7 +111,7 @@ export function createBookingService(data: Data, calendar: Calendar | null, nowF
       const out: { doctorId: string; doctor: string; start: string; label: string }[] = [];
       for (const d of doctors) {
         const slots = computeSlots({
-          openingHours: tenant.openingHours, busy: await busyFor(tenant, d, from, to), fromMs: from, toMs: to,
+          openingHours: hoursFor(tenant, d), busy: await busyFor(tenant, d, from, to), fromMs: from, toMs: to,
           durationMin: SLOT_MIN, nowMs: now.getTime(), limit: p.limit ?? 6,
         });
         for (const s of slots) out.push({ doctorId: d.id, doctor: d.name, start: s, label: describeSlot(s, p.locale ?? "en") });
@@ -112,10 +123,11 @@ export function createBookingService(data: Data, calendar: Calendar | null, nowF
     async bookAppointment(tenantId: string, p: { doctorId: string; startsAt: string; patientName: string; patientPhone: string; service?: string; conversationId?: string; notes?: string; source?: BookingSource; actor?: string }) {
       const { tenant, doctors } = await context(tenantId, p.doctorId);
       const doctor = doctors[0];
+      if (!isActive(doctor)) throw new ToolError("doctor_unavailable", "That doctor is not taking bookings. Offer another doctor.");
       const startMs = Date.parse(p.startsAt);
       if (Number.isNaN(startMs)) throw new ToolError("bad_time", "The start time must be an ISO date-time.");
       if (!p.patientName.trim() || lastDigits(p.patientPhone).length < 8) throw new ToolError("missing_details", "Ask the patient for their name and a full phone number.");
-      const free = isSlotFree({ openingHours: tenant.openingHours, busy: await busyFor(tenant, doctor, startMs, startMs + SLOT_MIN * 60_000), startMs, durationMin: SLOT_MIN, nowMs: nowFn().getTime() });
+      const free = isSlotFree({ openingHours: hoursFor(tenant, doctor), busy: await busyFor(tenant, doctor, startMs, startMs + SLOT_MIN * 60_000), startMs, durationMin: SLOT_MIN, nowMs: nowFn().getTime() });
       if (!free) throw new ToolError("slot_taken", "That time is no longer available. Offer other slots.");
       let booking: Booking;
       try {
@@ -213,7 +225,7 @@ export function createBookingService(data: Data, calendar: Calendar | null, nowF
       if (status === "confirmed" && wasCancelled) {
         const startMs = Date.parse(booking.startsAt);
         const busy = await busyFor(tenant, doctor, startMs, startMs + booking.durationMin * 60_000, booking.id);
-        if (!isSlotFree({ openingHours: tenant.openingHours, busy, startMs, durationMin: booking.durationMin, nowMs: nowFn().getTime() }))
+        if (!isSlotFree({ openingHours: hoursFor(tenant, doctor), busy, startMs, durationMin: booking.durationMin, nowMs: nowFn().getTime() }))
           throw new ToolError("slot_taken", "That time is no longer available. Book a new time instead.");
       }
       let updated: Booking;
@@ -242,6 +254,72 @@ export function createBookingService(data: Data, calendar: Calendar | null, nowF
         catch { await data.addAlert(tenantId, "warning", `Notes for ${booking.patientName} were saved but not copied to Google Calendar.`); }
       }
       return updated;
+    },
+
+    /**
+     * Fixes the patient's details or the service, and can hand the booking to another doctor at the same time
+     * (only if that doctor is free then). Moving doctors moves the Google Calendar event to the new doctor's calendar.
+     */
+    async staffUpdateDetails(tenantId: string, bookingId: string, p: { patientName?: string; patientPhone?: string; service?: string; doctorId?: string }, actor: string, onlyDoctorId?: string) {
+      const { tenant, booking, doctor } = await found(tenantId, bookingId, onlyDoctorId);
+      const patch: Partial<Booking> = {};
+      if (p.patientName !== undefined) {
+        const v = p.patientName.replace(/\s+/g, " ").trim().slice(0, 120);
+        if (!v) throw new ToolError("missing_details", "The patient's name is required.");
+        patch.patientName = v;
+      }
+      if (p.patientPhone !== undefined) {
+        if (lastDigits(p.patientPhone).length < 8) throw new ToolError("missing_details", "Enter a full phone number.");
+        patch.patientPhone = p.patientPhone.trim().slice(0, 30);
+      }
+      if (p.service !== undefined) patch.service = p.service.trim().slice(0, 120) || "Consultation";
+      let target = doctor;
+      if (p.doctorId && p.doctorId !== doctor.id) {
+        if (onlyDoctorId) throw new ToolError("not_allowed", "Only the clinic team can give a booking to another doctor.");
+        const next = (await data.getDoctors(tenantId)).find((d) => d.id === p.doctorId);
+        if (!next) throw new ToolError("unknown_doctor", "That doctor was not found.");
+        if (!isActive(next)) throw new ToolError("doctor_unavailable", "That doctor is not taking bookings.");
+        if (live(booking)) {
+          const startMs = Date.parse(booking.startsAt);
+          const busy = await busyFor(tenant, next, startMs, startMs + booking.durationMin * 60_000, booking.id);
+          if (!isSlotFree({ openingHours: hoursFor(tenant, next), busy, startMs, durationMin: booking.durationMin, nowMs: Math.min(nowFn().getTime(), startMs) }))
+            throw new ToolError("slot_taken", "That doctor is not free at this time. Pick another time or doctor.");
+        }
+        patch.doctorId = next.id;
+        target = next;
+      }
+      let updated: Booking;
+      try {
+        updated = await data.updateBooking(tenantId, booking.id, patch, actor);
+      } catch (e) {
+        if (e instanceof SlotTakenError) throw new ToolError("slot_taken", "That doctor already has a booking at this time.");
+        throw e;
+      }
+      if (calendar && live(updated)) {
+        try {
+          if (target.id !== doctor.id) {
+            if (doctor.googleCalendarId && booking.calendarEventId) await calendar.deleteEvent(doctor.googleCalendarId, booking.calendarEventId);
+            const eventId = target.googleCalendarId ? await calendar.createEvent(target.googleCalendarId, eventFor(updated)) : undefined;
+            updated = await data.updateBooking(tenantId, booking.id, { calendarEventId: eventId ?? "" }, actor);
+          } else if (doctor.googleCalendarId && updated.calendarEventId) {
+            await calendar.updateEvent(doctor.googleCalendarId, updated.calendarEventId, eventFor(updated));
+          }
+        } catch {
+          await data.addAlert(tenantId, "warning", `Booking for ${updated.patientName} was changed but Google Calendar was not updated.`);
+        }
+      }
+      return updated;
+    },
+
+    /** Removes a booking for good (made by mistake, a test, or a privacy request) and its Google Calendar event. */
+    async staffDeleteBooking(tenantId: string, bookingId: string, actor: string) {
+      const { booking, doctor } = await found(tenantId, bookingId);
+      if (calendar && doctor.googleCalendarId && booking.calendarEventId) {
+        try { await calendar.deleteEvent(doctor.googleCalendarId, booking.calendarEventId); }
+        catch { await data.addAlert(tenantId, "warning", `Booking for ${booking.patientName} was deleted but its Google Calendar event could not be removed.`); }
+      }
+      await data.deleteBooking(tenantId, booking.id, actor);
+      return { deleted: true };
     },
   };
 

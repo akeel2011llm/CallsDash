@@ -2,21 +2,25 @@ import { getT } from "@/lib/i18n";
 import { fmtNum } from "@/lib/format";
 import { listPackages, listTenants } from "@/lib/data";
 import { adminArchivePackageAction, adminSavePackageAction } from "@/lib/actions";
+import { adminDeletePackageAction } from "@/lib/manage-actions";
+import { ConfirmDelete } from "@/components/Confirm";
 import { Badge, Notice, PageHead } from "@/components/ui";
 import { SubmitButton } from "@/components/SubmitButton";
 import type { CatalogPackage } from "@/lib/types";
 
-export default async function PackagesPage({ searchParams }: { searchParams: Promise<{ saved?: string; error?: string }> }) {
-  const { saved, error } = await searchParams;
+export default async function PackagesPage({ searchParams }: { searchParams: Promise<{ saved?: string; error?: string; deleted?: string }> }) {
+  const { saved, error, deleted } = await searchParams;
   const [{ t, locale }, packages, tenants] = await Promise.all([getT(), listPackages(), listTenants()]);
   const inUse = (id: string) => tenants.filter((c) => c.plans.some((p) => p.active && p.packageId === id)).length;
+  const everUsed = (id: string) => tenants.some((c) => c.plans.some((p) => p.packageId === id));
   const blank: CatalogPackage = { id: "", name: "", nameAr: "", description: "", type: "package", includedCredits: 1000, monthlyPriceBhd: 0, pricePerCreditBhd: 0.08, rolloverCap: 0.5, archived: false };
   return (
     <>
       <PageHead title={t("packages.title")} />
       <p className="muted">{t("packages.help")}</p>
       {saved && <Notice tone="ok">{t("packages.saved")}</Notice>}
-      {(error === "invalid" || error === "name") && <Notice tone="warn">{t(`packages.err.${error}` as "packages.err.name")}</Notice>}
+      {(error === "invalid" || error === "name" || error === "inUse" || error === "confirm") && <Notice tone="warn">{t(`packages.err.${error}` as "packages.err.name")}</Notice>}
+      {deleted && <Notice tone="ok">{t("packages.deleted")}</Notice>}
       {packages.map((p) => (
         <details key={p.id} className="card">
           <summary className="row" style={{ justifyContent: "space-between", cursor: "pointer" }}>
@@ -36,6 +40,10 @@ export default async function PackagesPage({ searchParams }: { searchParams: Pro
             <input type="hidden" name="archived" value={p.archived ? "0" : "1"} />
             <SubmitButton className="btn small ghost" type="submit">{p.archived ? t("packages.restore") : t("packages.archive")}</SubmitButton>
           </form>
+          {everUsed(p.id) ? <small className="muted">{t("packages.deleteUsed")}</small> : (
+            <ConfirmDelete action={adminDeletePackageAction} summary={t("packages.delete")} warning={t("packages.delete.warn")}
+              tick={t("common.confirmTick")} button={t("packages.delete")} fields={{ id: p.id }} />
+          )}
         </details>
       ))}
       <details className="card" open={packages.length === 0}>

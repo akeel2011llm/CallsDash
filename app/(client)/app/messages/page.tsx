@@ -3,11 +3,14 @@ import { getT } from "@/lib/i18n";
 import { fmtDateTime } from "@/lib/format";
 import { getStaffRequests } from "@/lib/data";
 import { staffRequestStatusAction } from "@/lib/actions";
-import { Badge, Empty, PageHead } from "@/components/ui";
+import { deleteStaffRequestAction } from "@/lib/manage-actions";
+import { ConfirmDelete } from "@/components/Confirm";
+import { Badge, Empty, Notice, PageHead } from "@/components/ui";
 import { SubmitButton } from "@/components/SubmitButton";
 
-export default async function MessagesPage() {
-  const { tenant } = await requireClient();
+export default async function MessagesPage({ searchParams }: { searchParams: Promise<{ deleted?: string }> }) {
+  const { tenant, staffRole } = await requireClient();
+  const { deleted } = await searchParams;
   const [{ t, locale }, all] = await Promise.all([getT(), getStaffRequests(tenant.id)]);
   const open = all.filter((r) => r.status === "open").sort((a, b) => Number(b.urgent) - Number(a.urgent) || b.createdAt.localeCompare(a.createdAt));
   const done = all.filter((r) => r.status === "done").slice(0, 20);
@@ -30,12 +33,17 @@ export default async function MessagesPage() {
           <SubmitButton className="btn small" type="submit">{r.status === "open" ? t("messages.markDone") : t("messages.reopen")}</SubmitButton>
         </form>
       </div>
+      {staffRole === "manager" && (
+        <ConfirmDelete action={deleteStaffRequestAction} summary={t("common.delete")} warning={t("messages.delete.warn")}
+          tick={t("common.confirmTick")} button={t("common.delete")} fields={{ id: r.id }} />
+      )}
     </div>
   );
   return (
     <>
       <PageHead title={t("messages.title")} />
       <p className="muted">{t("messages.help")}</p>
+      {deleted && <Notice tone="ok">{t("messages.deleted")}</Notice>}
       {open.length === 0 ? <Empty kind="inbox">{t("messages.none")}</Empty> : <div className="stack">{open.map(card)}</div>}
       {done.length > 0 && (
         <details>
