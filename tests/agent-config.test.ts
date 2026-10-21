@@ -105,4 +105,13 @@ describe("voices", () => {
     expect(resolveVoiceId("RealElevenLabsId", "en", undefined)).toBe("RealElevenLabsId");
     expect(resolveVoiceId("voice_en_m", "en", "not json")).toMatch(/^[A-Za-z0-9]{20}$/);
   });
+  it("sets only one of description or dynamic_variable on each tool property (ElevenLabs returns 422 otherwise)", () => {
+    for (const [name, def] of Object.entries(toolDefinitions("https://app.example", "sec"))) {
+      const props = (def as { api_schema: { request_body_schema: { properties: Record<string, Record<string, unknown>> } } }).api_schema.request_body_schema.properties;
+      for (const [prop, cfg] of Object.entries(props)) {
+        const exclusive = ["description", "dynamic_variable", "constant_value", "is_system_provided", "is_omitted"].filter((k) => cfg[k] !== undefined);
+        expect(exclusive.length, `${name}.${prop}`).toBeLessThanOrEqual(1);
+      }
+    }
+  });
 });

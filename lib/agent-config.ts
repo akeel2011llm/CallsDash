@@ -129,10 +129,11 @@ export function buildAgentConfig(i: AgentConfigInput) {
   };
 }
 
-type Prop = { type: "string" | "boolean" | "integer"; description: string; dynamic_variable?: string };
+// ElevenLabs accepts only one of description, dynamic_variable, constant_value, is_system_provided or is_omitted per property.
+type Prop = { type: "string" | "boolean" | "integer"; description?: string; dynamic_variable?: string };
 const str = (description: string): Prop => ({ type: "string", description });
-const agentId: Prop = { type: "string", description: "Identifies the clinic.", dynamic_variable: "system__agent_id" };
-const conversationId: Prop = { type: "string", description: "Identifies this conversation.", dynamic_variable: "system__conversation_id" };
+const agentId: Prop = { type: "string", dynamic_variable: "system__agent_id" };
+const conversationId: Prop = { type: "string", dynamic_variable: "system__conversation_id" };
 
 /** The seven booking and hand-over tools (docs/agent-tools.md), as ElevenLabs webhook tool configs. One shared set serves every client; `agent_id` tells them apart. */
 export function toolDefinitions(appUrl: string, secret: string): Record<string, Record<string, unknown>> {
