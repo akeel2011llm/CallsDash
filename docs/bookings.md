@@ -3,8 +3,8 @@
 One booking record per appointment, whoever made it. The record says who: the AI receptionist (`ai`), the clinic team (`staff`) or later the doctor (`doctor`).
 
 ## Receptionist screens (client app)
-- `/app/bookings`: today, upcoming, past and all; search by name or phone; filter by doctor and status; one-click cancel.
-- `/app/bookings/new`: pick a doctor and a day, choose a free time (opening hours, existing bookings and the doctor's Google Calendar are all respected), enter the patient and notes.
+- `/app/bookings`: today, upcoming, past and all; search by name, phone or CPR number; filter by doctor and status; one-click cancel.
+- `/app/bookings/new`: pick a doctor and a day, choose a free time (opening hours, existing bookings and the doctor's Google Calendar are all respected), enter the patient (name, phone and CPR number, all required) and notes.
 - `/app/bookings/[id]`: notes, reschedule, mark completed, no-show, cancel, restore. WhatsApp and call links for the patient.
 
 All of it goes through `lib/booking.ts`, the same service the AI agent's tools use, so staff and the AI can never double-book a doctor.
@@ -26,5 +26,5 @@ A doctor never sees other doctors' bookings, credits, conversations or settings:
 - **Doctors page** (`/app/doctors` for the clinic manager, and the Doctors section of the admin client page): edit name, specialty, colour and Google Calendar ID, test the calendar, pause a doctor ("Taking new bookings" off: existing bookings stay, nobody can book them), set the doctor's own weekly hours or use the clinic's, add and remove leave (whole days), and remove the doctor (tick-box confirmation; refused while they have upcoming bookings or their own sign-in).
 - **Clinic closed days** (Calendar page): public holidays when nobody can book.
 - Availability (`lib/booking.ts`) uses the doctor's own hours when set, and treats leave and closed days as busy. Adding leave or a closed day says how many existing bookings fall on those days, so staff can move them.
-- **Booking edits**: patient name, phone and service; the clinic team can hand a booking to another doctor at the same time if that doctor is free (the Google event moves calendars). A doctor can fix details on their own bookings but cannot change the doctor.
+- **Booking edits**: patient name, phone, CPR number and service (a booking made before CPR was asked can be saved with the CPR left empty); the clinic team can hand a booking to another doctor at the same time if that doctor is free (the Google event moves calendars). A doctor can fix details on their own bookings but cannot change the doctor.
 - **Delete booking** (manager only, tick-box confirmation): removes the booking and its Google event with no record. Everyone else cancels, which keeps the record.

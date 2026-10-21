@@ -17,11 +17,21 @@ const ARABIC_STYLE = {
   msa: "When you speak or write Arabic, use clear Modern Standard Arabic.",
 } as const;
 
+/**
+ * Raise when the prompt rules or the tools change in a way a clinic's agent must pick up. The client screens ask for a
+ * Sync while the agent's last sync was at an older version. 2: CPR numbers for booking, finding, moving and cancelling.
+ */
+export const AGENT_VERSION = 2;
+
 const TOOL_RULES = [
   "Always call check_availability before offering times. Never invent slots. Leave from_date empty to start from today.",
-  "Ask for the patient's full name and phone number, then confirm doctor, time, name and number back to the patient before calling book_appointment.",
+  "To book, ask for the patient's full name, phone number and CPR number (the 9-digit personal number on the Bahraini ID card). Read the CPR number back digit by digit, then confirm doctor, time, name, phone and CPR with the patient before calling book_appointment.",
   "Call book_appointment with the doctor_id and starts_at exactly as check_availability returned them; never rewrite the time yourself.",
   "Only say an appointment is booked after book_appointment returns ok:true, then read back its label.",
+  "When someone asks about their booking, or wants to move or cancel it, first ask for their CPR number and call find_patient_booking with it. Only talk about the bookings it returns. Use their booking_id and the same CPR number for cancel_appointment or reschedule_appointment, and confirm the change with the patient before calling the tool.",
+  "To move a booking, call check_availability first (with the new doctor's doctor_id if they want another doctor), then call reschedule_appointment with the chosen starts_at as new_starts_at, and doctor_id only when the doctor changes.",
+  "If find_patient_booking finds nothing and the booking was made before CPR numbers were asked, ask for the phone number it was made with and call find_patient_booking again with both.",
+  "Never say a CPR number aloud except to read back the one the patient just gave. If the patient has no CPR number (for example a visitor), use take_message so the team can book for them.",
   "If a tool returns ok:false, follow its message. Never promise a booking that a tool did not confirm.",
   "Use take_message when the patient wants staff to call back. Use handoff_to_staff when a person must take over; there is no live transfer, so say that staff will call back.",
   "For a medical emergency tell the caller to call 999 immediately and also call handoff_to_staff with urgent set to true.",
@@ -155,6 +165,7 @@ type Prop = { type: "string" | "boolean" | "integer"; description?: string; dyna
 const str = (description: string): Prop => ({ type: "string", description });
 const agentId: Prop = { type: "string", dynamic_variable: "system__agent_id" };
 const conversationId: Prop = { type: "string", dynamic_variable: "system__conversation_id" };
+const CPR_HELP = "Patient's CPR number: the 9 digits on the Bahraini ID card, digits only.";
 
 /** The seven booking and hand-over tools (docs/agent-tools.md), as ElevenLabs webhook tool configs. One shared set serves every client; `agent_id` tells them apart. */
 export function toolDefinitions(appUrl: string, secret: string): Record<string, Record<string, unknown>> {
@@ -173,13 +184,20 @@ export function toolDefinitions(appUrl: string, secret: string): Record<string, 
     }, []),
     book_appointment: tool("book_appointment", "Book an appointment in a slot returned by check_availability.", {
       doctor_id: str("Doctor id from the slot."), starts_at: str("Slot start (ISO) exactly as returned by check_availability."),
-      patient_name: str("Patient's full name."), patient_phone: str("Patient's phone number."), service: str("Reason for the visit."), conversation_id: conversationId,
-    }, ["doctor_id", "starts_at", "patient_name", "patient_phone"]),
-    find_patient_booking: tool("find_patient_booking", "Find a patient's upcoming bookings by phone number.", { patient_phone: str("Patient's phone number.") }, ["patient_phone"]),
-    cancel_appointment: tool("cancel_appointment", "Cancel a booking.", { booking_id: str("Booking id."), patient_phone: str("Patient's phone number, as proof of identity.") }, ["booking_id", "patient_phone"]),
-    reschedule_appointment: tool("reschedule_appointment", "Move a booking to a new slot returned by check_availability.", {
-      booking_id: str("Booking id."), patient_phone: str("Patient's phone number."), new_starts_at: str("New slot start (ISO)."),
-    }, ["booking_id", "patient_phone", "new_starts_at"]),
+      patient_name: str("Patient's full name."), patient_phone: str("Patient's phone number."), patient_cpr: str(CPR_HELP),
+      service: str("Reason for the visit."), conversation_id: conversationId,
+    }, ["doctor_id", "starts_at", "patient_name", "patient_phone", "patient_cpr"]),
+    find_patient_booking: tool("find_patient_booking", "Find a patient's upcoming bookings by their CPR number.", {
+      patient_cpr: str(CPR_HELP), patient_phone: str("Only for a booking made before CPR numbers were asked: the phone number it was made with."),
+      language: str("en or ar, the language the time labels should be in."),
+    }, ["patient_cpr"]),
+    cancel_appointment: tool("cancel_appointment", "Cancel a booking found with find_patient_booking.", {
+      booking_id: str("booking_id from find_patient_booking."), patient_cpr: str(CPR_HELP), patient_phone: str("Only if find_patient_booking needed the phone number too."),
+    }, ["booking_id", "patient_cpr"]),
+    reschedule_appointment: tool("reschedule_appointment", "Move a booking found with find_patient_booking to a new slot returned by check_availability, with the same or another doctor.", {
+      booking_id: str("booking_id from find_patient_booking."), patient_cpr: str(CPR_HELP), new_starts_at: str("New slot start (ISO), the starts_at of the chosen slot."),
+      doctor_id: str("Only when the patient wants another doctor: the doctor_id of the chosen slot."), patient_phone: str("Only if find_patient_booking needed the phone number too."),
+    }, ["booking_id", "patient_cpr", "new_starts_at"]),
     take_message: tool("take_message", "Take a message for the clinic staff to answer later.", {
       patient_name: str("Caller's name."), patient_phone: str("Caller's phone number."), message: str("What the caller wants."), language: str("en or ar."), conversation_id: conversationId,
     }, ["patient_name", "patient_phone", "message"]),

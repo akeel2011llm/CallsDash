@@ -7,10 +7,10 @@ Create one **server tool** per row in the ElevenLabs agent (Agents > Tools > Add
 | Tool | Body fields (besides `agent_id`) | Returns |
 | --- | --- | --- |
 | `check_availability` | `doctor_id` (optional), `from_date` (YYYY-MM-DD, optional), `days` (1-30, default 7), `language` (`en`/`ar`) | `slots[]` with `doctor_id`, `doctor`, `starts_at` (ISO, pass to `book_appointment` as is), `label`; `message` when there are none |
-| `book_appointment` | `doctor_id`, `starts_at` (ISO, from a slot), `patient_name`, `patient_phone`, `service`, `conversation_id` (`system__conversation_id`) | `bookingId`, `label` |
-| `find_patient_booking` | `patient_phone` | `bookings[]` with `bookingId`, `doctor`, `label` |
-| `cancel_appointment` | `booking_id`, `patient_phone` | `cancelled` |
-| `reschedule_appointment` | `booking_id`, `patient_phone`, `new_starts_at` | `bookingId`, `label` |
+| `book_appointment` | `doctor_id`, `starts_at` (ISO, from a slot), `patient_name`, `patient_phone`, `patient_cpr` (9 digits), `service`, `conversation_id` (`system__conversation_id`) | `bookingId`, `label` |
+| `find_patient_booking` | `patient_cpr`; `patient_phone` only for bookings made before CPR was asked; `language` | upcoming `bookings[]` with `booking_id`, `doctor_id`, `doctor`, `starts_at`, `label`; `message` when there are none |
+| `cancel_appointment` | `booking_id`, `patient_cpr` (`patient_phone` for an old booking) | `cancelled` |
+| `reschedule_appointment` | `booking_id`, `patient_cpr`, `new_starts_at`, `doctor_id` (only to change doctor; `patient_phone` for an old booking) | `bookingId`, `doctor`, `label` |
 | `take_message` | `patient_name`, `patient_phone`, `message`, `language`, `conversation_id` | `requestId`, `message` (what to tell the caller) |
 | `handoff_to_staff` | `patient_name`, `patient_phone`, `reason`, `urgent` (true when it cannot wait, e.g. a medical emergency), `language`, `conversation_id` | `requestId`, `open` (clinic open now), `transferred` (always false for now), `message` |
 
@@ -19,7 +19,13 @@ Create one **server tool** per row in the ElevenLabs agent (Agents > Tools > Add
 should tell the caller to call the emergency number (999 in Bahrain) as well as calling `handoff_to_staff` with `urgent: true`.
 
 Responses are `{ "ok": true, ... }` or `{ "ok": false, "error": "<code>", "message": "<what the agent should say or do>" }`.
-Error codes: `slot_taken`, `calendar_unavailable`, `missing_details`, `not_found`, `bad_time`, `bad_date`, `unknown_doctor`, `doctor_unavailable`.
+Error codes: `slot_taken`, `calendar_unavailable`, `missing_details`, `bad_cpr`, `not_found`, `bad_time`, `bad_date`, `unknown_doctor`, `doctor_unavailable`.
+
+**CPR numbers.** Every booking needs the patient's CPR number, the 9-digit personal number on the Bahraini ID card
+(`lib/cpr.ts` accepts spaces, dashes and Arabic digits). A patient proves a booking is theirs with the same CPR number to look
+it up, move it or cancel it. Bookings made before CPR was asked have none; for those the phone number they were made with
+is the proof, as before. The CPR number is kept in CallsDash only: it is not written into the Google Calendar event, and the
+tool log keeps its last 3 digits.
 
 The tools forgive what models commonly get wrong: `doctor_id` may be the doctor's name ("Dr Hana") when only one doctor
 matches; a time without a zone ("2026-10-23T16:00") is read as Bahrain time; a `from_date` that is already over means today.
@@ -34,11 +40,11 @@ hidden symbol from copy-paste. Sync saves it fine, but ElevenLabs cannot put it 
 press Sync.
 
 Every tool call that reaches CallsDash is also written to the table `agent_tool_calls` (what was asked and the result; kept
-30 days, phone numbers cut to the last 3 digits), so a failed booking can be read there. Common causes seen so far: a secret
+30 days, phone and CPR numbers cut to the last 3 digits), so a failed booking can be read there. Common causes seen so far: a secret
 with a hidden character, and a conversation id column that was a uuid while ElevenLabs sends text ids (`conv_...`).
 
-Add to the prompt: "Always call check_availability before offering times. Never invent slots. Confirm doctor, time, name and phone number
-back to the patient before calling book_appointment. If a tool returns ok:false, follow its message."
+Sync writes the tool rules into the agent's prompt (`TOOL_RULES` in `lib/agent-config.ts`). When those rules or the tools
+change, `AGENT_VERSION` goes up and the client screens show **Update the assistant** until each client's agent is synced again.
 
 ## Google Calendar
 

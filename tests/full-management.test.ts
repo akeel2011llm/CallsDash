@@ -40,7 +40,7 @@ describe("doctor availability", () => {
     await expect(svc.checkAvailability(t.id, { doctorId: a.id, days: 1 })).rejects.toMatchObject({ code: "doctor_unavailable" });
     const all = (await svc.checkAvailability(t.id, { days: 1, limit: 50 })).slots;
     expect(all.every((s) => s.doctorId === b.id)).toBe(true);
-    await expect(svc.bookAppointment(t.id, { doctorId: a.id, startsAt: WED_10, patientName: "X", patientPhone: phone })).rejects.toMatchObject({ code: "doctor_unavailable" });
+    await expect(svc.bookAppointment(t.id, { doctorId: a.id, startsAt: WED_10, patientName: "X", patientPhone: phone, patientCpr: "850123456" })).rejects.toMatchObject({ code: "doctor_unavailable" });
   });
 
   it("uses a doctor's own hours instead of the clinic's", async () => {
@@ -49,7 +49,7 @@ describe("doctor availability", () => {
     const slots = (await svc.checkAvailability(t.id, { doctorId: a.id, days: 1, limit: 50 })).slots.map((s) => s.start);
     expect(slots[0]).toBe("2026-10-21T11:00:00.000Z"); // 14:00 local
     expect(slots).toHaveLength(4);
-    await expect(svc.bookAppointment(t.id, { doctorId: a.id, startsAt: WED_10, patientName: "X", patientPhone: phone })).rejects.toMatchObject({ code: "slot_taken" });
+    await expect(svc.bookAppointment(t.id, { doctorId: a.id, startsAt: WED_10, patientName: "X", patientPhone: phone, patientCpr: "850123456" })).rejects.toMatchObject({ code: "slot_taken" });
     await data.updateDoctor(t.id, a.id, { hours: null }, "x");
     expect((await svc.checkAvailability(t.id, { doctorId: a.id, days: 1 })).slots[0].start).toBe("2026-10-21T05:00:00.000Z");
   });
@@ -65,14 +65,14 @@ describe("doctor availability", () => {
     expect((await data.getTenant(t.id))?.closures).toEqual([{ from: "2026-10-21", to: "2026-10-21" }]);
     const bSlots = (await svc.checkAvailability(t.id, { doctorId: b.id, days: 2, limit: 1 })).slots;
     expect(bSlots[0].start).toBe("2026-10-22T05:00:00.000Z"); // Thursday 08:00 local
-    await expect(svc.bookAppointment(t.id, { doctorId: b.id, startsAt: WED_10, patientName: "X", patientPhone: phone })).rejects.toMatchObject({ code: "slot_taken" });
+    await expect(svc.bookAppointment(t.id, { doctorId: b.id, startsAt: WED_10, patientName: "X", patientPhone: phone, patientCpr: "850123456" })).rejects.toMatchObject({ code: "slot_taken" });
   });
 });
 
 describe("staff booking edits", () => {
   it("fixes patient details and hands a booking to another free doctor, moving the calendar event", async () => {
     const { svc, t, a, b, events, data } = await setup();
-    const { bookingId } = await svc.bookAppointment(t.id, { doctorId: a.id, startsAt: WED_10, patientName: "Fatma", patientPhone: phone });
+    const { bookingId } = await svc.bookAppointment(t.id, { doctorId: a.id, startsAt: WED_10, patientName: "Fatma", patientPhone: phone, patientCpr: "850123456" });
     const updated = await svc.staffUpdateDetails(t.id, bookingId, { patientName: "Fatima Ali", patientPhone: "+973 3900 1111", service: "Check-up", doctorId: b.id }, "staff");
     expect(updated).toMatchObject({ patientName: "Fatima Ali", patientPhone: "+973 3900 1111", service: "Check-up", doctorId: b.id });
     expect(Object.values(events)).toEqual([{ calendar: "cal-b", start: WED_10 }]);
@@ -81,17 +81,42 @@ describe("staff booking edits", () => {
 
   it("refuses a doctor who is busy then, an empty name, and a doctor changing doctors", async () => {
     const { svc, t, a, b } = await setup();
-    const one = await svc.bookAppointment(t.id, { doctorId: a.id, startsAt: WED_10, patientName: "One", patientPhone: phone });
-    await svc.bookAppointment(t.id, { doctorId: b.id, startsAt: WED_10, patientName: "Two", patientPhone: "+973 3888 7777" });
+    const one = await svc.bookAppointment(t.id, { doctorId: a.id, startsAt: WED_10, patientName: "One", patientPhone: phone, patientCpr: "850123456" });
+    await svc.bookAppointment(t.id, { doctorId: b.id, startsAt: WED_10, patientName: "Two", patientPhone: "+973 3888 7777", patientCpr: "850123456" });
     await expect(svc.staffUpdateDetails(t.id, one.bookingId, { doctorId: b.id }, "staff")).rejects.toMatchObject({ code: "slot_taken" });
     await expect(svc.staffUpdateDetails(t.id, one.bookingId, { patientName: "  " }, "staff")).rejects.toMatchObject({ code: "missing_details" });
     await expect(svc.staffUpdateDetails(t.id, one.bookingId, { doctorId: b.id }, "doctor", a.id)).rejects.toMatchObject({ code: "not_allowed" });
     await expect(svc.staffUpdateDetails(t.id, one.bookingId, { patientName: "Other" }, "doctor", b.id)).rejects.toMatchObject({ code: "not_found" });
   });
 
+  it("records, corrects and keeps a booking's CPR number", async () => {
+    const { svc, t, a, data } = await setup();
+    const { bookingId } = await svc.bookAppointment(t.id, { doctorId: a.id, startsAt: WED_10, patientName: "Fatma", patientPhone: phone, patientCpr: "850123456" });
+    await expect(svc.staffUpdateDetails(t.id, bookingId, { patientCpr: "1234" }, "staff")).rejects.toMatchObject({ code: "bad_cpr" });
+    expect((await svc.staffUpdateDetails(t.id, bookingId, { patientCpr: "850 123 457" }, "staff")).patientCpr).toBe("850123457");
+    // left empty, the field keeps the number (a booking made before CPR was asked can still be edited)
+    expect((await svc.staffUpdateDetails(t.id, bookingId, { patientName: "Fatma Ali", patientCpr: "" }, "staff")).patientCpr).toBe("850123457");
+    expect((await data.getBookings(t.id))[0]).toMatchObject({ patientName: "Fatma Ali", patientCpr: "850123457" });
+  });
+
+  it("moves a patient's booking to another doctor and time, moving the calendar event between calendars", async () => {
+    const { svc, t, a, b, events, data } = await setup();
+    const { bookingId } = await svc.bookAppointment(t.id, { doctorId: a.id, startsAt: WED_10, patientName: "Fatma", patientPhone: phone, patientCpr: "850123456" });
+    const moved = await svc.rescheduleAppointment(t.id, { bookingId, patientCpr: "850123456", newStartsAt: "2026-10-21T11:00", doctorId: "Dr. B" });
+    expect(moved).toMatchObject({ doctor: "Dr. B", start: "2026-10-21T08:00:00.000Z" });
+    expect(Object.values(events)).toEqual([{ calendar: "cal-b", start: "2026-10-21T08:00:00.000Z" }]);
+    const saved = (await data.getBookings(t.id)).find((x) => x.id === bookingId)!;
+    expect(saved).toMatchObject({ doctorId: b.id, status: "rescheduled", calendarEventId: Object.keys(events)[0] });
+    // a paused doctor, or one who is busy then, is refused
+    await svc.bookAppointment(t.id, { doctorId: a.id, startsAt: WED_10, patientName: "Other", patientPhone: "+973 3888 7777", patientCpr: "900101234" });
+    await expect(svc.rescheduleAppointment(t.id, { bookingId, patientCpr: "850123456", newStartsAt: WED_10, doctorId: a.id })).rejects.toMatchObject({ code: "slot_taken" });
+    await data.updateDoctor(t.id, a.id, { active: false }, "x");
+    await expect(svc.rescheduleAppointment(t.id, { bookingId, patientCpr: "850123456", newStartsAt: "2026-10-21T09:00", doctorId: a.id })).rejects.toMatchObject({ code: "doctor_unavailable" });
+  });
+
   it("deletes a booking and its calendar event", async () => {
     const { svc, t, a, events, data } = await setup();
-    const { bookingId } = await svc.bookAppointment(t.id, { doctorId: a.id, startsAt: WED_10, patientName: "Test", patientPhone: phone });
+    const { bookingId } = await svc.bookAppointment(t.id, { doctorId: a.id, startsAt: WED_10, patientName: "Test", patientPhone: phone, patientCpr: "850123456" });
     await svc.staffDeleteBooking(t.id, bookingId, "manager");
     expect(events).toEqual({});
     expect(await data.getBookings(t.id)).toEqual([]);

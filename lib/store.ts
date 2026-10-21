@@ -319,7 +319,7 @@ export function createBooking(tenantId: string, b: Omit<Booking, "id" | "tenantI
   return booking;
 }
 
-export function updateBooking(tenantId: string, bookingId: string, patch: Partial<Pick<Booking, "startsAt" | "status" | "calendarEventId" | "notes" | "patientName" | "patientPhone" | "service" | "doctorId">>, actor: string): Booking {
+export function updateBooking(tenantId: string, bookingId: string, patch: Partial<Pick<Booking, "startsAt" | "status" | "calendarEventId" | "notes" | "patientName" | "patientPhone" | "patientCpr" | "service" | "doctorId">>, actor: string): Booking {
   const d = db();
   const b = d.bookings.find((x) => x.tenantId === tenantId && x.id === bookingId);
   if (!b) throw new Error("booking not found");

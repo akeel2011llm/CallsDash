@@ -37,7 +37,7 @@ describe("booking service", () => {
     blocked.push({ start: "2026-10-21T05:00:00Z", end: "2026-10-21T06:00:00Z" }); // 08:00-09:00 local blocked in Google Calendar
     const first = (await svc.checkAvailability(t.id, { doctorId: doc, days: 1 })).slots;
     expect(first[0].start).toBe("2026-10-21T06:00:00.000Z"); // 09:00 local: 08:00-09:00 is blocked
-    const b = await svc.bookAppointment(t.id, { doctorId: doc, startsAt: WED_10, patientName: "Fatima", patientPhone: phone });
+    const b = await svc.bookAppointment(t.id, { doctorId: doc, startsAt: WED_10, patientName: "Fatima", patientPhone: phone, patientCpr: "850123456" });
     expect(b.bookingId).toBeTruthy();
     expect(Object.values(events)).toEqual([{ start: WED_10, end: "2026-10-21T07:30:00.000Z" }]);
     const after = (await svc.checkAvailability(t.id, { doctorId: doc, days: 1 })).slots.map((s) => s.start);
@@ -46,41 +46,66 @@ describe("booking service", () => {
 
   it("refuses a taken or off-grid slot and incomplete details", async () => {
     const { svc, t, doc } = await setup();
-    await svc.bookAppointment(t.id, { doctorId: doc, startsAt: WED_10, patientName: "A", patientPhone: phone });
-    await expect(svc.bookAppointment(t.id, { doctorId: doc, startsAt: WED_10, patientName: "B", patientPhone: "+973 3999 0000" })).rejects.toMatchObject({ code: "slot_taken" });
-    await expect(svc.bookAppointment(t.id, { doctorId: doc, startsAt: "2026-10-21T07:10:00Z", patientName: "B", patientPhone: phone })).rejects.toMatchObject({ code: "slot_taken" });
-    await expect(svc.bookAppointment(t.id, { doctorId: doc, startsAt: "2026-10-21T08:00:00Z", patientName: "B", patientPhone: "123" })).rejects.toMatchObject({ code: "missing_details" });
+    await svc.bookAppointment(t.id, { doctorId: doc, startsAt: WED_10, patientName: "A", patientPhone: phone, patientCpr: "850123456" });
+    await expect(svc.bookAppointment(t.id, { doctorId: doc, startsAt: WED_10, patientName: "B", patientPhone: "+973 3999 0000", patientCpr: "850123456" })).rejects.toMatchObject({ code: "slot_taken" });
+    await expect(svc.bookAppointment(t.id, { doctorId: doc, startsAt: "2026-10-21T07:10:00Z", patientName: "B", patientPhone: phone, patientCpr: "850123456" })).rejects.toMatchObject({ code: "slot_taken" });
+    await expect(svc.bookAppointment(t.id, { doctorId: doc, startsAt: "2026-10-21T08:00:00Z", patientName: "B", patientPhone: "123", patientCpr: "850123456" })).rejects.toMatchObject({ code: "missing_details" });
   });
 
   it("two simultaneous bookings of one slot: exactly one wins", async () => {
     const { svc, t, doc } = await setup();
     const res = await Promise.allSettled([
-      svc.bookAppointment(t.id, { doctorId: doc, startsAt: WED_10, patientName: "A", patientPhone: phone }),
-      svc.bookAppointment(t.id, { doctorId: doc, startsAt: WED_10, patientName: "B", patientPhone: "+973 3888 7777" }),
+      svc.bookAppointment(t.id, { doctorId: doc, startsAt: WED_10, patientName: "A", patientPhone: phone, patientCpr: "850123456" }),
+      svc.bookAppointment(t.id, { doctorId: doc, startsAt: WED_10, patientName: "B", patientPhone: "+973 3888 7777", patientCpr: "850123456" }),
     ]);
     expect(res.filter((r) => r.status === "fulfilled")).toHaveLength(1);
     const lost = res.find((r) => r.status === "rejected") as PromiseRejectedResult;
     expect(lost.reason).toBeInstanceOf(ToolError);
   });
 
-  it("finds, reschedules and cancels only with the matching phone number", async () => {
+  it("finds, reschedules and cancels only with the matching CPR number", async () => {
     const { svc, t, doc, events } = await setup();
-    const b = await svc.bookAppointment(t.id, { doctorId: doc, startsAt: WED_10, patientName: "Fatima", patientPhone: phone });
-    expect((await svc.findPatientBookings(t.id, { patientPhone: "39123456" })).bookings).toHaveLength(1);
-    await expect(svc.cancelAppointment(t.id, { bookingId: b.bookingId, patientPhone: "+973 3000 0000" })).rejects.toMatchObject({ code: "not_found" });
-    const moved = await svc.rescheduleAppointment(t.id, { bookingId: b.bookingId, patientPhone: "39123456", newStartsAt: "2026-10-21T08:00:00Z" });
-    expect(moved.start).toBe("2026-10-21T08:00:00.000Z");
+    const b = await svc.bookAppointment(t.id, { doctorId: doc, startsAt: WED_10, patientName: "Fatima", patientPhone: phone, patientCpr: "850123456" });
+    const found = (await svc.findPatientBookings(t.id, { patientCpr: "850 123 456" })).bookings;
+    expect(found).toEqual([expect.objectContaining({ bookingId: b.bookingId, doctorId: doc, doctor: "Dr. A", start: WED_10 })]);
+    expect((await svc.findPatientBookings(t.id, { patientCpr: "850123457" })).bookings).toHaveLength(0);
+    // the phone number alone no longer proves who the patient is
+    expect((await svc.findPatientBookings(t.id, { patientCpr: "850123457", patientPhone: phone })).bookings).toHaveLength(0);
+    await expect(svc.cancelAppointment(t.id, { bookingId: b.bookingId, patientCpr: "850123457", patientPhone: phone })).rejects.toMatchObject({ code: "not_found" });
+    await expect(svc.cancelAppointment(t.id, { bookingId: b.bookingId, patientCpr: "12345" })).rejects.toMatchObject({ code: "bad_cpr" });
+    const moved = await svc.rescheduleAppointment(t.id, { bookingId: b.bookingId, patientCpr: "850-123-456", newStartsAt: "2026-10-21T08:00:00Z" });
+    expect(moved).toMatchObject({ start: "2026-10-21T08:00:00.000Z", moved: true, doctor: "Dr. A" });
     expect(Object.values(events)[0].start).toBe("2026-10-21T08:00:00.000Z");
-    await svc.cancelAppointment(t.id, { bookingId: b.bookingId, patientPhone: phone });
+    await svc.cancelAppointment(t.id, { bookingId: b.bookingId, patientCpr: "٨٥٠١٢٣٤٥٦" }); // the same number in Arabic digits
     expect(Object.keys(events)).toHaveLength(0);
-    expect((await svc.findPatientBookings(t.id, { patientPhone: phone })).bookings).toHaveLength(0);
+    expect((await svc.findPatientBookings(t.id, { patientCpr: "850123456" })).bookings).toHaveLength(0);
     // the freed slot can be booked again
-    await svc.bookAppointment(t.id, { doctorId: doc, startsAt: "2026-10-21T08:00:00Z", patientName: "C", patientPhone: "+973 3555 4444" });
+    await svc.bookAppointment(t.id, { doctorId: doc, startsAt: "2026-10-21T08:00:00Z", patientName: "C", patientPhone: "+973 3555 4444", patientCpr: "900101234" });
+  });
+
+  it("needs a 9-digit CPR number to book, and keeps it with the booking", async () => {
+    const { svc, t, doc, data, full } = await setup();
+    for (const bad of ["", "12345678", "1234567890", "85012345a"])
+      await expect(svc.bookAppointment(t.id, { doctorId: doc, startsAt: WED_10, patientName: "A", patientPhone: phone, patientCpr: bad })).rejects.toMatchObject({ code: "bad_cpr" });
+    expect(await data.getBookings(t.id)).toHaveLength(0);
+    await svc.bookAppointment(t.id, { doctorId: doc, startsAt: WED_10, patientName: "A", patientPhone: phone, patientCpr: "٨٥٠ ١٢٣ ٤٥٦" });
+    expect((await data.getBookings(t.id))[0].patientCpr).toBe("850123456");
+    // the national number stays in CallsDash and is not copied into Google Calendar
+    expect(Object.values(full)[0].description).not.toContain("850123456");
+  });
+
+  it("finds a booking made before CPR numbers were asked by its phone number, given with any CPR", async () => {
+    const { svc, t, doc, data } = await setup();
+    const old = await data.createBooking(t.id, { doctorId: doc, patientName: "Old", patientPhone: phone, service: "Consultation", startsAt: WED_10, durationMin: 30, status: "confirmed" }, "x");
+    expect((await svc.findPatientBookings(t.id, { patientCpr: "850123456" })).bookings).toHaveLength(0);
+    expect((await svc.findPatientBookings(t.id, { patientCpr: "850123456", patientPhone: "39123456" })).bookings.map((x) => x.bookingId)).toEqual([old.id]);
+    await expect(svc.cancelAppointment(t.id, { bookingId: old.id, patientCpr: "850123456" })).rejects.toMatchObject({ code: "not_found" });
+    expect(await svc.cancelAppointment(t.id, { bookingId: old.id, patientCpr: "850123456", patientPhone: phone })).toEqual({ cancelled: true });
   });
 
   it("lets staff book, move, complete, cancel and restore, keeping the doctor's calendar in step", async () => {
     const { svc, t, doc, events, full, data } = await setup();
-    const made = await svc.bookAppointment(t.id, { doctorId: doc, startsAt: WED_10, patientName: "Maryam", patientPhone: phone, service: "Check-up", notes: "Prefers a female nurse", source: "staff", actor: "reception@x" });
+    const made = await svc.bookAppointment(t.id, { doctorId: doc, startsAt: WED_10, patientName: "Maryam", patientPhone: phone, patientCpr: "850123456", service: "Check-up", notes: "Prefers a female nurse", source: "staff", actor: "reception@x" });
     expect(made.calendarSaved).toBe(true);
     const id = made.bookingId;
     expect((await data.getBookings(t.id))[0]).toMatchObject({ source: "staff", notes: "Prefers a female nurse" });
@@ -89,7 +114,7 @@ describe("booking service", () => {
     const moved = await svc.staffReschedule(t.id, id, "2026-10-21T08:00:00Z", "reception@x");
     expect(moved).toMatchObject({ status: "rescheduled", startsAt: "2026-10-21T08:00:00.000Z" });
     expect(Object.values(events)).toEqual([{ start: "2026-10-21T08:00:00.000Z", end: "2026-10-21T08:30:00.000Z" }]);
-    await svc.bookAppointment(t.id, { doctorId: doc, startsAt: WED_10, patientName: "Other", patientPhone: "+973 3777 8888", source: "staff" });
+    await svc.bookAppointment(t.id, { doctorId: doc, startsAt: WED_10, patientName: "Other", patientPhone: "+973 3777 8888", patientCpr: "850123456", source: "staff" });
     await expect(svc.staffReschedule(t.id, id, WED_10, "x")).rejects.toMatchObject({ code: "slot_taken" });
 
     await svc.staffSetNotes(t.id, id, "Bring insurance card", "reception@x");
@@ -105,10 +130,10 @@ describe("booking service", () => {
 
     // a cancelled booking cannot come back onto a time somebody else has taken since
     await svc.staffSetStatus(t.id, id, "cancelled", "x");
-    await svc.bookAppointment(t.id, { doctorId: doc, startsAt: "2026-10-21T08:00:00Z", patientName: "Third", patientPhone: "+973 3000 1111", source: "staff" });
+    await svc.bookAppointment(t.id, { doctorId: doc, startsAt: "2026-10-21T08:00:00Z", patientName: "Third", patientPhone: "+973 3000 1111", patientCpr: "850123456", source: "staff" });
     await expect(svc.staffSetStatus(t.id, id, "confirmed", "x")).rejects.toMatchObject({ code: "slot_taken" });
 
-    await svc.staffSetStatus(t.id, (await svc.bookAppointment(t.id, { doctorId: doc, startsAt: "2026-10-21T09:00:00Z", patientName: "Z", patientPhone: "+973 3222 3333" })).bookingId, "completed", "x");
+    await svc.staffSetStatus(t.id, (await svc.bookAppointment(t.id, { doctorId: doc, startsAt: "2026-10-21T09:00:00Z", patientName: "Z", patientPhone: "+973 3222 3333", patientCpr: "850123456" })).bookingId, "completed", "x");
     await expect(svc.staffSetStatus(t.id, id, "bogus" as never, "x")).rejects.toMatchObject({ code: "bad_status" });
     await expect(svc.staffSetStatus(t.id, "00000000-0000-0000-0000-000000000000", "cancelled", "x")).rejects.toMatchObject({ code: "not_found" });
   });
@@ -116,7 +141,7 @@ describe("booking service", () => {
   it("keeps a doctor's own sign-in to their own bookings", async () => {
     const { svc, t, doc, q } = await setup();
     const other = (await q<{ id: string }>(`insert into doctors (tenant_id, name) values ($1,'Dr. B') returning id`, [t.id]))[0].id;
-    const mine = (await svc.bookAppointment(t.id, { doctorId: doc, startsAt: WED_10, patientName: "P", patientPhone: phone, source: "doctor", actor: "doctor:1" })).bookingId;
+    const mine = (await svc.bookAppointment(t.id, { doctorId: doc, startsAt: WED_10, patientName: "P", patientPhone: phone, patientCpr: "850123456", source: "doctor", actor: "doctor:1" })).bookingId;
     await expect(svc.staffSetStatus(t.id, mine, "completed", "doctor:2", other)).rejects.toMatchObject({ code: "not_found" });
     await expect(svc.staffSetNotes(t.id, mine, "x", "doctor:2", other)).rejects.toMatchObject({ code: "not_found" });
     await expect(svc.staffReschedule(t.id, mine, "2026-10-21T08:00:00Z", "doctor:2", other)).rejects.toMatchObject({ code: "not_found" });
@@ -127,7 +152,7 @@ describe("booking service", () => {
     const { svc, t, doc, fail, data } = await setup();
     fail(true);
     await expect(svc.checkAvailability(t.id, { doctorId: doc })).rejects.toMatchObject({ code: "calendar_unavailable" });
-    await expect(svc.bookAppointment(t.id, { doctorId: doc, startsAt: WED_10, patientName: "A", patientPhone: phone })).rejects.toMatchObject({ code: "calendar_unavailable" });
+    await expect(svc.bookAppointment(t.id, { doctorId: doc, startsAt: WED_10, patientName: "A", patientPhone: phone, patientCpr: "850123456" })).rejects.toMatchObject({ code: "calendar_unavailable" });
     expect((await data.getAlerts(t.id)).some((a) => a.severity === "error")).toBe(true);
     expect(await data.getBookings(t.id)).toHaveLength(0);
   });
@@ -136,7 +161,7 @@ describe("booking service", () => {
     const { data, t, doc } = await setup();
     const broken: Calendar = { busy: async () => [], createEvent: async () => { throw new Error("quota"); }, updateEvent: async () => {}, deleteEvent: async () => {} };
     const svc = createBookingService(data, broken, () => NOW);
-    await svc.bookAppointment(t.id, { doctorId: doc, startsAt: WED_10, patientName: "A", patientPhone: phone });
+    await svc.bookAppointment(t.id, { doctorId: doc, startsAt: WED_10, patientName: "A", patientPhone: phone, patientCpr: "850123456" });
     expect(await data.getBookings(t.id)).toHaveLength(1);
     expect((await data.getAlerts(t.id)).some((a) => /not added to Google Calendar/.test(a.message))).toBe(true);
   });

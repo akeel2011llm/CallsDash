@@ -211,6 +211,8 @@ export function seed(): DB {
       bookings.push({
         id: `b_${t}_${i}`, tenantId: t, doctorId: pick(clinicDocs(t)).id,
         patientName: pick(names), patientPhone: `+973 3${Math.floor(1000000 + r() * 8999999)}`,
+        // a made-up CPR number: birth year and month, then five digits (no random draw, so the rest of the demo data stays the same)
+        patientCpr: `${70 + ((i * 7) % 30)}${String(1 + (i % 12)).padStart(2, "0")}${String(10007 + ((i * 7919) % 89993)).padStart(5, "0")}`,
         service: pick(services), startsAt: iso(startMs), durationMin: 30, status,
       });
     }

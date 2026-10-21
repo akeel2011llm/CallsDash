@@ -177,7 +177,7 @@ export interface Tenant {
 }
 
 export interface Integrations {
-  elevenlabs?: { kbDocId?: string; syncedAt?: string; error?: string; /** Hostnames the widget was allowed on at the last sync. */ widgetHosts?: string[]; /** Extra settings ElevenLabs refused on the last sync; the agent still works without them. */ warnings?: { group: string; detail: string }[] };
+  elevenlabs?: { kbDocId?: string; syncedAt?: string; error?: string; /** Hostnames the widget was allowed on at the last sync. */ widgetHosts?: string[]; /** Extra settings ElevenLabs refused on the last sync; the agent still works without them. */ warnings?: { group: string; detail: string }[]; /** AGENT_VERSION (lib/agent-config.ts) at the last sync; older means the agent misses newer rules or tools. */ version?: number };
   whatsapp?: { phoneNumberId?: string; displayNumber?: string; confirmTemplate?: string; confirmTemplateLang?: string };
   /** `accountId` is the Instagram business account id Meta sends in webhooks; `inboundUrl` is the custom channel address copied from ElevenLabs. */
   instagram?: { accountId?: string; username?: string; inboundUrl?: string };
@@ -268,6 +268,8 @@ export interface Booking {
   doctorId: string;
   patientName: string;
   patientPhone: string;
+  /** The patient's 9-digit CPR number (Bahraini ID). Required for new bookings; bookings made before it was asked have none. */
+  patientCpr?: string;
   service: string;
   startsAt: string;
   durationMin: number;

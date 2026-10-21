@@ -11,6 +11,7 @@ import {
 } from "@/lib/actions";
 import { adminAdjustCreditsAction, adminClientProfileAction, adminDeclineTopUpAction } from "@/lib/manage-actions";
 import { DoctorsManager } from "@/components/DoctorsManager";
+import { TryAssistant } from "@/components/TryAssistant";
 import { Badge, Notice, PageHead, Stat } from "@/components/ui";
 import { SubmitButton } from "@/components/SubmitButton";
 
@@ -63,12 +64,14 @@ export default async function ClientAdmin({ params, searchParams }: { params: Pr
           ))}
         </Notice>
       )}
-      {saved && <Notice tone="ok">{t("agent.saved").split(".")[0]}.</Notice>}
+      {saved && saved !== "synced" && saved !== "created" && <Notice tone="ok">{t("agent.saved").split(".")[0]}.</Notice>}
       <div className="grid">
         <Stat label={t("admin.balance")} value={fmtNum(w.balance, locale, 1)} tone={w.low ? "warn" : undefined} hint={planNames(tenant.plans)} />
         <Stat label={t("common.status")} value={t(`status.${tenant.status}` as "status.live")} />
         <Stat label="Agent id" value={<code>{agent.elevenLabsAgentId || "–"}</code>} />
       </div>
+
+      <TryAssistant tenant={tenant} admin returnTo={returnTo} sp={{ saved, error }} />
 
       <div className="grid two">
         <section className="card stack" id="wallet">

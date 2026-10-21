@@ -170,11 +170,12 @@ export async function createBookingAction(f: FormData) {
   const err = await attempt(async () => {
     created = await svc.bookAppointment(tenant.id, {
       doctorId: chosen, startsAt: str(f, "startsAt"), patientName: str(f, "patientName"), patientPhone: str(f, "patientPhone"),
-      service: str(f, "service") || undefined, notes: str(f, "notes") || undefined, source: doctorId ? "doctor" : "staff", actor,
+      patientCpr: str(f, "patientCpr"), service: str(f, "service") || undefined, notes: str(f, "notes") || undefined, source: doctorId ? "doctor" : "staff", actor,
     });
   });
   revalidatePath(base, "layout");
   if (created) redirect(`${base}/bookings/${created.bookingId}?created=1`);
+  // the CPR number is not carried in the address (it would end up in server logs); it is typed again
   const keep = new URLSearchParams({ doctor: chosen, date: str(f, "date"), err: err ?? "unknown", name: str(f, "patientName"), phone: str(f, "patientPhone"), service: str(f, "service") });
   redirect(`${base}/bookings/new?${keep}`);
 }

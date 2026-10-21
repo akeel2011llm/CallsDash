@@ -28,6 +28,12 @@ ElevenLabs' embedded widget has no volume control. If a client reports a quiet v
 console built on `@elevenlabs/client` (output gain plus a limiter); it was built and tested once and is in git history
 (PR #18) if it is needed again.
 
+**Try the assistant** (top of the admin client page and of the clinic's Home page, `components/TryAssistant.tsx`) runs the
+clinic's live agent inside the dashboard: the same floating widget visitors get, plus a written chat (`@elevenlabs/client`,
+text only) like WhatsApp or Instagram. Both use the real knowledge base, calendar and booking tools, so test bookings are
+real bookings and conversations use credits. The widget only runs on this app's own address after a Sync has added it to
+the agent's allow-list; the panel says so, and offers **Update the assistant** (Sync) to the admin when the agent is behind.
+
 ## 3. WhatsApp
 
 1. In ElevenLabs (Agents, WhatsApp) add the clinic's WhatsApp Business number and choose its agent. That is what makes the agent answer chats.

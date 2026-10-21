@@ -5,6 +5,7 @@ import { getData } from "@/lib/data";
 import { sharedCalendar } from "@/lib/booking-service";
 import { elevenLabsFromEnv } from "@/lib/elevenlabs-api";
 import { sendBookingConfirmation } from "@/lib/whatsapp";
+import { asciiDigits } from "@/lib/cpr";
 
 export const dynamic = "force-dynamic";
 
@@ -70,7 +71,7 @@ async function run(tool: string, body: Record<string, unknown>, data: Awaited<Re
       case "book_appointment": {
         const booked = await svc.bookAppointment(tenant.id, {
           doctorId: str(body.doctor_id), startsAt: str(body.starts_at), patientName: str(body.patient_name),
-          patientPhone: str(body.patient_phone), service: str(body.service) || undefined, conversationId: str(body.conversation_id) || undefined,
+          patientPhone: str(body.patient_phone), patientCpr: str(body.patient_cpr), service: str(body.service) || undefined, conversationId: str(body.conversation_id) || undefined,
         });
         // The confirmation goes out after the agent has its answer, and a failure only leaves a note: it never undoes the booking.
         const api = elevenLabsFromEnv();
@@ -84,12 +85,23 @@ async function run(tool: string, body: Record<string, unknown>, data: Awaited<Re
         });
         return ok(booked);
       }
-      case "find_patient_booking":
-        return ok(await svc.findPatientBookings(tenant.id, { patientPhone: str(body.patient_phone) }));
+      case "find_patient_booking": {
+        const { bookings } = await svc.findPatientBookings(tenant.id, {
+          patientCpr: str(body.patient_cpr), patientPhone: str(body.patient_phone) || undefined, locale: body.language === "ar" ? "ar" : "en",
+        });
+        // Field names match cancel_appointment and reschedule_appointment's inputs, so the model copies booking_id and doctor_id across unchanged.
+        return ok({
+          bookings: bookings.map((b) => ({ booking_id: b.bookingId, doctor_id: b.doctorId, doctor: b.doctor, starts_at: b.start, label: b.label, service: b.service })),
+          ...(bookings.length ? {} : { message: "No upcoming booking was found for this CPR number. Read the number back to the patient to check it, then offer to book a new appointment or take a message." }),
+        });
+      }
       case "cancel_appointment":
-        return ok(await svc.cancelAppointment(tenant.id, { bookingId: str(body.booking_id), patientPhone: str(body.patient_phone) }));
+        return ok(await svc.cancelAppointment(tenant.id, { bookingId: str(body.booking_id), patientCpr: str(body.patient_cpr), patientPhone: str(body.patient_phone) || undefined }));
       case "reschedule_appointment":
-        return ok(await svc.rescheduleAppointment(tenant.id, { bookingId: str(body.booking_id), patientPhone: str(body.patient_phone), newStartsAt: str(body.new_starts_at) }));
+        return ok(await svc.rescheduleAppointment(tenant.id, {
+          bookingId: str(body.booking_id), patientCpr: str(body.patient_cpr), patientPhone: str(body.patient_phone) || undefined,
+          newStartsAt: str(body.new_starts_at), doctorId: str(body.doctor_id) || undefined,
+        }));
       case "take_message":
         return ok(await svc.takeMessage(tenant.id, {
           name: str(body.patient_name), phone: str(body.patient_phone), message: str(body.message),
@@ -112,16 +124,17 @@ async function run(tool: string, body: Record<string, unknown>, data: Awaited<Re
 
 const ok = (v: object): Record<string, unknown> => ({ ok: true, ...v });
 
-/** What the agent asked, for the log: the fields that decide a booking, with only the last 3 digits of a phone number. */
+/** What the agent asked, for the log: the fields that decide a booking, with only the last 3 digits of a phone or CPR number. */
 function summarize(body: Record<string, unknown>) {
-  const keys = ["doctor_id", "from_date", "days", "starts_at", "new_starts_at", "booking_id", "patient_name", "patient_phone", "service", "urgent"];
+  const keys = ["doctor_id", "from_date", "days", "starts_at", "new_starts_at", "booking_id", "patient_name", "patient_phone", "patient_cpr", "service", "urgent"];
   return keys.filter((k) => body[k] !== undefined && body[k] !== "").map((k) => {
     const v = String(body[k]).slice(0, 60);
-    return `${k}=${k === "patient_phone" ? `…${v.replace(/\D/g, "").slice(-3)}` : v}`;
+    return `${k}=${k === "patient_phone" || k === "patient_cpr" ? `…${asciiDigits(v).replace(/\D/g, "").slice(-3)}` : v}`;
   }).join(" ") || "(no details)";
 }
 
 function outcome(res: Record<string, unknown>) {
+  if (res.moved) return `moved to ${String(res.label ?? res.start ?? "")}${res.doctor ? ` with ${String(res.doctor)}` : ""}`;
   if (Array.isArray(res.slots)) return `${res.slots.length} free times${res.slots[0] ? `, first ${(res.slots[0] as { label?: string }).label}` : ""}`;
   if (res.bookingId) return `booked ${String(res.label ?? res.start ?? "")} (${String(res.bookingId)})${res.calendarSaved === false ? ", not on Google Calendar" : ""}`;
   if (Array.isArray(res.bookings)) return `${res.bookings.length} bookings found`;
