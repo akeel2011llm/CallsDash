@@ -150,6 +150,7 @@ describe("extra settings", () => {
     expect(Object.keys(b.platform_settings.data_collection)).toEqual(["outcome", "intent", "urgent", "follow_up_needed", "caller_name", "caller_sentiment"]);
     expect(b.platform_settings.evaluation.criteria.map((c: { id: string }) => c.id)).toContain("no_medical_advice");
     expect(b.platform_settings.widget.btn_color).toBe("#112233");
+    expect(b.platform_settings.widget.disable_banner).toBe(true); // the "Powered by" line is hidden, merged into the same widget object as the look
     expect(b.conversation_config.asr.keywords).toContain("Sync Clinic");
   });
 
@@ -168,6 +169,18 @@ describe("extra settings", () => {
     api.updateAgent = real;
     await syncAgent(deps, tenant.id, "admin");
     expect((await data.getTenant(tenant.id))!.integrations.elevenlabs?.warnings).toBeUndefined(); // cleared when it works again
+  });
+
+  it("keeps the widget's look when ElevenLabs refuses to hide the \"Powered by\" line, and says so", async () => {
+    const { deps, data, tenant, api, calls } = await setup();
+    const real = api.updateAgent;
+    api.updateAgent = (id, b) => (JSON.stringify(b).includes('"disable_banner"') ? Promise.reject(new ElevenLabsError(403, "Removing the branding is not included in this plan")) : real(id, b));
+    const r = await syncAgent(deps, tenant.id, "admin");
+    expect(r.warnings).toEqual([{ group: "branding", detail: expect.stringContaining("not included in this plan") }]);
+    const last = body(calls.filter((c) => c.fn === "updateAgent").at(-1)!);
+    expect(last.platform_settings.widget.btn_color).toBe("#112233"); // the look is applied
+    expect(last.platform_settings.widget.disable_banner).toBeUndefined();
+    expect((await data.getTenant(tenant.id))!.integrations.elevenlabs?.warnings?.[0].group).toBe("branding");
   });
 
   it("still fails the sync when even the core agent is refused", async () => {

@@ -7,12 +7,14 @@ Create one **server tool** per row in the ElevenLabs agent (Agents > Tools > Add
 | Tool | Body fields (besides `agent_id`) | Returns |
 | --- | --- | --- |
 | `check_availability` | `doctor_id` (optional), `from_date` (YYYY-MM-DD, optional), `days` (1-30, default 7), `language` (`en`/`ar`) | `slots[]` with `doctor_id`, `doctor`, `starts_at` (ISO, pass to `book_appointment` as is), `label`; `message` when there are none |
-| `book_appointment` | `doctor_id`, `starts_at` (ISO, from a slot), `patient_name`, `patient_phone`, `patient_cpr` (9 digits), `service`, `conversation_id` (`system__conversation_id`) | `bookingId`, `label` |
+| `book_appointment` | `doctor_id`, `starts_at` (ISO, from a slot), `patient_name`, `patient_phone`, `patient_cpr` (9 digits), `service`, `language` (`en`/`ar`, the language the patient uses; optional), `conversation_id` (`system__conversation_id`) | `bookingId`, `label`, `whatsappConfirmation` |
 | `find_patient_booking` | `patient_cpr`; `patient_phone` only for bookings made before CPR was asked; `language` | upcoming `bookings[]` with `booking_id`, `doctor_id`, `doctor`, `starts_at`, `label`; `message` when there are none |
 | `cancel_appointment` | `booking_id`, `patient_cpr` (`patient_phone` for an old booking) | `cancelled` |
-| `reschedule_appointment` | `booking_id`, `patient_cpr`, `new_starts_at`, `doctor_id` (only to change doctor; `patient_phone` for an old booking) | `bookingId`, `doctor`, `label` |
+| `reschedule_appointment` | `booking_id`, `patient_cpr`, `new_starts_at`, `doctor_id` (only to change doctor; `patient_phone` for an old booking), `language` (optional) | `bookingId`, `doctor`, `label`, `whatsappConfirmation` |
 | `take_message` | `patient_name`, `patient_phone`, `message`, `language`, `conversation_id` | `requestId`, `message` (what to tell the caller) |
 | `handoff_to_staff` | `patient_name`, `patient_phone`, `reason`, `urgent` (true when it cannot wait, e.g. a medical emergency), `language`, `conversation_id` | `requestId`, `open` (clinic open now), `transferred` (always false for now), `message` |
+
+**WhatsApp confirmation.** After `book_appointment` or `reschedule_appointment` succeeds, CallsDash sends the patient a confirmation with all the booking details on WhatsApp (see `docs/bookings.md`). The answer carries `whatsappConfirmation: true` only when one is on its way; the prompt rules tell the assistant to say so then, and to say nothing about WhatsApp otherwise. `language` decides which language the confirmation is in; a missing or unknown value uses the clinic's main language. The send happens after the answer, so it never slows the call, and the tool log notes "WhatsApp confirmation queued".
 
 `take_message` and `handoff_to_staff` both land in the client's **Messages** inbox (handoffs first when urgent). Live call transfer needs a phone line
 (phase 2); until then a handoff is a callback request and the agent must not promise an immediate transfer. For a medical emergency the agent
@@ -65,4 +67,4 @@ change, `AGENT_VERSION` goes up and the client screens show **Update the assista
 Availability = the clinic's opening hours minus CallsDash bookings minus busy time on the doctor's Google Calendar.
 If the calendar cannot be read the tool refuses to book and raises an alert; it never books blind.
 
-Not built yet: WhatsApp confirmation after booking (needs the WhatsApp channel) and notifying staff of a message outside the dashboard.
+Not built yet: notifying staff of a message outside the dashboard.

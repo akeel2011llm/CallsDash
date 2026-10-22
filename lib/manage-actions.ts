@@ -5,11 +5,14 @@ import { revalidatePath } from "next/cache";
 import { getSession, requireAdmin, requireBookingUser, requireClient } from "./auth";
 import { dayKey, safePath } from "./format";
 import * as store from "./data";
+import { getData } from "./data";
 import { cleanOpeningHours } from "./availability";
 import { readHours } from "./hours-form";
 import { googleCalendarFromEnv } from "./google-calendar";
 import { checkCalendar } from "./setup-check";
 import { bookingService } from "./booking-service";
+import { deliverConfirmation } from "./booking-notify";
+import { elevenLabsFromEnv } from "./elevenlabs-api";
 import { ToolError } from "./booking";
 import { DuplicateError } from "./errors";
 import { autoSync } from "./auto-sync";
@@ -192,11 +195,33 @@ export async function updateBookingDetailsAction(f: FormData) {
   try {
     await (await bookingService()).staffUpdateDetails(tenant.id, id, {
       patientName: str(f, "patientName"), patientPhone: str(f, "patientPhone"), patientCpr: str(f, "patientCpr"), service: str(f, "service"),
-      doctorId: doctorId ? undefined : str(f, "doctorId") || undefined,
-    }, actor, doctorId);
+      doctorId: doctorId ? undefined : str(f, "doctorId") || undefined, language: str(f, "language") || undefined,
+    }, actor, doctorId, { notify: f.get("whatsapp") === "on" });
   } catch (e) { if (e instanceof ToolError) err = e.code; else throw e; }
   revalidatePath(base, "layout");
   redirect(`${base}/bookings/${id}?${err ? `err=${err}` : "saved=1"}`);
+}
+
+/**
+ * Sends the patient their WhatsApp confirmation again (it failed, or the phone number or doctor was corrected). The clinic team
+ * waits for the answer here, so what happened is on the booking when the page comes back.
+ */
+export async function resendWhatsappConfirmationAction(f: FormData) {
+  const { tenant, actor, doctorId, base } = await requireBookingUser();
+  const id = str(f, "id");
+  const booking = (await store.getBookings(tenant.id)).find((b) => b.id === id && (!doctorId || b.doctorId === doctorId));
+  if (!booking) redirect(`${base}/bookings`);
+  let outcome = "not_active";
+  const api = elevenLabsFromEnv();
+  if (booking.status === "confirmed" || booking.status === "rescheduled") {
+    if (!api) outcome = "not_configured";
+    else {
+      const r = await deliverConfirmation({ api, data: await getData() }, tenant.id, id, actor);
+      outcome = !r ? "not_active" : r.status === "skipped" ? r.reason : r.status;
+    }
+  }
+  revalidatePath(base, "layout");
+  redirect(`${base}/bookings/${id}?wa=${outcome}`);
 }
 
 /** Managers only. Receptionists and doctors cancel instead, which keeps the record. */

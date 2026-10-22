@@ -36,12 +36,29 @@ the agent's allow-list; the panel says so, and offers **Update the assistant** (
 
 ## 3. WhatsApp
 
-1. In ElevenLabs (Agents, WhatsApp) add the clinic's WhatsApp Business number and choose its agent. That is what makes the agent answer chats.
-2. In Meta WhatsApp Manager create a **utility** template for booking confirmation (the Channels page shows the exact wording and variables) and wait for approval.
-3. In CallsDash enter the phone number ID, display number, template name and language, set status Live.
-4. A booking made through the agent now sends the confirmation (after the response, so the caller is never kept waiting). **Send a test confirmation** checks the whole path to your own number.
+WhatsApp does two jobs for a clinic. A patient who writes to the clinic's number chats with the assistant (this runs inside ElevenLabs). And after every booking or move, CallsDash sends the patient a **confirmation with all the booking details** (clinic, doctor, service, date, time, address with map link, clinic phone, booking reference) through ElevenLabs' outbound message call. Both use the same business number, imported once in ElevenLabs. What the message looks like and when it is sent is in `docs/bookings.md`; this section is the setup.
 
-Patients who message first can be answered inside the 24 hour window; the confirmation template covers messages the clinic starts.
+The Channels page (WhatsApp card, "Set up WhatsApp step by step") shows the steps below with this clinic's own names, the exact message text with **Copy** buttons, the example value for every variable, a preview of the message with the clinic's real address, and a test button. Steps already done show a green tick in the card's list and the steps fold away.
+
+**Part 1: connect the number in ElevenLabs** (checked against ElevenLabs' WhatsApp documentation, 2026-10-22)
+1. The number must not be in use in the WhatsApp Business app on a phone or with another WhatsApp provider; remove it there first if it is.
+2. ElevenLabs, Agents, WhatsApp (`elevenlabs.io/app/agents/whatsapp`), **Import account**. In Meta's window choose (or create) the business account and the number and allow ElevenLabs.
+3. Open the imported account, under "Assign an agent" choose the client's agent (named `CallsDash: <client name>`) and check that "Enable messaging" is on. Without an agent, a patient's reply is ignored.
+4. Menu next to the account, **Copy phone number ID**. Paste it on the Channels page ("WhatsApp phone number ID") and set the status to Live.
+5. In WhatsApp Manager, Overview, **Add payment method**: Meta bills each template message delivered (not from CallsDash credits). Without it template messages are not delivered.
+
+**Part 2: create the message template in Meta's WhatsApp Manager** (`business.facebook.com/latest/whatsapp_manager/message_templates`)
+1. **Create template**, category **Utility**, name `appointment_confirmation` (or the name chosen on the Channels page), the language of the text.
+2. Set "Type of variable" to **Name** (not Number): the text uses `{{name}}`, `{{clinic}}`, `{{doctor}}`, `{{service}}`, `{{date}}`, `{{time}}`, `{{address}}`, `{{phone}}`, `{{reference}}`.
+3. Paste the text from the Channels page into the Body, type the example values it lists, submit. Meta usually answers in minutes or hours, up to 24 hours. Wait for **Active**.
+4. A second language is a second template with the same name and the other language ("English" and "Arabic", codes `en` and `ar`). The patient's confirmation is sent in their language when the clinic has a template in it, otherwise in the main language.
+5. On the Channels page tick the languages created, fill in the clinic's address (English and Arabic), Google Maps link and phone, Save, then **Send a test confirmation** to your own number and reply to it.
+
+Meta rejects a body that starts or ends with a variable and one with too many variables for its length. The wording on the Channels page starts and ends with fixed text; if Meta still rejects it for the length, add a sentence of your own at the end of the body.
+
+**Wording.** "All details" (template `appointment_confirmation`, 9 variables) is the default. A clinic that saved a template before it existed has the earlier "Short" wording (`booking_confirmation`: name, clinic, doctor, time) and keeps it until an admin switches; the full wording needs a template under a new name, and saving the same name is refused.
+
+**How it is sent.** After the booking is saved, `after()` calls `POST /v1/convai/whatsapp/outbound-message` with the phone number ID, the patient's WhatsApp id (digits with country code; 8 digits means Bahrain), the template name and language, `template_params` (body parameters with `parameter_name`) and the agent id plus dynamic variables (today's date, opening hours, the patient's number, channel `whatsapp`), so the assistant can answer the patient's reply. ElevenLabs answers with a conversation id once WhatsApp accepted the message; the booking records "Sent". Meta can still decline later (for example the number is not on WhatsApp) and that is not reported back. A refusal is recorded on the booking with the reason and a hint, in the activity log, and once as an alert. A confirmation the patient never answers is not stored as a conversation and costs no credits.
 
 ## 4. Instagram DMs
 
@@ -63,6 +80,7 @@ The ElevenLabs request shapes below were written from the public documentation a
 
 - agent create/update body (language presets, `data_collection`), workspace tool and knowledge-base endpoints;
 - the conversation-start webhook response format;
-- WhatsApp template send call;
+- WhatsApp: ElevenLabs' outbound message call and the named-variable `template_params` shape follow ElevenLabs' documentation (2026-10-22) but were tested against fakes only; check the first real test confirmation. Not confirmed anywhere: the exact button names in Meta's WhatsApp Manager (sources disagree: "Create template", "Type of variable", "Submit for review"), how many variables Meta accepts for the length of a Utility template, and whether Meta accepts a Google Maps link inside the address value (leave the link field empty if it does not);
+- the "Powered by" line: sent as `platform_settings.widget.disable_banner`; ElevenLabs does not say whether a plan is needed, so after pressing "Update the assistant" open the website widget and look. A refusal shows as a warning on the Channels page and never loses the widget;
 - custom channel inbound `async_message` request and the reply signature (`ElevenLabs-Signature`, `t=<time>,v0=<HMAC-SHA256 of "time.body">`);
 - Instagram Graph send endpoint host and permissions for the connected account.

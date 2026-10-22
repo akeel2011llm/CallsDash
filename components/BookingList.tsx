@@ -5,6 +5,7 @@ import { getBookings, getDoctors } from "@/lib/data";
 import { setBookingStatusAction } from "@/lib/actions";
 import { isBookingError } from "@/lib/booking-ui";
 import { asciiDigits } from "@/lib/cpr";
+import { bookingRef } from "@/lib/booking-ref";
 import { Badge, Notice, PageHead, Stat } from "@/components/ui";
 import type { Tenant } from "@/lib/types";
 import { SubmitButton } from "@/components/SubmitButton";
@@ -30,7 +31,8 @@ export async function BookingList({ base, tenant, doctorId, sp }: BookingScope &
     view === "all" ? true : view === "today" ? dayKey(b.startsAt) === today : view === "past" ? Date.parse(b.startsAt) < nowMs : dayKey(b.startsAt) >= today;
   const rows = all
     .filter((b) => inView(b) && (!sp.doctor || b.doctorId === sp.doctor) && (!sp.status || b.status === sp.status)
-      && (!q || b.patientName.toLowerCase().includes(q) || (qDigits.length >= 3 && (b.patientPhone.replace(/\D/g, "").includes(qDigits) || (b.patientCpr ?? "").includes(qDigits)))))
+      && (!q || b.patientName.toLowerCase().includes(q) || (qDigits.length >= 3 && (b.patientPhone.replace(/\D/g, "").includes(qDigits) || (b.patientCpr ?? "").includes(qDigits)))
+        || (q.length >= 4 && bookingRef(b.id).toLowerCase().includes(q.replace(/\s+/g, "")))))
     .sort((a, b) => (view === "past" || view === "all" ? b.startsAt.localeCompare(a.startsAt) : a.startsAt.localeCompare(b.startsAt)));
   const todayLive = all.filter((b) => dayKey(b.startsAt) === today && live(b.status)).length;
   const upcomingLive = all.filter((b) => live(b.status) && Date.parse(b.startsAt) >= nowMs).length;

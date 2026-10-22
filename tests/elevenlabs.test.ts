@@ -1,6 +1,6 @@
 import { createHmac } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { parsePostCall, verifySignature } from "@/lib/elevenlabs";
+import { parsePostCall, unansweredConfirmation, verifySignature } from "@/lib/elevenlabs";
 
 const secret = "whsec_test";
 const sign = (body: string, t: number) => `t=${t},v0=${createHmac("sha256", secret).update(`${t}.${body}`).digest("hex")}`;
@@ -53,5 +53,30 @@ describe("parsePostCall", () => {
     const plain = parsePostCall(d({ intent: { value: "question" }, urgent: { value: false } }))!;
     expect(plain.conversation.aiFlags).toBeUndefined();
     expect(plain.conversation.sentiment).toBe("neutral");
+  });
+});
+
+describe("unansweredConfirmation", () => {
+  const whatsapp = (lines: { role: "agent" | "user"; message: string }[], channel = "whatsapp") => parsePostCall({
+    type: "post_call_transcription",
+    data: {
+      agent_id: "agent_1", conversation_id: "conv_wa", has_audio: false,
+      transcript: lines.map((l, i) => ({ ...l, time_in_call_secs: i })),
+      metadata: { channel },
+      conversation_initiation_client_data: { dynamic_variables: { channel } },
+      analysis: { transcript_summary: "", data_collection_results: {} },
+    },
+  })!.conversation;
+
+  it("spots a WhatsApp conversation that holds only the confirmation CallsDash sent", () => {
+    expect(unansweredConfirmation(whatsapp([{ role: "agent", message: "Hello Fatima, your appointment is confirmed." }]))).toBe(true);
+  });
+  it("keeps a conversation once the patient has replied, even with a single word", () => {
+    expect(unansweredConfirmation(whatsapp([{ role: "agent", message: "Hello Fatima, your appointment is confirmed." }, { role: "user", message: "Thanks" }]))).toBe(false);
+  });
+  it("only ever applies to WhatsApp, and never to an empty transcript", () => {
+    expect(unansweredConfirmation(whatsapp([{ role: "agent", message: "Hello" }], "website"))).toBe(false);
+    expect(unansweredConfirmation(whatsapp([{ role: "agent", message: "Hello" }], "phone"))).toBe(false);
+    expect(unansweredConfirmation(whatsapp([]))).toBe(false);
   });
 });

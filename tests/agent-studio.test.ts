@@ -144,7 +144,13 @@ describe("saving a section", () => {
       "w.expandable": "mobile", "w.borderRadius": "8", "w.btnRadius": "20", "w.actionText": "Talk to us", "w.transcript": "on", "w.feedback": "none",
     }), base());
     expect(ok.errors).toEqual([]);
-    expect(ok.studio.widget).toMatchObject({ colors: "custom", bgColor: "#ffffff", btnColor: "#aa0000", variant: "compact", placement: "bottom-left", expandable: "mobile", borderRadius: 8, actionText: "Talk to us", transcript: true, textInput: false, feedback: "none" });
+    expect(ok.studio.widget).toMatchObject({ colors: "custom", bgColor: "#ffffff", btnColor: "#aa0000", variant: "compact", placement: "bottom-left", expandable: "mobile", borderRadius: 8, actionText: "Talk to us", transcript: true, textInput: false, feedback: "none", hideBanner: false });
+    const hidden = parseSection("widget", form({
+      "w.colors": "brand", "w.bgColor": "#ffffff", "w.textColor": "#111111", "w.borderColor": "#e1e1e1", "w.btnColor": "#aa0000", "w.btnTextColor": "#ffffff", "w.variant": "full", "w.placement": "bottom-right",
+      "w.expandable": "never", "w.borderRadius": "16", "w.btnRadius": "10", "w.feedback": "end", "w.hideBanner": "on",
+    }), base());
+    expect(hidden.errors).toEqual([]);
+    expect(hidden.studio.widget?.hideBanner).toBe(true);
     const bad = parseSection("widget", form({ "w.colors": "custom", "w.bgColor": "white", "w.textColor": "#111111", "w.borderColor": "#e1e1e1", "w.btnColor": "#aa0000", "w.btnTextColor": "#ffffff", "w.variant": "full", "w.placement": "bottom-right", "w.expandable": "never", "w.borderRadius": "8", "w.btnRadius": "8", "w.feedback": "end" }), base());
     expect(bad.errors).toEqual([{ field: "w.bgColor", key: "studio.err.color" }]);
   });
@@ -194,6 +200,8 @@ function legacyExtras(t: Tenant, doctors: { name: string }[]) {
       bg_color: "#ffffff", text_color: "#111111", border_color: "#e1e1e1", btn_color: primary, btn_text_color: readableOn(primary), focus_color: primary,
       language_selector: true, feedback_mode: "end", show_conversation_id: false, transcript_enabled: true, text_input_enabled: true, supports_text_only: true,
     } } } },
+    // the one deliberate change for every client: the widget no longer shows the "Powered by" line
+    { name: "branding", body: { platform_settings: { widget: { disable_banner: true } } } },
   ];
 }
 
@@ -231,7 +239,7 @@ describe("an agent whose studio was saved", () => {
   const saved = (section: SectionId, studio: Record<string, unknown>, top: Partial<AgentSettings> = {}): AgentSettings => ({ ...base(), ...top, studio: { touched: [section], ...studio } });
 
   it("sends the newer groups only for the sections that were saved", () => {
-    expect(names(base())).toEqual(["tools", "hardening", "keywords", "guardrails", "analysis", "privacy", "limits", "widget"]);
+    expect(names(base())).toEqual(["tools", "hardening", "keywords", "guardrails", "analysis", "privacy", "limits", "widget", "branding"]);
     expect(names(saved("model", {}))).toContain("model");
     expect(names(saved("model", {}))).not.toContain("voice");
     expect(names(saved("voice", {}))).toContain("voice");
@@ -312,6 +320,22 @@ describe("an agent whose studio was saved", () => {
     expect(w({ colors: "custom", btnColor: "#aa0000", btnTextColor: "#fefefe", bgColor: "#101010", actionText: "Talk to us", variant: "compact", placement: "bottom-left", micMuting: true })).toMatchObject({
       bg_color: "#101010", btn_color: "#aa0000", btn_text_color: "#fefefe", focus_color: "#aa0000", action_text: "Talk to us", variant: "compact", placement: "bottom-left", mic_muting_enabled: true,
     });
+  });
+  it("hides the widget's \"Powered by\" line unless an admin turns that off, and keeps it apart from the widget look", () => {
+    const banner = (settings: AgentSettings) => (groupOf(settings, "branding") as { platform_settings: { widget: Record<string, unknown> } }).platform_settings.widget;
+    expect(banner(base())).toEqual({ disable_banner: true }); // a studio that was never saved
+    expect(banner(saved("widget", {}))).toEqual({ disable_banner: true }); // a widget section saved before the option existed
+    expect(banner(saved("widget", { widget: { hideBanner: false } }))).toEqual({ disable_banner: false });
+    expect(banner(saved("model", { widget: { hideBanner: false } }))).toEqual({ disable_banner: false }); // the choice stands whichever section was saved last
+    // the look group does not carry the flag, so a refusal of one never costs the other
+    expect(JSON.stringify(groupOf(saved("widget", {}), "widget"))).not.toContain("disable_banner");
+    expect(JSON.stringify(groupOf(base(), "widget"))).not.toContain("disable_banner");
+  });
+  it("sends the look and the \"Powered by\" flag together in one widget object when ElevenLabs takes everything at once", () => {
+    const every = saved("widget", {});
+    const core = buildAgentConfig({ tenant: tenant(), settings: every, toolIds: [], appUrl: "https://a.example" });
+    const widget = ((withExtras(core as unknown as Record<string, unknown>, buildExtras({ tenant: tenant(), doctors: [], settings: every })) as { platform_settings: { widget: Record<string, unknown> } }).platform_settings.widget);
+    expect(widget).toMatchObject({ disable_banner: true, btn_color: "#0e7c86", variant: "full" });
   });
   it("is accepted by ElevenLabs' own field names: no group repeats a key another group set differently", () => {
     const every = saved("model", {}) as AgentSettings;

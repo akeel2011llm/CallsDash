@@ -3,12 +3,26 @@ import { SlotTakenError } from "./errors";
 import { asciiDigits, normalizeCpr } from "./cpr";
 import type { Calendar, EventInput } from "./google-calendar";
 import type { Data } from "./data/demo";
-import type { Booking, BookingSource, BookingStatus, DateRange, Doctor, Tenant } from "./types";
+import type { Booking, BookingSource, BookingStatus, DateRange, Doctor, Locale, Tenant } from "./types";
 
 /** Error with a message safe to read back to the caller (the agent turns it into speech). */
 export class ToolError extends Error {
   constructor(public code: string, message: string) { super(message); }
 }
+
+/** Something happened to a patient's appointment that they should be told about. */
+export interface BookingEvent { kind: "booked" | "moved" | "changed"; booking: Booking; doctor: Doctor; /** Who did it, for the audit trail. */ actor: string }
+
+export interface BookingHooks {
+  /**
+   * Called after an appointment is made, moved, or given to another doctor or phone number. Sends the patient their confirmation (lib/booking-notify.ts) and answers
+   * whether one is on its way. It must be quick and must not fail the booking, so the service ignores anything it throws.
+   */
+  notify?: (e: BookingEvent) => Promise<"queued" | "not_sent">;
+}
+
+/** Options a person (not the assistant) can choose for one change. */
+export interface ChangeOptions { /** False when the patient should not be sent a confirmation. Missing = send. */ notify?: boolean }
 
 const SLOT_MIN = 30;
 const HORIZON_DAYS = 30;
@@ -68,7 +82,14 @@ export function eventFor(b: Booking): EventInput {
  * Booking operations behind the agent's tools. Bookings in CallsDash are the source of truth for the clinic's
  * availability; Google Calendar is read for busy time (staff may block slots there) and written to for each booking.
  */
-export function createBookingService(data: Data, calendar: Calendar | null, nowFn: () => Date = () => new Date()) {
+export function createBookingService(data: Data, calendar: Calendar | null, nowFn: () => Date = () => new Date(), hooks: BookingHooks = {}) {
+  /** Tells the patient about an appointment, unless the caller said not to. True when a confirmation is on its way. */
+  async function tell(kind: BookingEvent["kind"], booking: Booking, doctor: Doctor, actor: string, notify = true): Promise<boolean> {
+    if (!notify || !hooks.notify) return false;
+    try { return (await hooks.notify({ kind, booking, doctor, actor })) === "queued"; }
+    catch { return false; } // a confirmation that cannot be sent never undoes the booking
+  }
+
   async function busyFor(tenant: Tenant, doctor: Doctor, fromMs: number, toMs: number, ignoreBookingId?: string): Promise<Busy[]> {
     const busy: Busy[] = (await data.getBookings(tenant.id))
       .filter((b) => b.doctorId === doctor.id && live(b) && b.id !== ignoreBookingId)
@@ -182,7 +203,7 @@ export function createBookingService(data: Data, calendar: Calendar | null, nowF
       return { slots: out.slice(0, p.limit ?? 8) };
     },
 
-    async bookAppointment(tenantId: string, p: { doctorId: string; startsAt: string; patientName: string; patientPhone: string; patientCpr?: string; service?: string; conversationId?: string; notes?: string; source?: BookingSource; actor?: string }) {
+    async bookAppointment(tenantId: string, p: ChangeOptions & { doctorId: string; startsAt: string; patientName: string; patientPhone: string; patientCpr?: string; service?: string; conversationId?: string; notes?: string; source?: BookingSource; actor?: string; language?: Locale }) {
       const { tenant, doctors } = await context(tenantId, p.doctorId);
       const doctor = doctors[0];
       if (!isActive(doctor)) throw new ToolError("doctor_unavailable", "That doctor is not taking bookings. Offer another doctor.");
@@ -200,7 +221,7 @@ export function createBookingService(data: Data, calendar: Calendar | null, nowF
         booking = await data.createBooking(tenantId, {
           doctorId: doctor.id, patientName: p.patientName.trim().slice(0, 120), patientPhone: p.patientPhone.trim().slice(0, 30), patientCpr: cpr ?? undefined,
           service: (p.service ?? "Consultation").slice(0, 120), startsAt: new Date(startMs).toISOString(), durationMin: SLOT_MIN, status: "confirmed", conversationId: p.conversationId,
-          notes: p.notes?.trim().slice(0, 1000) || undefined, source: p.source ?? "ai",
+          notes: p.notes?.trim().slice(0, 1000) || undefined, source: p.source ?? "ai", language: p.language === "ar" || p.language === "en" ? p.language : undefined,
         }, p.actor ?? "agent");
       } catch (e) {
         if (e instanceof SlotTakenError) throw new ToolError("slot_taken", "That time was just taken. Offer other slots.");
@@ -215,7 +236,8 @@ export function createBookingService(data: Data, calendar: Calendar | null, nowF
           await data.addAlert(tenantId, "warning", `Booking for ${booking.patientName} at ${booking.startsAt} was saved but not added to Google Calendar.`);
         }
       }
-      return { bookingId: booking.id, doctor: doctor.name, start: booking.startsAt, label: describeSlot(booking.startsAt, "en"), calendarSaved: Boolean(booking.calendarEventId) };
+      const whatsappConfirmation = await tell("booked", booking, doctor, p.actor ?? "agent", p.notify);
+      return { bookingId: booking.id, doctor: doctor.name, start: booking.startsAt, label: describeSlot(booking.startsAt, "en"), calendarSaved: Boolean(booking.calendarEventId), whatsappConfirmation };
     },
 
     /**
@@ -272,22 +294,27 @@ export function createBookingService(data: Data, calendar: Calendar | null, nowF
     },
 
     /** Moves the patient's booking to a new time, and to another doctor when `doctorId` names one. */
-    async rescheduleAppointment(tenantId: string, p: { bookingId: string; patientCpr: string; patientPhone?: string; newStartsAt: string; doctorId?: string }) {
+    async rescheduleAppointment(tenantId: string, p: { bookingId: string; patientCpr: string; patientPhone?: string; newStartsAt: string; doctorId?: string; language?: Locale }) {
       const { booking, doctor } = await owned(tenantId, p.bookingId, p.patientCpr, p.patientPhone);
       let target = doctor;
       if (p.doctorId && p.doctorId !== doctor.id) {
         target = (await context(tenantId, p.doctorId)).doctors[0];
         if (!isActive(target)) throw new ToolError("doctor_unavailable", "That doctor is not taking bookings. Offer another doctor.");
       }
-      const updated = await moveBooking(tenantId, booking, doctor, p.newStartsAt, "agent", target);
-      return { bookingId: updated.id, moved: true, doctor: target.name, start: updated.startsAt, label: describeSlot(updated.startsAt, "en") };
+      let updated = await moveBooking(tenantId, booking, doctor, p.newStartsAt, "agent", target);
+      // the patient is writing or speaking this language now, which is the one their confirmation should be in
+      if ((p.language === "ar" || p.language === "en") && updated.language !== p.language) updated = await data.updateBooking(tenantId, updated.id, { language: p.language }, "agent");
+      const whatsappConfirmation = await tell("moved", updated, target, "agent");
+      return { bookingId: updated.id, moved: true, doctor: target.name, start: updated.startsAt, label: describeSlot(updated.startsAt, "en"), whatsappConfirmation };
     },
 
     /** The clinic team (receptionist, manager or doctor) moves a booking. No phone check: they are signed in. */
-    async staffReschedule(tenantId: string, bookingId: string, newStartsAt: string, actor: string, onlyDoctorId?: string) {
+    async staffReschedule(tenantId: string, bookingId: string, newStartsAt: string, actor: string, onlyDoctorId?: string, opts: ChangeOptions = {}) {
       const { booking, doctor } = await found(tenantId, bookingId, onlyDoctorId);
       if (!live(booking)) throw new ToolError("not_active", "Only an active booking can be moved. Restore it first.");
-      return moveBooking(tenantId, booking, doctor, newStartsAt, actor);
+      const updated = await moveBooking(tenantId, booking, doctor, newStartsAt, actor);
+      await tell("moved", updated, doctor, actor, opts.notify);
+      return updated;
     },
 
     /**
@@ -336,8 +363,10 @@ export function createBookingService(data: Data, calendar: Calendar | null, nowF
     /**
      * Fixes the patient's details or the service, and can hand the booking to another doctor at the same time
      * (only if that doctor is free then). Moving doctors moves the Google Calendar event to the new doctor's calendar.
+     * A new doctor or a corrected phone number means the patient's confirmation is wrong or went astray, so a fresh one is sent
+     * (unless `opts.notify` is false). Other fixes, such as a spelling in the name, send nothing.
      */
-    async staffUpdateDetails(tenantId: string, bookingId: string, p: { patientName?: string; patientPhone?: string; patientCpr?: string; service?: string; doctorId?: string }, actor: string, onlyDoctorId?: string) {
+    async staffUpdateDetails(tenantId: string, bookingId: string, p: { patientName?: string; patientPhone?: string; patientCpr?: string; service?: string; doctorId?: string; language?: string }, actor: string, onlyDoctorId?: string, opts: ChangeOptions = {}) {
       const { tenant, booking, doctor } = await found(tenantId, bookingId, onlyDoctorId);
       const patch: Partial<Booking> = {};
       if (p.patientName !== undefined) {
@@ -356,6 +385,7 @@ export function createBookingService(data: Data, calendar: Calendar | null, nowF
         patch.patientCpr = cpr;
       }
       if (p.service !== undefined) patch.service = p.service.trim().slice(0, 120) || "Consultation";
+      if (p.language === "ar" || p.language === "en") patch.language = p.language;
       let target = doctor;
       if (p.doctorId && p.doctorId !== doctor.id) {
         if (onlyDoctorId) throw new ToolError("not_allowed", "Only the clinic team can give a booking to another doctor.");
@@ -385,6 +415,8 @@ export function createBookingService(data: Data, calendar: Calendar | null, nowF
           catch { await data.addAlert(tenantId, "warning", `Booking for ${updated.patientName} was changed but Google Calendar was not updated.`); }
         }
       }
+      const newPhone = patch.patientPhone !== undefined && lastDigits(patch.patientPhone) !== lastDigits(booking.patientPhone);
+      if (live(updated) && (target.id !== doctor.id || newPhone)) await tell("changed", updated, target, actor, opts.notify);
       return updated;
     },
 

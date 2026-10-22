@@ -75,6 +75,8 @@ export interface WidgetStudio {
   actionText: string; startCallText: string; endCallText: string; listeningText: string; speakingText: string;
   transcript: boolean; textInput: boolean; micMuting: boolean; languageSelector: boolean; textOnlyMode: boolean;
   defaultExpanded: boolean; dismissible: boolean; endConfirmation: boolean; showConversationId: boolean;
+  /** Hides the small "Powered by ..." line under the widget. On unless an admin turns it off. */
+  hideBanner: boolean;
   feedback: (typeof CHOICES.widgetFeedback)[number];
 }
 
@@ -155,7 +157,7 @@ export const WIDGET_DEFAULTS: WidgetStudio = {
   variant: "full", placement: "bottom-right", expandable: "never", borderRadius: 16, btnRadius: 10,
   actionText: "", startCallText: "", endCallText: "", listeningText: "", speakingText: "",
   transcript: true, textInput: true, micMuting: false, languageSelector: true, textOnlyMode: true,
-  defaultExpanded: false, dismissible: false, endConfirmation: false, showConversationId: false, feedback: "end",
+  defaultExpanded: false, dismissible: false, endConfirmation: false, showConversationId: false, hideBanner: true, feedback: "end",
 };
 
 /** What a client has when the studio was never saved. The values that already existed before the studio match what the agent had. */
@@ -227,7 +229,7 @@ function cleanWidget(raw: unknown): WidgetStudio {
     transcript: flag(w.transcript, d.transcript), textInput: flag(w.textInput, d.textInput), micMuting: flag(w.micMuting, d.micMuting),
     languageSelector: flag(w.languageSelector, d.languageSelector), textOnlyMode: flag(w.textOnlyMode, d.textOnlyMode),
     defaultExpanded: flag(w.defaultExpanded, d.defaultExpanded), dismissible: flag(w.dismissible, d.dismissible),
-    endConfirmation: flag(w.endConfirmation, d.endConfirmation), showConversationId: flag(w.showConversationId, d.showConversationId),
+    endConfirmation: flag(w.endConfirmation, d.endConfirmation), showConversationId: flag(w.showConversationId, d.showConversationId), hideBanner: flag(w.hideBanner, d.hideBanner),
     feedback: pick(w.feedback, CHOICES.widgetFeedback, d.feedback),
   };
 }
@@ -453,7 +455,7 @@ export function parseSection(section: SectionId, f: FormData, current: AgentSett
       w.borderRadius = r.num("w.borderRadius", LIMITS.widgetRadius, d.widget.borderRadius);
       w.btnRadius = r.num("w.btnRadius", LIMITS.widgetRadius, d.widget.btnRadius);
       for (const k of ["actionText", "startCallText", "endCallText", "listeningText", "speakingText"] as const) w[k] = r.str(`w.${k}`, LIMITS.shortText);
-      for (const k of ["transcript", "textInput", "micMuting", "languageSelector", "textOnlyMode", "defaultExpanded", "dismissible", "endConfirmation", "showConversationId"] as const) w[k] = r.on(`w.${k}`);
+      for (const k of ["transcript", "textInput", "micMuting", "languageSelector", "textOnlyMode", "defaultExpanded", "dismissible", "endConfirmation", "showConversationId", "hideBanner"] as const) w[k] = r.on(`w.${k}`);
       w.feedback = r.choice("w.feedback", CHOICES.widgetFeedback, d.widget.feedback);
       s.widget = w;
       break;

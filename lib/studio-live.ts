@@ -74,6 +74,8 @@ export function liveRows(i: {
   add("retentionDays", "safety", Math.max(1, Math.round(i.tenant.retentionDays || 90)), orNull(live.retentionDays), true);
   add("guardFocus", "safety", st.guardFocus, orNull(live.guardrailsFocus), true);
   add("guardInjection", "safety", st.guardInjection, orNull(live.guardrailsPromptInjection), true);
+  // ElevenLabs leaves the field out while it is at its default (the line is shown), so a missing value reads as "shown"
+  add("hideBanner", "widget", st.widget.hideBanner, live.disableBanner ?? false, true);
   return rows;
 }
 

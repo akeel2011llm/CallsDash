@@ -95,6 +95,8 @@ export interface LiveAgent {
   toolCount?: number;
   guardrailsFocus?: boolean;
   guardrailsPromptInjection?: boolean;
+  /** The widget's "Powered by" line is switched off (platform_settings.widget.disable_banner). */
+  disableBanner?: boolean;
 }
 
 export interface CatalogApi {
@@ -206,6 +208,7 @@ export function mapLiveAgent(raw: unknown): LiveAgent {
     dailyLimit: num(obj(ps.call_limits).daily_limit), recordVoice: bool(obj(ps.privacy).record_voice), retentionDays: num(obj(ps.privacy).retention_days),
     toolCount: arr(prompt.tool_ids).length + Object.values(tools).filter((t) => obj(t).name || obj(t).type).length,
     guardrailsFocus: bool(obj(guard.focus).is_enabled), guardrailsPromptInjection: bool(obj(guard.prompt_injection).is_enabled),
+    disableBanner: bool(obj(ps.widget).disable_banner),
   };
 }
 

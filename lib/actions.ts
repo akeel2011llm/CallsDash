@@ -177,6 +177,7 @@ export async function createBookingAction(f: FormData) {
     created = await svc.bookAppointment(tenant.id, {
       doctorId: chosen, startsAt: str(f, "startsAt"), patientName: str(f, "patientName"), patientPhone: str(f, "patientPhone"),
       patientCpr: str(f, "patientCpr"), service: str(f, "service") || undefined, notes: str(f, "notes") || undefined, source: doctorId ? "doctor" : "staff", actor,
+      language: str(f, "language") === "ar" ? "ar" : str(f, "language") === "en" ? "en" : undefined, notify: f.get("whatsapp") === "on",
     });
   });
   revalidatePath(base, "layout");
@@ -189,7 +190,7 @@ export async function createBookingAction(f: FormData) {
 export async function rescheduleBookingAction(f: FormData) {
   const { tenant, actor, doctorId, base } = await requireBookingUser();
   const id = str(f, "id");
-  const err = await attempt(async () => (await bookingService()).staffReschedule(tenant.id, id, str(f, "startsAt"), actor, doctorId));
+  const err = await attempt(async () => (await bookingService()).staffReschedule(tenant.id, id, str(f, "startsAt"), actor, doctorId, { notify: f.get("whatsapp") === "on" }));
   revalidatePath(base, "layout");
   redirect(`${base}/bookings/${id}?${err ? `err=${err}` : "moved=1"}`);
 }

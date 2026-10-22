@@ -8,9 +8,10 @@ import { appUrl } from "./app-url";
 import { safePath } from "./format";
 import { syncAgent, SyncError } from "./agent-sync";
 import { elevenLabsFromEnv } from "./elevenlabs-api";
-import { sendBookingConfirmation } from "./whatsapp";
+import { TEMPLATES, mainLanguage, sendBookingConfirmation, testFailKey, wordingOf, type Wording } from "./whatsapp";
+import { bookingRef } from "./booking-ref";
 import { badHeaderSetting } from "./header-safe";
-import type { Channel, Integrations } from "./types";
+import type { Channel, Integrations, Locale } from "./types";
 
 const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 const page = (id: string, q: string) => `/admin/clients/${id}/channels?${q}`;
@@ -44,15 +45,31 @@ export async function syncAgentAction(f: FormData) {
   redirect(back ? `${back}${back.includes("?") ? "&" : "?"}${q}` : page(id, q));
 }
 
+const httpsUrl = (s: string) => { try { return new URL(s).protocol === "https:"; } catch { return false; } };
+
 export async function saveWhatsappAction(f: FormData) {
   const { actor } = await requireAdmin();
   const id = str(f, "tenantId");
   const t = await only(id);
+  const wording: Wording = str(f, "wording") === "short" ? "short" : "full";
+  const confirmTemplate = str(f, "confirmTemplate").replace(/[^a-z0-9_]/gi, "").toLowerCase().slice(0, 80) || undefined;
+  const mapUrl = str(f, "mapUrl").slice(0, 300);
+  if (mapUrl && !httpsUrl(mapUrl)) redirect(page(id, "error=badMapUrl"));
+  // the short template has four variables: sending the full set to it would be refused (Meta error 132000)
+  if (wording === "full" && confirmTemplate === TEMPLATES.short.name) redirect(page(id, "error=sameTemplate"));
+  const main: Locale = str(f, "confirmTemplateLang") === "ar" ? "ar" : "en";
   const wa: NonNullable<Integrations["whatsapp"]> = {
     phoneNumberId: str(f, "phoneNumberId").replace(/\D/g, "").slice(0, 32) || undefined,
     displayNumber: str(f, "displayNumber").slice(0, 40) || undefined,
-    confirmTemplate: str(f, "confirmTemplate").replace(/[^a-z0-9_]/gi, "").toLowerCase().slice(0, 80) || undefined,
-    confirmTemplateLang: str(f, "confirmTemplateLang") === "ar" ? "ar" : "en",
+    confirmTemplate,
+    confirmTemplateLang: main,
+    confirmWording: wording,
+    templateLangs: (["en", "ar"] as const).filter((l) => l === main || f.get(`lang_${l}`) === "on"),
+    ...(f.get("confirmations") === "on" ? {} : { confirmations: false }),
+    address: str(f, "address").slice(0, 250) || undefined,
+    addressAr: str(f, "addressAr").slice(0, 250) || undefined,
+    mapUrl: mapUrl || undefined,
+    phone: str(f, "phone").slice(0, 40) || undefined,
   };
   await store.setIntegrations(id, { ...t.integrations, whatsapp: wa }, actor, "WhatsApp settings saved");
   await store.setChannelStatus(id, "whatsapp", status(f), actor);
@@ -60,16 +77,24 @@ export async function saveWhatsappAction(f: FormData) {
   redirect(page(id, "saved=1"));
 }
 
-/** Sends the confirmation template to a number the admin types, to check that the template is approved and delivers. */
+/**
+ * Sends the confirmation to a number the admin types, as a patient would get it (the clinic's real name, address and phone, a
+ * sample patient and booking), to check that the template is approved and arrives. The reason for a failure is kept on the
+ * server for the page to show.
+ */
 export async function testWhatsappAction(f: FormData) {
   await requireAdmin();
   const id = str(f, "tenantId");
-  await only(id);
+  const t = await only(id);
   const api = elevenLabsFromEnv();
   if (!api) redirect(page(id, "error=no_api_key"));
+  const language: Locale = str(f, "language") === "ar" ? "ar" : str(f, "language") === "en" ? "en" : mainLanguage(t.integrations.whatsapp);
+  const sample = TEMPLATES[wordingOf(t.integrations.whatsapp)].samples[language];
   const r = await sendBookingConfirmation({ api, data: store }, id, {
-    patientName: "Test", patientPhone: str(f, "to"), doctorName: "Dr. Test", startsAt: new Date(Date.now() + 86_400_000).toISOString(),
+    patientName: sample.name, patientPhone: str(f, "to"), doctorName: sample.doctor, startsAt: new Date(Date.now() + 86_400_000).toISOString(),
+    service: sample.service, reference: bookingRef("test0000"), language,
   });
+  if (r.status === "failed") await store.setSetting(testFailKey(id), { detail: r.error, at: new Date().toISOString() });
   redirect(page(id, r.status === "sent" ? "saved=wa_test" : r.status === "skipped" ? `wa=${r.reason}` : "wa=failed"));
 }
 

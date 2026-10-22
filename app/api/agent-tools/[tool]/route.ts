@@ -1,10 +1,10 @@
 import { timingSafeEqual } from "node:crypto";
 import { after, NextResponse } from "next/server";
 import { createBookingService, ToolError } from "@/lib/booking";
+import { bookingNotifier } from "@/lib/booking-notify";
 import { getData } from "@/lib/data";
 import { sharedCalendar } from "@/lib/booking-service";
 import { elevenLabsFromEnv } from "@/lib/elevenlabs-api";
-import { sendBookingConfirmation } from "@/lib/whatsapp";
 import { asciiDigits } from "@/lib/cpr";
 import { appUrl } from "@/lib/app-url";
 import { ensureSharedTools } from "@/lib/agent-sync";
@@ -19,6 +19,8 @@ export const dynamic = "force-dynamic";
  */
 const same = (a: string, b: string) => a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
 const str = (v: unknown) => (typeof v === "string" ? v : "");
+/** The language the patient is speaking or writing, when the assistant says it. Anything else is left out. */
+const lang = (v: unknown) => (v === "ar" || v === "en" ? v : undefined);
 
 /** The tools that need the patient's CPR number. A call without the field comes from a tool definition made before CPR numbers were asked. */
 const CPR_TOOLS = new Set(["book_appointment", "find_patient_booking", "cancel_appointment", "reschedule_appointment"]);
@@ -84,7 +86,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ tool: string }
 /** The tool's answer for the agent, or null for a tool that does not exist. */
 async function run(tool: string, body: Record<string, unknown>, data: Awaited<ReturnType<typeof getData>>, tenantId: string): Promise<Record<string, unknown> | null> {
   const tenant = { id: tenantId };
-  const svc = createBookingService(data, sharedCalendar());
+  // A booking or a move also sends the patient their WhatsApp confirmation, after the assistant has its answer (lib/booking-notify.ts).
+  const svc = createBookingService(data, sharedCalendar(), undefined, { notify: bookingNotifier({ data }) });
   try {
     switch (tool) {
       case "check_availability": {
@@ -99,21 +102,11 @@ async function run(tool: string, body: Record<string, unknown>, data: Awaited<Re
         });
       }
       case "book_appointment": {
-        const booked = await svc.bookAppointment(tenant.id, {
+        return ok(await svc.bookAppointment(tenant.id, {
           doctorId: str(body.doctor_id), startsAt: str(body.starts_at), patientName: str(body.patient_name),
           patientPhone: str(body.patient_phone), patientCpr: str(body.patient_cpr), service: str(body.service) || undefined, conversationId: str(body.conversation_id) || undefined,
-        });
-        // The confirmation goes out after the agent has its answer, and a failure only leaves a note: it never undoes the booking.
-        const api = elevenLabsFromEnv();
-        if (api) after(async () => {
-          const r = await sendBookingConfirmation({ api, data }, tenant.id, { patientName: str(body.patient_name), patientPhone: str(body.patient_phone), doctorName: booked.doctor, startsAt: booked.start });
-          if (r.status === "sent") await data.audit("agent", `WhatsApp confirmation sent to ${str(body.patient_name)}`, tenant.id);
-          if (r.status === "failed") {
-            await data.audit("agent", `WhatsApp confirmation failed: ${r.error.slice(0, 160)}`, tenant.id);
-            await data.addAlert(tenant.id, "warning", `A booking confirmation could not be sent on WhatsApp (${r.error.slice(0, 120)}). Check the template in WhatsApp Manager.`);
-          }
-        });
-        return ok(booked);
+          language: lang(body.language),
+        }));
       }
       case "find_patient_booking": {
         const { bookings } = await svc.findPatientBookings(tenant.id, {
@@ -132,7 +125,7 @@ async function run(tool: string, body: Record<string, unknown>, data: Awaited<Re
       case "reschedule_appointment":
         return ok(await svc.rescheduleAppointment(tenant.id, {
           bookingId: str(body.booking_id), patientCpr: str(body.patient_cpr), patientPhone: str(body.patient_phone) || undefined,
-          newStartsAt: str(body.new_starts_at), doctorId: str(body.doctor_id) || undefined,
+          newStartsAt: str(body.new_starts_at), doctorId: str(body.doctor_id) || undefined, language: lang(body.language),
         }));
       case "take_message":
         return ok(await svc.takeMessage(tenant.id, {
@@ -166,9 +159,9 @@ function summarize(body: Record<string, unknown>) {
 }
 
 function outcome(res: Record<string, unknown>) {
-  if (res.moved) return `moved to ${String(res.label ?? res.start ?? "")}${res.doctor ? ` with ${String(res.doctor)}` : ""}`;
+  if (res.moved) return `moved to ${String(res.label ?? res.start ?? "")}${res.doctor ? ` with ${String(res.doctor)}` : ""}${res.whatsappConfirmation ? ", WhatsApp confirmation queued" : ""}`;
   if (Array.isArray(res.slots)) return `${res.slots.length} free times${res.slots[0] ? `, first ${(res.slots[0] as { label?: string }).label}` : ""}`;
-  if (res.bookingId) return `booked ${String(res.label ?? res.start ?? "")} (${String(res.bookingId)})${res.calendarSaved === false ? ", not on Google Calendar" : ""}`;
+  if (res.bookingId) return `booked ${String(res.label ?? res.start ?? "")} (${String(res.bookingId)})${res.calendarSaved === false ? ", not on Google Calendar" : ""}${res.whatsappConfirmation ? ", WhatsApp confirmation queued" : ""}`;
   if (Array.isArray(res.bookings)) return `${res.bookings.length} bookings found`;
   if (res.cancelled) return "cancelled";
   if (res.requestId) return "saved for staff";
