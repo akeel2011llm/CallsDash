@@ -19,3 +19,6 @@ export const safePath = (p: unknown, fallback: string) =>
 
 /** Local (Bahrain, UTC+3) calendar day key, used by the week view. */
 export const dayKey = (iso: string) => new Date(new Date(iso).getTime() + 3 * 3_600_000).toISOString().slice(0, 10);
+
+/** Puts values into a sentence: fill("Retires on {date}", { date }) gives "Retires on 14 Jan 2027". An unknown {name} stays as it is. */
+export const fill = (text: string, vars: Record<string, string | number>) => text.replace(/\{(\w+)\}/g, (m, k: string) => (k in vars ? String(vars[k]) : m));

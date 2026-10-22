@@ -1,4 +1,6 @@
 import { variablePlaceholders } from "./agent-context";
+import { acceptsTemperature, defaultLlm } from "./agent-catalog";
+import { STUDIO_DEFAULTS, studioOf } from "./agent-studio";
 import { resolveVoiceId } from "./voices";
 import type { AgentSettings, Doctor, KnowledgeItem, Tenant } from "./types";
 
@@ -65,12 +67,26 @@ export function buildPrompt(settings: AgentSettings, doctors: DoctorLine[] = [])
 
 const clean = (s: string) => s.replace(/\s+/g, " ").trim();
 
-export function greeting(tenant: Pick<Tenant, "name" | "branding">, lang: "en" | "ar", style: "gulf" | "msa"): string {
+/**
+ * The first thing the assistant says. An admin may write their own in the Assistant studio; `{name}` stands for the clinic's
+ * display name in that language. Left blank, the built-in greeting (with the recording notice) is used.
+ */
+export function greeting(tenant: Pick<Tenant, "name" | "branding">, lang: "en" | "ar", style: "gulf" | "msa", custom = ""): string {
+  if (custom.trim()) return custom.replaceAll("{name}", lang === "en" ? tenant.branding.displayName || tenant.name : tenant.branding.displayNameAr || tenant.name);
   if (lang === "en") return `Hello, you are speaking with the AI assistant of ${tenant.branding.displayName || tenant.name}. This conversation is recorded to help us serve you. How can I help?`;
   const name = tenant.branding.displayNameAr || tenant.name;
   return style === "gulf"
     ? `هلا والله، معك المساعد الذكي لـ ${name}. المحادثة مسجلة لتحسين خدمتك. شلون أقدر أساعدك؟`
     : `مرحباً بك، معك المساعد الذكي لـ ${name}. تُسجَّل هذه المحادثة لتحسين خدمتك. كيف يمكنني مساعدتك؟`;
+}
+
+/** A sentence an admin can add to a greeting of their own, per language. */
+export const RECORDING_NOTICE = { en: "This conversation is recorded to help us serve you.", ar: "تُسجَّل هذه المحادثة لتحسين خدمتك." } as const;
+
+/** True when a greeting tells the caller the conversation is recorded, in English or in Arabic (vowel marks do not matter). */
+export function mentionsRecording(text: string): boolean {
+  const plain = text.replace(/[\u064B-\u0652\u0670\u0640]/g, "");
+  return /record/i.test(plain) || /سج[يل]/.test(plain);
 }
 
 /** The knowledge base as one text document, question and answer pairs, for ElevenLabs to index. */
@@ -98,30 +114,32 @@ export function widgetHostnames(t: Pick<Tenant, "allowedDomains">, appUrl?: stri
 }
 
 // ElevenLabs requires the English-only v2 model for an agent whose main language is English; Arabic needs the multilingual v2.5 model, set on the Arabic preset.
-export const ENGLISH_TTS_MODEL = "eleven_flash_v2";
-export const ARABIC_TTS_MODEL = "eleven_flash_v2_5";
+export const ENGLISH_TTS_MODEL = STUDIO_DEFAULTS.ttsModelEn; // "eleven_flash_v2"
+export const ARABIC_TTS_MODEL = STUDIO_DEFAULTS.ttsModelAr; // "eleven_flash_v2_5"
 
 export const OUTCOME_ITEM = {
   type: "string", enum: ["booked", "answered", "handed_off", "abandoned"],
   description: "How the conversation ended: booked (an appointment was booked or changed), answered (questions answered), handed_off (staff will follow up or a message was taken), abandoned (the person left without a request).",
 };
 
-/** The body for creating or updating the client's agent in ElevenLabs. Updating sends the same body, so the agent always matches CallsDash. */
+/** The body for creating or updating the client's agent in ElevenLabs. Updating sends the same body, so a sync brings the agent back in line with CallsDash. */
 export function buildAgentConfig(i: AgentConfigInput) {
   const { tenant, settings } = i;
   const style = settings.arabicWrittenStyle;
+  const studio = studioOf(settings);
+  const llm = i.llm ?? (studio.llm || defaultLlm());
   return {
     name: `CallsDash: ${tenant.name}`.slice(0, 120),
     tags: ["callsdash", tenant.slug],
     conversation_config: {
       agent: {
-        first_message: greeting(tenant, "en", style),
+        first_message: greeting(tenant, "en", style, studio.greetingEn),
         language: "en",
         dynamic_variables: { dynamic_variable_placeholders: variablePlaceholders() },
         prompt: {
           prompt: buildPrompt(settings, i.doctors),
-          llm: i.llm ?? process.env.ELEVENLABS_LLM ?? "gemini-2.5-flash",
-          temperature: settings.temperature,
+          llm,
+          temperature: acceptsTemperature(llm) ? settings.temperature : null, // the newest Claude models reject a custom temperature: null leaves it out
           tool_ids: i.toolIds,
           built_in_tools: { language_detection: { name: "language_detection", description: "", params: { system_tool_type: "language_detection" } } },
           knowledge_base: i.knowledgeDoc ? [{ type: "text", name: i.knowledgeDoc.name, id: i.knowledgeDoc.id, usage_mode: "auto" }] : [],
@@ -130,13 +148,13 @@ export function buildAgentConfig(i: AgentConfigInput) {
       language_presets: {
         ar: {
           overrides: {
-            agent: { first_message: greeting(tenant, "ar", style), language: "ar" },
-            tts: { voice_id: resolveVoiceId(settings.voiceAr, "ar"), model_id: ARABIC_TTS_MODEL },
+            agent: { first_message: greeting(tenant, "ar", style, studio.greetingAr), language: "ar" },
+            tts: { voice_id: resolveVoiceId(settings.voiceAr, "ar"), model_id: studio.ttsModelAr },
           },
         },
       },
-      tts: { voice_id: resolveVoiceId(settings.voiceEn, "en"), model_id: ENGLISH_TTS_MODEL },
-      conversation: { max_duration_seconds: 900 },
+      tts: { voice_id: resolveVoiceId(settings.voiceEn, "en"), model_id: studio.ttsModelEn },
+      conversation: { max_duration_seconds: studio.maxDurationSeconds },
     },
     platform_settings: {
       auth: { enable_auth: false, allowlist: widgetHostnames(tenant, i.appUrl).map((hostname) => ({ hostname })) },

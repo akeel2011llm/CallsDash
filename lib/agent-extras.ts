@@ -1,5 +1,6 @@
 import { OUTCOME_ITEM } from "./agent-config";
-import type { Tenant } from "./types";
+import { studioOf, type AgentStudio, type SectionId } from "./agent-studio";
+import type { AgentSettings, Tenant } from "./types";
 
 type Json = Record<string, unknown>;
 
@@ -9,7 +10,7 @@ type Json = Record<string, unknown>;
  * admin sees which group was refused and why (lib/agent-sync.ts).
  */
 export type ExtraGroup = { name: ExtraGroupName; body: Json };
-export const EXTRA_GROUPS = ["tools", "hardening", "keywords", "guardrails", "analysis", "privacy", "limits", "widget"] as const;
+export const EXTRA_GROUPS = ["tools", "hardening", "keywords", "guardrails", "analysis", "privacy", "limits", "widget", "model", "voice", "turn", "hearing"] as const;
 export type ExtraGroupName = (typeof EXTRA_GROUPS)[number];
 
 const system = (name: string, extra: Json = {}) => ({ type: "system", name, description: "", params: { system_tool_type: name, ...extra } });
@@ -46,38 +47,102 @@ const isHex = (s: unknown): s is string => typeof s === "string" && /^#[0-9a-f]{
 export interface ExtrasInput {
   tenant: Pick<Tenant, "name" | "branding" | "retentionDays" | "allowedDomains">;
   doctors: { name: string }[];
+  /** The client's agent settings. Without them (or without a saved studio) the agent keeps the settings it always had. */
+  settings?: Pick<AgentSettings, "studio">;
 }
+
+/** The widget as it was before the studio: the client's brand colour on a white card, with the language selector and text chat. */
+const legacyWidget = (primary: string) => ({
+  bg_color: "#ffffff", text_color: "#111111", border_color: "#e1e1e1",
+  btn_color: primary, btn_text_color: readableOn(primary), focus_color: primary,
+  language_selector: true, feedback_mode: "end", show_conversation_id: false, transcript_enabled: true,
+  text_input_enabled: true, supports_text_only: true,
+});
+
+const studioWidget = (w: AgentStudio["widget"], primary: string) => {
+  const brand = w.colors === "brand";
+  const btn = brand ? primary : w.btnColor;
+  const orNull = (v: string) => v || null; // a blank text puts ElevenLabs' own wording back
+  return {
+    bg_color: brand ? "#ffffff" : w.bgColor, text_color: brand ? "#111111" : w.textColor, border_color: brand ? "#e1e1e1" : w.borderColor,
+    btn_color: btn, btn_text_color: brand ? readableOn(primary) : w.btnTextColor, focus_color: btn,
+    language_selector: w.languageSelector, feedback_mode: w.feedback, show_conversation_id: w.showConversationId, transcript_enabled: w.transcript,
+    text_input_enabled: w.textInput, supports_text_only: w.textOnlyMode,
+    variant: w.variant, placement: w.placement, expandable: w.expandable, border_radius: w.borderRadius, btn_radius: w.btnRadius,
+    mic_muting_enabled: w.micMuting, default_expanded: w.defaultExpanded, dismissible: w.dismissible, end_confirmation_enabled: w.endConfirmation,
+    action_text: orNull(w.actionText), start_call_text: orNull(w.startCallText), end_call_text: orNull(w.endCallText),
+    listening_text: orNull(w.listeningText), speaking_text: orNull(w.speakingText),
+  };
+};
 
 export function buildExtras(i: ExtrasInput): ExtraGroup[] {
   const brand = i.tenant.branding;
+  const st = studioOf(i.settings ?? {});
+  const saved = (section: SectionId) => st.touched.includes(section);
   const primary = isHex(brand.primaryColor) ? brand.primaryColor : "#0f766e";
-  const keywords = [...new Set([i.tenant.name, brand.displayName, brand.displayNameAr, ...i.doctors.map((d) => d.name)].map((k) => (k ?? "").trim()).filter((k) => k && k.length <= 50))].slice(0, 20);
+  const auto = [i.tenant.name, brand.displayName, brand.displayNameAr, ...i.doctors.map((d) => d.name)];
+  const keywords = [...new Set([...st.extraKeywords, ...auto].map((k) => (k ?? "").trim()).filter((k) => k && k.length <= 50))].slice(0, 20);
   const g = (name: ExtraGroupName, body: Json): ExtraGroup => ({ name, body });
-  return [
+  const groups: ExtraGroup[] = [
     // End call is not added automatically to agents made through the API, so without it a call can only end when the caller hangs up.
     g("tools", { conversation_config: { agent: { prompt: { built_in_tools: { end_call: system("end_call"), skip_turn: system("skip_turn") } } } } }),
     g("hardening", {
       conversation_config: {
-        agent: { disable_first_message_interruptions: true, prompt: { timezone: "Asia/Bahrain" } }, // the recording notice in the greeting must not be cut off
-        turn: { silence_end_call_timeout: 30 },
+        agent: { disable_first_message_interruptions: st.protectGreeting, prompt: { timezone: "Asia/Bahrain" } }, // the recording notice in the greeting must not be cut off
+        turn: { silence_end_call_timeout: st.silenceEndSeconds || -1 },
       },
     }),
     g("keywords", { conversation_config: { asr: { keywords } } }), // clinic and doctor names are easy to mis-hear
-    g("guardrails", { platform_settings: { guardrails: { version: "1", focus: { is_enabled: true }, prompt_injection: { is_enabled: true } } } }),
-    g("analysis", { platform_settings: { evaluation: { criteria: EVALUATION_CRITERIA }, data_collection: DATA_COLLECTION } }),
-    g("privacy", { platform_settings: { privacy: { record_voice: true, retention_days: Math.max(1, Math.round(i.tenant.retentionDays || 90)) } } }),
-    g("limits", { platform_settings: { call_limits: { daily_limit: 500 } } }), // a public widget must not be able to run up an unlimited bill
-    g("widget", {
+    g("guardrails", { platform_settings: { guardrails: { version: "1", focus: { is_enabled: st.guardFocus }, prompt_injection: { is_enabled: st.guardInjection } } } }),
+    g("analysis", {
       platform_settings: {
-        widget: {
-          bg_color: "#ffffff", text_color: "#111111", border_color: "#e1e1e1",
-          btn_color: primary, btn_text_color: readableOn(primary), focus_color: primary,
-          language_selector: true, feedback_mode: "end", show_conversation_id: false, transcript_enabled: true,
-          text_input_enabled: true, supports_text_only: true,
-        },
+        evaluation: { criteria: EVALUATION_CRITERIA.filter((c) => !st.criteriaOff.includes(c.id)) },
+        data_collection: DATA_COLLECTION,
+        ...(saved("analysis") ? { summary_language: st.summaryLanguage || null } : {}),
       },
     }),
+    g("privacy", { platform_settings: { privacy: { record_voice: st.recordVoice, retention_days: Math.max(1, Math.round(i.tenant.retentionDays || 90)) } } }),
+    g("limits", { platform_settings: { call_limits: { daily_limit: st.dailyLimit, ...(saved("safety") ? { agent_concurrency_limit: st.concurrencyLimit || -1, bursting_enabled: st.bursting } : {}) } } }), // a public widget must not be able to run up an unlimited bill
+    g("widget", { platform_settings: { widget: saved("widget") ? studioWidget(st.widget, primary) : legacyWidget(primary) } }),
   ];
+  // The options below were added with the Assistant studio. They are sent only for a section an admin has saved.
+  if (saved("model")) {
+    groups.push(g("model", {
+      conversation_config: {
+        agent: {
+          prompt: {
+            max_tokens: st.maxTokens || -1,
+            reasoning_effort: st.reasoningEffort || null, // null puts the model's own default back
+            enable_parallel_tool_calls: st.parallelTools,
+            backup_llm_config: st.backupMode === "custom" ? { preference: "override", order: st.backupModels } : { preference: st.backupMode },
+            cascade_timeout_seconds: st.cascadeSeconds,
+          },
+        },
+      },
+    }));
+  }
+  if (saved("voice")) {
+    groups.push(g("voice", {
+      conversation_config: {
+        tts: { stability: st.stability, similarity_boost: st.similarity, speed: st.speed, text_normalisation_type: st.textNormalisation, expressive_mode: st.expressive },
+        language_presets: { ar: { overrides: { tts: { stability: st.stability, similarity_boost: st.similarity, speed: st.speed } } } },
+      },
+    }));
+  }
+  if (saved("conversation")) {
+    groups.push(g("turn", {
+      conversation_config: {
+        agent: { max_conversation_duration_message: st.maxDurationMessage },
+        turn: {
+          turn_eagerness: st.turnEagerness, turn_timeout: st.turnTimeout, spelling_patience: st.spellingPatience, speculative_turn: st.speculativeTurn,
+          soft_timeout_config: { timeout_seconds: st.softTimeoutSeconds || -1, message: st.softTimeoutMessageEn, use_llm_generated_message: false },
+        },
+        language_presets: { ar: { overrides: { turn: { soft_timeout_config: { message: st.softTimeoutMessageAr } } } } },
+      },
+    }));
+  }
+  if (saved("hearing")) groups.push(g("hearing", { conversation_config: { asr: { provider: st.asrProvider } } }));
+  return groups;
 }
 
 /** Merges plain objects deeply; arrays and other values from `b` replace those in `a`. */

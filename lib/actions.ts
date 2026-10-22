@@ -15,6 +15,7 @@ import { ToolError } from "./booking";
 import { cleanOpeningHours } from "./availability";
 import { cleanCatalogInput, type PlanInput } from "./plans";
 import { FLAG_KINDS, normalizeRules } from "./flags";
+import { voiceAllowed } from "./voices";
 import { FONT_STYLES, PATTERN_STYLES, RADIUS_STYLES, SIDEBAR_STYLES, coverDataUrl, isCoverUrl, isHex, isLogoUrl, logoDataUrl } from "./theme";
 import type { AgentSettings, Branding, BookingStatus, Locale, Permissions } from "./types";
 
@@ -92,6 +93,7 @@ export async function saveAgentAction(f: FormData) {
   const cur = await store.getAgent(tenant.id);
   const next: AgentSettings = structuredClone(cur);
   const changed: string[] = [];
+  let refused = false;
   if (f.has("prompt.identity")) {
     if (!tenant.permissions.editPrompt) throw new Error("forbidden");
     for (const k of Object.keys(next.prompt) as (keyof AgentSettings["prompt"])[]) next.prompt[k] = str(f, `prompt.${k}`).slice(0, 2000);
@@ -110,13 +112,17 @@ export async function saveAgentAction(f: FormData) {
   }
   if (f.has("voiceEn")) {
     if (!tenant.permissions.editVoice) throw new Error("forbidden");
-    next.voiceEn = str(f, "voiceEn");
-    next.voiceAr = str(f, "voiceAr");
-    changed.push("voice");
+    // only voices on the client's list (what the admin offered, or the built-in four) can be chosen; anything else keeps the current voice
+    const en = str(f, "voiceEn"), ar = str(f, "voiceAr");
+    const okEn = voiceAllowed(cur, "en", en), okAr = voiceAllowed(cur, "ar", ar);
+    if (okEn) next.voiceEn = en;
+    if (okAr) next.voiceAr = ar;
+    if (next.voiceEn !== cur.voiceEn || next.voiceAr !== cur.voiceAr) changed.push("voice");
+    refused = !okEn || !okAr; // a stale page: the admin took a voice off the list after it was opened
   }
   if (changed.length) { await store.saveAgent(tenant.id, next, actor, changed.join(", ")); await autoSync(tenant.id, actor); }
   revalidatePath("/app", "layout");
-  back(f, "/app/agent");
+  back(f, "/app/agent", refused ? "voiceRefused=1" : "saved=1");
 }
 
 export async function addKnowledgeAction(f: FormData) {

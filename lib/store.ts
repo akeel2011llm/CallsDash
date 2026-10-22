@@ -5,7 +5,9 @@ import { PLAN_PRESETS, firstPackage, type PlanInput } from "./plans";
 import { DuplicateError, SlotTakenError } from "./errors";
 import { findDuplicate, nameKey } from "./tenant-keys";
 import { DEFAULT_OPENING_HOURS } from "./availability";
-import { seed, type DB, ELEVENLABS_USD_PER_MIN, ELEVENLABS_USD_PER_MSG } from "./seed";
+import { seed, type DB, FLAT_RATES } from "./seed";
+import { conversationCostUsd } from "./costing";
+import { USD_TO_BHD } from "./pricing";
 import type {
   AgentToolCall,
   NewConversation,
@@ -201,7 +203,7 @@ export function recordConversation(tenantId: string, input: NewConversation) {
   const flags = detectFlags(input, t.alertRules);
   const full: Conversation = {
     ...conv, id: id("c"), tenantId, creditsCharged: credits, flags, reviewed: false,
-    costUsd: round2(conv.mode === "voice" ? (conv.durationSec / 60) * ELEVENLABS_USD_PER_MIN : conv.messages * ELEVENLABS_USD_PER_MSG),
+    costUsd: conv.costUsd ?? conversationCostUsd(conv, FLAT_RATES),
   };
   d.conversations.unshift(full);
   if (t.alertRules.emergency.notifyStaff && flags.includes("emergency"))
@@ -457,7 +459,7 @@ export function marginFor(tenantId: string, since: Date) {
   const t = getTenant(tenantId)!;
   const convs = getConversations(tenantId).filter((c) => new Date(c.startedAt) >= since);
   const credits = round2(convs.reduce((s, c) => s + c.creditsCharged, 0));
-  const costBhd = round2(convs.reduce((s, c) => s + c.costUsd, 0) * 0.377);
+  const costBhd = round2(convs.reduce((s, c) => s + c.costUsd, 0) * USD_TO_BHD);
   const perCredit = revenuePerCredit(t.plans);
   const revenueBhd = round2(credits * perCredit);
   return { conversations: convs.length, credits, costBhd, revenueBhd, marginBhd: round2(revenueBhd - costBhd) };

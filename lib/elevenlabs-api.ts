@@ -7,10 +7,33 @@ export class ElevenLabsError extends Error {
   constructor(public status: number, public detail: string) { super(`ElevenLabs ${status}: ${detail}`); }
 }
 
+const lineOf = (d: unknown): string | null => {
+  if (typeof d === "string") return d.trim() || null;
+  if (!d || typeof d !== "object") return null;
+  const o = d as { msg?: unknown; message?: unknown; status?: unknown; loc?: unknown };
+  const text = [o.msg, o.message, o.status].find((v): v is string => typeof v === "string" && !!v.trim())?.trim();
+  if (!text) return null;
+  const where = Array.isArray(o.loc) ? o.loc.filter((p) => (typeof p === "string" && p !== "body") || typeof p === "number").join(".") : "";
+  return where ? `${text} (${where})` : text;
+};
+
+/**
+ * What ElevenLabs said, without the JSON around it, so an admin can read it: `ElevenLabs 422: {"detail":[{"loc":["body","a","b"],"msg":"Not allowed"}]}`
+ * becomes `Not allowed (a.b)`. Text that is not JSON, or has no message to pick out, comes back as it was.
+ */
+export function plainDetail(message: string): string {
+  let parsed: unknown;
+  try { parsed = JSON.parse(message.replace(/^ElevenLabs \d{3}:\s*/, "").trim()); } catch { return message; }
+  const detail = parsed && typeof parsed === "object" && !Array.isArray(parsed) && "detail" in parsed ? (parsed as { detail: unknown }).detail : parsed;
+  const lines = (Array.isArray(detail) ? detail : [detail]).map(lineOf).filter((l): l is string => !!l);
+  return lines.length ? lines.join("; ") : message;
+}
+
 type Json = Record<string, unknown>;
 type FetchLike = typeof fetch;
 
-const BASE = "https://api.elevenlabs.io";
+/** ELEVENLABS_API_BASE exists only so tests can point the app at a local fake; in production it stays unset. */
+export const elevenLabsBase = () => (process.env.ELEVENLABS_API_BASE || "https://api.elevenlabs.io").replace(/\/+$/, "");
 
 export interface WhatsappTemplateParams {
   type: "body" | "header" | "button";
@@ -32,18 +55,24 @@ export interface ElevenLabsApi {
   transcribe(audio: Uint8Array, filename: string, mime: string): Promise<{ text: string; language?: string }>;
 }
 
-export function createElevenLabsApi(apiKey: string, fetchImpl: FetchLike = fetch): ElevenLabsApi {
-  async function call<T>(method: string, path: string, body?: Json | FormData): Promise<T> {
+/** One request to ElevenLabs with the key attached. Errors carry ElevenLabs' own message. `timeoutMs` stops a slow answer from holding up a page. */
+export function elevenLabsRequester(apiKey: string, fetchImpl: FetchLike = fetch) {
+  return async function call<T>(method: string, path: string, body?: Json | FormData, opts: { timeoutMs?: number } = {}): Promise<T> {
     const isForm = body instanceof FormData;
-    const res = await fetchImpl(`${BASE}${path}`, {
+    const res = await fetchImpl(`${elevenLabsBase()}${path}`, {
       method,
       headers: { "xi-api-key": apiKey, ...(body && !isForm ? { "content-type": "application/json" } : {}) },
       body: body ? (isForm ? body : JSON.stringify(body)) : undefined,
+      ...(opts.timeoutMs ? { signal: AbortSignal.timeout(opts.timeoutMs) } : {}),
     });
     const text = await res.text();
     if (!res.ok) throw new ElevenLabsError(res.status, text.slice(0, 500));
     return (text ? JSON.parse(text) : {}) as T;
-  }
+  };
+}
+
+export function createElevenLabsApi(apiKey: string, fetchImpl: FetchLike = fetch): ElevenLabsApi {
+  const call = elevenLabsRequester(apiKey, fetchImpl);
   return {
     createAgent: (body) => call("POST", "/v1/convai/agents/create", body),
     updateAgent: async (id, body) => { await call("PATCH", `/v1/convai/agents/${encodeURIComponent(id)}`, body); },

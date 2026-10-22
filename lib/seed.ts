@@ -31,9 +31,11 @@ export interface DB {
   seq: number;
 }
 
-export const USD_TO_BHD = 0.377;
+export { USD_TO_BHD } from "./pricing";
 export const ELEVENLABS_USD_PER_MIN = 0.08 + 0.05; // minute fee + estimated LLM cost per minute
 export const ELEVENLABS_USD_PER_MSG = 0.003 + 0.002; // message fee + estimated LLM cost per message
+/** What a conversation is recorded at when its caller did not work the cost out from the client's AI model (the demo data, tests). */
+export const FLAT_RATES = { minuteUsd: ELEVENLABS_USD_PER_MIN, messageUsd: ELEVENLABS_USD_PER_MSG };
 
 const DAY = 86_400_000;
 
