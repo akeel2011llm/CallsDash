@@ -16,8 +16,12 @@ export const USD_TO_BHD = 0.377;
 export interface Fees { minuteUsd: number; messageUsd: number }
 export const DEFAULT_FEES: Fees = { minuteUsd: 0.08, messageUsd: 0.003 };
 export const FEES_KEY = "elevenlabs.fees";
-/** Where the studio keeps its copy of ElevenLabs' model list and prices (lib/studio-data.ts). */
+/**
+ * Where the studio keeps its copy of ElevenLabs' answers (lib/studio-data.ts): the model list, which is the same for every
+ * client, and the prices, which depend on the size of one client's instructions and knowledge base, so each client has its own.
+ */
 export const MODELS_KEY = "elevenlabs.models";
+export const pricesKey = (tenantId: string) => `elevenlabs.prices.${tenantId}`;
 
 /** What a model with no price at all is assumed to add per voice minute and per message. */
 export const UNKNOWN_MODEL = { perMinute: 0.02, perMessage: 0.001 };

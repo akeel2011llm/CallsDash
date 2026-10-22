@@ -134,14 +134,24 @@ describe("voice models", () => {
     expect(ttsAllowed("ar", "eleven_flash_v2_5")).toBe(true);
     expect(ttsAllowed("en", "eleven_flash_v2")).toBe(true);
   });
-  it("offers Flash v2.5, Multilingual v2 and the v3 and v4 models for Arabic", () => {
-    expect(ttsFor("ar").map((m) => m.id)).toEqual(["eleven_flash_v2_5", "eleven_multilingual_v2", "eleven_v3_conversational", "eleven_v4_turbo", "eleven_v4"]);
+  it("offers Flash v2.5, Multilingual v2 and the v3 and v4 Turbo models for Arabic", () => {
+    expect(ttsFor("ar").map((m) => m.id)).toEqual(["eleven_flash_v2_5", "eleven_multilingual_v2", "eleven_v3_conversational", "eleven_v4_turbo"]);
   });
-  it("hides retired models unless a client still has one", () => {
+  it("offers English only Flash v2 and the newest default models, because ElevenLabs refused Flash v2.5 for English", () => {
+    expect(ttsFor("en").map((m) => m.id)).toEqual(["eleven_flash_v2", "eleven_v3_conversational", "eleven_v4_turbo"]);
+    for (const id of ["eleven_flash_v2_5", "eleven_multilingual_v2", "eleven_turbo_v2_5"]) expect(ttsAllowed("en", id)).toBe(false);
+  });
+  it("hides retired models and the ones made for recordings unless a client still has one", () => {
     expect(ttsFor("en").map((m) => m.id)).not.toContain("eleven_turbo_v2");
     expect(ttsFor("en", "eleven_turbo_v2").map((m) => m.id)).toContain("eleven_turbo_v2");
     expect(ttsFor("ar").map((m) => m.id)).not.toContain("eleven_turbo_v2_5");
     expect(ttsFor("ar", "eleven_turbo_v2_5").map((m) => m.id)).toContain("eleven_turbo_v2_5");
+    expect(ttsFor("ar").map((m) => m.id)).not.toContain("eleven_v4");
+    expect(ttsFor("en", "eleven_v4").map((m) => m.id)).toContain("eleven_v4");
+    expect(ttsAllowed("ar", "eleven_v4")).toBe(false);
+    expect(ttsAllowed("ar", "eleven_v4", "eleven_v4")).toBe(true);
+    expect(ttsAllowed("en", "eleven_turbo_v2")).toBe(false);
+    expect(ttsAllowed("en", "eleven_turbo_v2", "eleven_turbo_v2")).toBe(true);
   });
   it("keeps an unknown model on the English side only, and only if it is the one already in use", () => {
     expect(ttsAllowed("en", "eleven_future", "eleven_future")).toBe(true);

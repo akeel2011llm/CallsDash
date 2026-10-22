@@ -141,7 +141,7 @@ export function buildExtras(i: ExtrasInput): ExtraGroup[] {
       },
     }));
   }
-  if (saved("hearing") && st.asrProvider) groups.push(g("hearing", { conversation_config: { asr: { provider: st.asrProvider } } }));
+  if (saved("hearing")) groups.push(g("hearing", { conversation_config: { asr: { provider: st.asrProvider } } }));
   return groups;
 }
 

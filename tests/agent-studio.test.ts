@@ -56,7 +56,7 @@ describe("reading the stored studio", () => {
     expect(s.concurrencyLimit).toBe(1000);
     expect(s.turnEagerness).toBe("normal");
     expect(s.backupMode).toBe("default");
-    expect(s.asrProvider).toBe("");
+    expect(s.asrProvider).toBe("scribe_realtime");
     expect(s.summaryLanguage).toBe("");
     expect(s.touched).toEqual(["model"]);
     expect(s.extraKeywords).toEqual(["Dr Ali", "x".repeat(50)]);
@@ -237,7 +237,13 @@ describe("an agent whose studio was saved", () => {
     expect(names(saved("voice", {}))).toContain("voice");
     expect(names(saved("conversation", {}))).toContain("turn");
     expect(names(saved("hearing", { asrProvider: "scribe_realtime" }))).toContain("hearing");
-    expect(names(saved("hearing", {}))).not.toContain("hearing"); // nothing to send while the platform default is kept
+    expect(names(saved("hearing", {}))).toContain("hearing"); // a saved section always sends the provider, so choosing the standard one again really switches back
+    expect(names(base())).not.toContain("hearing");
+  });
+  it("puts the standard speech recognition back when a saved hearing section is reset", () => {
+    const turbo = saved("hearing", { asrProvider: "scribe_v2_turbo" });
+    expect(groupOf(turbo, "hearing")).toEqual({ conversation_config: { asr: { provider: "scribe_v2_turbo" } } });
+    expect(groupOf(resetSection(turbo, "hearing"), "hearing")).toEqual({ conversation_config: { asr: { provider: "scribe_realtime" } } });
   });
   it("sends the model options, with 'no limit' as -1 and the backup in the form ElevenLabs expects", () => {
     expect(groupOf(saved("model", {}), "model")).toEqual({ conversation_config: { agent: { prompt: { max_tokens: -1, reasoning_effort: null, enable_parallel_tool_calls: true, backup_llm_config: { preference: "default" }, cascade_timeout_seconds: 4 } } } });

@@ -80,6 +80,15 @@ export function greeting(tenant: Pick<Tenant, "name" | "branding">, lang: "en" |
     : `مرحباً بك، معك المساعد الذكي لـ ${name}. تُسجَّل هذه المحادثة لتحسين خدمتك. كيف يمكنني مساعدتك؟`;
 }
 
+/** A sentence an admin can add to a greeting of their own, per language. */
+export const RECORDING_NOTICE = { en: "This conversation is recorded to help us serve you.", ar: "تُسجَّل هذه المحادثة لتحسين خدمتك." } as const;
+
+/** True when a greeting tells the caller the conversation is recorded, in English or in Arabic (vowel marks do not matter). */
+export function mentionsRecording(text: string): boolean {
+  const plain = text.replace(/[\u064B-\u0652\u0670\u0640]/g, "");
+  return /record/i.test(plain) || /سج[يل]/.test(plain);
+}
+
 /** The knowledge base as one text document, question and answer pairs, for ElevenLabs to index. */
 export function knowledgeText(items: Pick<KnowledgeItem, "question" | "answer">[]): string {
   return items.map((k) => `Q: ${clean(k.question)}\nA: ${clean(k.answer)}`).join("\n\n");
@@ -113,7 +122,7 @@ export const OUTCOME_ITEM = {
   description: "How the conversation ended: booked (an appointment was booked or changed), answered (questions answered), handed_off (staff will follow up or a message was taken), abandoned (the person left without a request).",
 };
 
-/** The body for creating or updating the client's agent in ElevenLabs. Updating sends the same body, so the agent always matches CallsDash. */
+/** The body for creating or updating the client's agent in ElevenLabs. Updating sends the same body, so a sync brings the agent back in line with CallsDash. */
 export function buildAgentConfig(i: AgentConfigInput) {
   const { tenant, settings } = i;
   const style = settings.arabicWrittenStyle;

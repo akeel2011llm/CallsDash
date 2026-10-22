@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { AGENT_VERSION, buildAgentConfig, knowledgeText, toolDefinitions, widgetHostnames } from "./agent-config";
 import { buildExtras, withExtras, type ExtraGroup } from "./agent-extras";
-import { ElevenLabsError, type ElevenLabsApi } from "./elevenlabs-api";
+import { ElevenLabsError, plainDetail, type ElevenLabsApi } from "./elevenlabs-api";
 import type { Data } from "./data/demo";
 import type { AgentSettings } from "./types";
 
@@ -67,7 +67,7 @@ export async function applyExtras(api: ElevenLabsApi, agentId: string, core: Rec
       await api.updateAgent(agentId, withExtras(core, [...accepted, g]));
       accepted.push(g);
     } catch (e) {
-      warnings.push({ group: g.name, detail: (e instanceof Error ? e.message : "refused").slice(0, 300) });
+      warnings.push({ group: g.name, detail: plainDetail(e instanceof Error ? e.message : "refused").slice(0, 300) });
     }
   }
   return warnings;

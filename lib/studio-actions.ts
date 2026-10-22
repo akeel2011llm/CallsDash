@@ -4,10 +4,11 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "./auth";
 import * as store from "./data";
-import { defaultLlm } from "./agent-catalog";
+import { defaultLlm, type ModelRow } from "./agent-catalog";
 import { SECTIONS, studioOf, type SectionId } from "./agent-studio";
 import { FEES_KEY } from "./pricing";
 import { applyStudioChange, type StudioOutcome } from "./studio-apply";
+import { failKey, failRecord } from "./studio-fail";
 import { clearStudioCache, modelBook, syncSetup } from "./studio-server";
 
 const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
@@ -15,14 +16,17 @@ const page = (id: string, q: string, hash = "") => `/admin/clients/${id}/assista
 const only = (id: string) => store.getTenant(id).then((t) => t ?? redirect("/admin"));
 const sectionOf = (f: FormData): SectionId => SECTIONS.find((s) => s === str(f, "section")) ?? redirect("/admin");
 
-function done(id: string, section: SectionId, o: StudioOutcome): never {
+async function done(id: string, section: SectionId, o: StudioOutcome): Promise<never> {
   revalidatePath(`/admin/clients/${id}`, "layout");
   revalidatePath("/app", "layout");
   const hash = `#${section}`;
   const q = new URLSearchParams({ section });
   if (o.kind === "invalid") q.set("bad", o.errors.map((e) => `${e.field}:${e.key}`).join(","));
-  else if (o.kind === "refused") q.set("fail", o.detail.slice(0, 300));
-  else if (o.kind === "saved") { q.set("done", "saved"); q.set("why", o.reason); }
+  else if (o.kind === "refused") {
+    // ElevenLabs' own words are kept on the server and shown by the page; the address only says there is a reason to show
+    await store.setSetting(failKey(id), failRecord(section, o.detail)).catch(() => undefined);
+    q.set("fail", "1");
+  } else if (o.kind === "saved") { q.set("done", "saved"); q.set("why", o.reason); }
   else { q.set("done", "applied"); if (o.warnings.length) q.set("warn", o.warnings.map((w) => w.group).join(",")); }
   redirect(page(id, q.toString(), hash));
 }
@@ -33,14 +37,20 @@ async function run(f: FormData, reset: boolean) {
   await only(id);
   const section = sectionOf(f);
   if (reset && f.get("confirm") !== "on") redirect(page(id, `section=${section}`, `#${section}`));
-  const agent = await store.getAgent(id);
-  const st = studioOf(agent);
-  const book = await modelBook(id, { keep: [st.llm || defaultLlm(), ...st.backupModels] });
+  // only a change to the AI model is checked against ElevenLabs' list, so the other sections do not wait for it
+  let models: ModelRow[] = [];
+  let listed = false;
+  if (section === "model" && !reset) {
+    const st = studioOf(await store.getAgent(id));
+    const book = await modelBook(id, { keep: [st.llm || defaultLlm(), ...st.backupModels] });
+    models = book.rows;
+    listed = book.source !== "builtin";
+  }
   const outcome = await applyStudioChange(
-    { data: store, sync: await syncSetup(), models: book.rows, listed: book.source !== "builtin" },
+    { data: store, sync: await syncSetup(), models, listed },
     id, actor, reset ? { section, reset: true } : { section, form: f },
   );
-  done(id, section, outcome);
+  await done(id, section, outcome);
 }
 
 /** Saves one section of a client's Assistant studio: checks it, sends it to ElevenLabs, and stores it once ElevenLabs accepted it. */

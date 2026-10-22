@@ -47,7 +47,7 @@ export function VoiceFields({ value, builtins, labels }: { value: VoiceValue; bu
     setOpen(side);
     setTimeout(() => panel.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }), 50);
   };
-  const expressive = [modelEn, modelAr].some((m) => ttsMeta(m)?.expressive);
+  const expressive = !!ttsMeta(modelEn)?.expressive; // expressive mode belongs to the assistant as a whole and follows its main (English) voice model
 
   const addOffered = (side: BrowserFor, p: VoicePick) =>
     setOffered((cur) => (cur.some((o) => o.id === p.id) || cur.length >= LIMITS.offeredVoices ? cur : [...cur, {
@@ -103,7 +103,7 @@ export function VoiceFields({ value, builtins, labels }: { value: VoiceValue; bu
           </select>
           <small className="muted">{meta ? T(`studio.tts.${meta.id}`) : T("studio.voice.model.unknown")}</small>
         </label>
-        {lang === "ar" && <small className="muted">{T("studio.voice.model.arabicOnly")}</small>}
+        <small className="muted">{T(lang === "ar" ? "studio.voice.model.arabicOnly" : "studio.voice.model.englishOnly")}</small>
       </section>
     );
   };

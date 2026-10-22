@@ -6,9 +6,9 @@ import { voiceChoices } from "@/lib/voices";
 import { Notice, PageHead } from "@/components/ui";
 import { SubmitButton } from "@/components/SubmitButton";
 
-export default async function VoicePage({ searchParams }: { searchParams: Promise<{ saved?: string }> }) {
+export default async function VoicePage({ searchParams }: { searchParams: Promise<{ saved?: string; voiceRefused?: string }> }) {
   const { tenant } = await requireClient();
-  const { saved } = await searchParams;
+  const { saved, voiceRefused } = await searchParams;
   const { t } = await getT();
   const agent = await getAgent(tenant.id);
   const locked = !tenant.permissions.editVoice;
@@ -16,6 +16,7 @@ export default async function VoicePage({ searchParams }: { searchParams: Promis
     <>
       <PageHead title={t("voice.title")} />
       {saved && <Notice tone="ok">{t("agent.saved")}</Notice>}
+      {voiceRefused && <Notice tone="warn">{t("voice.refused")}</Notice>}
       {locked && <Notice tone="warn">{t("common.locked")}</Notice>}
       <form action={saveAgentAction} className="stack">
         <input type="hidden" name="returnTo" value="/app/voice" />

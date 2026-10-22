@@ -9,8 +9,11 @@ import type { AgentSettings, Tenant } from "./types";
 import { resolveVoiceId } from "./voices";
 
 export type LiveValue = string | number | boolean | null;
-/** `same`: both agree. `differs`: CallsDash sent this and ElevenLabs shows something else. `unset`: CallsDash does not send it yet, so ElevenLabs uses its own value. */
-export type LiveState = "same" | "differs" | "unset";
+/**
+ * `same`: both agree. `differs`: CallsDash sent this and ElevenLabs shows something else. `unset`: CallsDash does not send it yet,
+ * so ElevenLabs uses its own value. `unused`: the chosen model never reads this setting, so whatever ElevenLabs shows is harmless.
+ */
+export type LiveState = "same" | "differs" | "unset" | "unused";
 
 export interface LiveRow {
   id: string;
@@ -41,15 +44,17 @@ export function liveRows(i: {
   const llm = st.llm || i.fallbackLlm || defaultLlm();
   const rows: LiveRow[] = [];
   /** `sent` is false while the section was never saved: CallsDash then leaves that option to ElevenLabs. */
-  const add = (id: string, section: LiveRow["section"], here: LiveValue, there: LiveValue, sent: boolean, extra: Pick<LiveRow, "unit" | "none"> = {}) => {
+  const add = (id: string, section: LiveRow["section"], here: LiveValue, there: LiveValue, sent: boolean, extra: Partial<Pick<LiveRow, "unit" | "none" | "state">> = {}) => {
     rows.push({ id, section, here: sent ? here : null, there, state: !sent ? "unset" : near(here, there) ? "same" : "differs", ...extra });
   };
   const saved = (section: SectionId) => st.touched.includes(section);
   const tokens = live.maxTokens && live.maxTokens > 0 ? live.maxTokens : null;
   const silence = live.silenceEndCallTimeout && live.silenceEndCallTimeout > 0 ? live.silenceEndCallTimeout : null;
 
+  // A model that ignores the temperature has nothing to compare: it matches when ElevenLabs holds none, and is "not used" when ElevenLabs shows a value the model never reads.
+  const usesTemperature = acceptsTemperature(llm);
   add("llm", "model", llm, orNull(live.llm), true);
-  add("temperature", "model", acceptsTemperature(llm) ? s.temperature : null, orNull(live.temperature), true, { none: "notUsed" });
+  add("temperature", "model", usesTemperature ? s.temperature : null, orNull(live.temperature), true, { none: "notUsed", ...(!usesTemperature && live.temperature != null ? { state: "unused" as const } : {}) });
   add("maxTokens", "model", st.maxTokens || null, tokens, saved("model"), { none: "noLimit" });
   add("reasoningEffort", "model", st.reasoningEffort || null, live.reasoningEffort || null, saved("model"), { none: "default" });
   add("voiceEn", "voice", resolveVoiceId(s.voiceEn, "en", i.voiceOverrides), orNull(live.voiceId), true);
@@ -63,7 +68,7 @@ export function liveRows(i: {
   add("turnTimeout", "conversation", st.turnTimeout, orNull(live.turnTimeout), saved("conversation"), { unit: "s" });
   add("silenceEndSeconds", "conversation", st.silenceEndSeconds || null, silence, true, { unit: "s", none: "noLimit" });
   add("maxDurationSeconds", "conversation", st.maxDurationSeconds, orNull(live.maxDurationSeconds), true, { unit: "s" });
-  add("asrProvider", "hearing", st.asrProvider || null, orNull(live.asrProvider), saved("hearing") && !!st.asrProvider, { none: "default" });
+  add("asrProvider", "hearing", st.asrProvider, orNull(live.asrProvider), saved("hearing"), { none: "default" });
   add("dailyLimit", "safety", st.dailyLimit, orNull(live.dailyLimit), true);
   add("recordVoice", "safety", st.recordVoice, orNull(live.recordVoice), true);
   add("retentionDays", "safety", Math.max(1, Math.round(i.tenant.retentionDays || 90)), orNull(live.retentionDays), true);

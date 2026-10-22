@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { LLM_CATALOG, defaultLlm } from "@/lib/agent-catalog";
 import { conversationCostUsd, ratesFor } from "@/lib/costing";
-import { DEFAULT_FEES, MODELS_KEY, UNKNOWN_MODEL } from "@/lib/pricing";
+import { DEFAULT_FEES, MODELS_KEY, UNKNOWN_MODEL, pricesKey } from "@/lib/pricing";
 import { createPgData, type Db, type Q } from "@/lib/data/pg";
 import { makeDb } from "./helpers/pgdb";
 
@@ -32,9 +32,9 @@ describe("what a minute and a message cost us", () => {
     expect(a.messageUsd - b.messageUsd).toBeCloseTo(0.004 - DEFAULT_FEES.messageUsd, 10);
   });
 
-  it("prefers the prices ElevenLabs gave the studio over the built-in estimate", () => {
-    const book = { at: "2026-10-21T00:00:00Z", promptChars: 5000, llms: [{ id: "gemini-2.5-flash", reasoningEfforts: [] }, { id: "gpt-6-luna", reasoningEfforts: [] }], prices: [{ llm: "gpt-6-luna", perMinute: 0.25, perMessage: 0.04 }] };
-    const r = ratesFor(withModel("gpt-6-luna"), undefined, book);
+  it("prefers the prices ElevenLabs gave the studio for this client over the built-in estimate", () => {
+    const saved = { at: "2026-10-21T00:00:00Z", promptChars: 5000, prices: [{ llm: "gpt-6-luna", perMinute: 0.25, perMessage: 0.04 }] };
+    const r = ratesFor(withModel("gpt-6-luna"), undefined, saved);
     expect(r.minuteUsd).toBeCloseTo(DEFAULT_FEES.minuteUsd + 0.25, 10);
     expect(r.messageUsd).toBeCloseTo(DEFAULT_FEES.messageUsd + 0.04, 10);
   });
@@ -46,14 +46,15 @@ describe("what a minute and a message cost us", () => {
   });
 
   it("never throws on damaged saved data", () => {
-    for (const junk of [null, 5, "x", [], { llms: "no", prices: 3, promptChars: "big" }, { llms: [null], prices: [{}] }]) {
+    for (const junk of [null, 5, "x", [], { prices: 3, promptChars: "big" }, { prices: [null] }, { prices: [{}] }]) {
       expect(() => ratesFor(withModel(defaultLlm()), junk, junk)).not.toThrow();
     }
-    expect(Number.isFinite(ratesFor(withModel(defaultLlm()), { minuteUsd: "x" }, { llms: "no" }).minuteUsd)).toBe(true);
+    expect(Number.isFinite(ratesFor(withModel(defaultLlm()), { minuteUsd: "x" }, { prices: "no" }).minuteUsd)).toBe(true);
   });
 
-  it("keeps the same key for the saved list as the studio", () => {
+  it("keeps each client's prices under its own key", () => {
     expect(MODELS_KEY).toBe("elevenlabs.models");
+    expect(pricesKey("t_a")).not.toBe(pricesKey("t_b"));
   });
 });
 

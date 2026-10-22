@@ -4,8 +4,8 @@ import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/auth";
 import { dictionaries, getT } from "@/lib/i18n";
 import { fmtDateTime } from "@/lib/format";
-import { getAgent, getConversations, getDoctors, getTenant } from "@/lib/data";
-import { greeting } from "@/lib/agent-config";
+import { getAgent, getConversations, getDoctors, getSetting, getTenant } from "@/lib/data";
+import { RECORDING_NOTICE, greeting, mentionsRecording } from "@/lib/agent-config";
 import { EVALUATION_CRITERIA } from "@/lib/agent-extras";
 import { PROVIDER_LABEL, defaultLlm, rowFor } from "@/lib/agent-catalog";
 import { CHOICES, LIMITS, studioOf, type SectionId, type VoiceNote } from "@/lib/agent-studio";
@@ -13,6 +13,7 @@ import { EXAMPLE_USAGE, clientRatePerCredit, costLine, fmtBhd, fmtUsd, marginOf,
 import { catalogFromEnv, explainCatalogError, type CatalogVoice } from "@/lib/elevenlabs-catalog";
 import { liveRows, liveSummary, type LiveRow, type LiveValue } from "@/lib/studio-live";
 import { loadFees, modelBook } from "@/lib/studio-server";
+import { failKey, failToShow } from "@/lib/studio-fail";
 import { refreshModelsAction, resetStudioSectionAction, saveFeesAction, saveStudioSectionAction } from "@/lib/studio-actions";
 import { VOICES, resolveVoiceId } from "@/lib/voices";
 import type { AgentSettings, Tenant } from "@/lib/types";
@@ -66,6 +67,10 @@ export default async function AssistantStudioPage({ params, searchParams }: { pa
 
   const [agent, doctors, conversations, fees] = await Promise.all([getAgent(id), getDoctors(id), getConversations(id), loadFees()]);
   const st = studioOf(agent);
+  // ElevenLabs' reason for the last refusal is read from here, never from the address, so a link cannot put its own words on this screen
+  const failed = sp.fail && SECTION_ORDER.includes(sp.section as SectionId)
+    ? failToShow(await getSetting(failKey(id)).catch(() => undefined), sp.section as SectionId) ?? T("studio.fail.noDetail")
+    : null;
   const fallbackLlm = defaultLlm();
   const effective = st.llm || fallbackLlm;
   const book = await modelBook(id, { keep: [fallbackLlm, effective, ...st.backupModels] });
@@ -155,7 +160,7 @@ export default async function AssistantStudioPage({ params, searchParams }: { pa
             <ul className="notes">{bad.map(([field, key]) => <li key={field}>{f(field)}: {T(key)}</li>)}</ul>
           </Notice>
         )}
-        {sp.fail && <Notice tone="warn">{T("studio.fail", { detail: sp.fail })}</Notice>}
+        {failed && <Notice tone="warn">{T("studio.fail", { detail: failed })}</Notice>}
         {sp.done === "applied" && <Notice tone="ok">{T("studio.done.applied")} <a href="#try">{T("studio.done.test")}</a></Notice>}
         {sp.done === "saved" && <Notice tone="warn">{T("studio.done.saved")} {sp.why === "no_agent" ? T("studio.done.saved.no_agent") : CODE.test(sp.why ?? "") ? T(`channels.err.${sp.why}`) : ""}</Notice>}
         {groups.length > 0 && (
@@ -290,6 +295,9 @@ export default async function AssistantStudioPage({ params, searchParams }: { pa
               {area("greetingEn", st.greetingEn, { max: LIMITS.greeting, placeholder: greeting(tenant, "en", agent.arabicWrittenStyle, "") })}
               {area("greetingAr", st.greetingAr, { max: LIMITS.greeting, rtl: true, placeholder: greeting(tenant, "ar", agent.arabicWrittenStyle, "") })}
             </div>
+            {(["greetingEn", "greetingAr"] as const).filter((k) => st[k].trim() && !mentionsRecording(st[k])).map((k) => (
+              <Notice key={k} tone="warn">{T("studio.greeting.noRecording", { field: f(k), example: RECORDING_NOTICE[k === "greetingEn" ? "en" : "ar"] })}</Notice>
+            ))}
           </div>
         ))}
 

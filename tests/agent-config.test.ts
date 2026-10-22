@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { agentVariables, initiationResponse } from "@/lib/agent-context";
-import { buildAgentConfig, buildPrompt, greeting, knowledgeText, toolDefinitions } from "@/lib/agent-config";
+import { RECORDING_NOTICE, buildAgentConfig, buildPrompt, greeting, knowledgeText, mentionsRecording, toolDefinitions } from "@/lib/agent-config";
 import { resolveVoiceId } from "@/lib/voices";
 import { agent } from "@/lib/seed";
 import { DEFAULT_OPENING_HOURS } from "@/lib/availability";
@@ -65,6 +65,22 @@ describe("agent config", () => {
     expect(greeting(t, "en", "gulf")).toContain("recorded");
     expect(greeting(t, "ar", "gulf")).toContain("مركز النور");
     expect(greeting(t, "ar", "gulf")).not.toBe(greeting(t, "ar", "msa"));
+  });
+  it("knows whether a greeting tells the caller the conversation is recorded, in either language", () => {
+    const t = tenant();
+    for (const style of ["gulf", "msa"] as const) {
+      expect(mentionsRecording(greeting(t, "ar", style))).toBe(true); // the built-in Arabic greetings say it
+      expect(mentionsRecording(greeting(t, "en", style))).toBe(true);
+    }
+    expect(mentionsRecording(RECORDING_NOTICE.en)).toBe(true); // the sentence the page suggests must satisfy its own check
+    expect(mentionsRecording(RECORDING_NOTICE.ar)).toBe(true);
+    expect(mentionsRecording("Welcome to Al Noor. This call is being recorded.")).toBe(true);
+    expect(mentionsRecording("هذه المكالمة قد تُسجَّل")).toBe(true); // with vowel marks
+    expect(mentionsRecording("المحادثة مسجلة")).toBe(true);
+    expect(mentionsRecording("نقوم بتسجيل المكالمات")).toBe(true);
+    expect(mentionsRecording("Welcome to Al Noor, how can I help?")).toBe(false);
+    expect(mentionsRecording("أهلاً بك في مركز النور، كيف أساعدك؟")).toBe(false);
+    expect(mentionsRecording("")).toBe(false);
   });
   it("builds the body ElevenLabs needs", () => {
     const c = buildAgentConfig({ tenant: tenant(), settings, toolIds: ["tool_1", "tool_2"], knowledgeDoc: { id: "kb1", name: "Knowledge" }, appUrl: "https://www.callsdash.com", initSecret: "s3" });

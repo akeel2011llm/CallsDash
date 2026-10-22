@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { parsePostCall, verifySignature } from "@/lib/elevenlabs";
 import { findTenantByAgent, getAgent, getSetting, recordConversation } from "@/lib/data";
 import { conversationCostUsd, ratesFor } from "@/lib/costing";
-import { FEES_KEY, MODELS_KEY } from "@/lib/pricing";
+import { FEES_KEY, pricesKey } from "@/lib/pricing";
 
 export const dynamic = "force-dynamic";
 
@@ -25,8 +25,8 @@ export async function POST(req: Request) {
   if (!tenant) return NextResponse.json({ error: "unknown agent" }, { status: 404 });
   // what it cost us: ElevenLabs' fee plus the share of the AI model this client's assistant uses, the same sums as the Assistant studio
   // (a failure here must never lose the conversation: without a worked-out cost it is recorded at the flat estimate)
-  const costUsd = await Promise.all([getAgent(tenant.id), getSetting(FEES_KEY), getSetting(MODELS_KEY)])
-    .then(([agent, fees, models]) => conversationCostUsd(parsed.conversation, ratesFor(agent, fees, models)))
+  const costUsd = await Promise.all([getAgent(tenant.id), getSetting(FEES_KEY), getSetting(pricesKey(tenant.id))])
+    .then(([agent, fees, prices]) => conversationCostUsd(parsed.conversation, ratesFor(agent, fees, prices)))
     .catch(() => undefined);
   const res = await recordConversation(tenant.id, { ...parsed.conversation, costUsd });
   return NextResponse.json({ ok: true, duplicate: res.duplicate, credits: res.conversation.creditsCharged });

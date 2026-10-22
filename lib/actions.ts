@@ -93,6 +93,7 @@ export async function saveAgentAction(f: FormData) {
   const cur = await store.getAgent(tenant.id);
   const next: AgentSettings = structuredClone(cur);
   const changed: string[] = [];
+  let refused = false;
   if (f.has("prompt.identity")) {
     if (!tenant.permissions.editPrompt) throw new Error("forbidden");
     for (const k of Object.keys(next.prompt) as (keyof AgentSettings["prompt"])[]) next.prompt[k] = str(f, `prompt.${k}`).slice(0, 2000);
@@ -113,13 +114,15 @@ export async function saveAgentAction(f: FormData) {
     if (!tenant.permissions.editVoice) throw new Error("forbidden");
     // only voices on the client's list (what the admin offered, or the built-in four) can be chosen; anything else keeps the current voice
     const en = str(f, "voiceEn"), ar = str(f, "voiceAr");
-    if (voiceAllowed(cur, "en", en)) next.voiceEn = en;
-    if (voiceAllowed(cur, "ar", ar)) next.voiceAr = ar;
-    changed.push("voice");
+    const okEn = voiceAllowed(cur, "en", en), okAr = voiceAllowed(cur, "ar", ar);
+    if (okEn) next.voiceEn = en;
+    if (okAr) next.voiceAr = ar;
+    if (next.voiceEn !== cur.voiceEn || next.voiceAr !== cur.voiceAr) changed.push("voice");
+    refused = !okEn || !okAr; // a stale page: the admin took a voice off the list after it was opened
   }
   if (changed.length) { await store.saveAgent(tenant.id, next, actor, changed.join(", ")); await autoSync(tenant.id, actor); }
   revalidatePath("/app", "layout");
-  back(f, "/app/agent");
+  back(f, "/app/agent", refused ? "voiceRefused=1" : "saved=1");
 }
 
 export async function addKnowledgeAction(f: FormData) {

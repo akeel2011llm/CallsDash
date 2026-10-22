@@ -1,10 +1,12 @@
 /**
  * Saving one section of the Assistant studio. The change is checked, sent to the client's agent in ElevenLabs, and only
- * stored in CallsDash once ElevenLabs has accepted it, so a refused change never leaves the two out of step.
+ * stored in CallsDash once ElevenLabs has accepted it, so a refused change is not saved here. The two can still differ later
+ * (an optional group ElevenLabs refused, an edit made inside ElevenLabs); the "Live in ElevenLabs" panel shows that.
  */
 import { defaultLlm, ttsAllowed, type ModelRow } from "./agent-catalog";
 import { applySection, describeStudioChange, parseSection, resetSection, studioOf, type ParsedSection, type SectionId } from "./agent-studio";
 import { SyncError, syncAgent, type SyncDeps } from "./agent-sync";
+import { plainDetail } from "./elevenlabs-api";
 import type { AgentSettings } from "./types";
 
 export interface FieldError { field: string; key: string }
@@ -80,6 +82,6 @@ export async function applyStudioChange(d: ApplyDeps, tenantId: string, actor: s
       await store();
       return { kind: "saved", reason: e.code };
     }
-    return { kind: "refused", detail: (e instanceof Error ? e.message : "refused").slice(0, 400) };
+    return { kind: "refused", detail: plainDetail(e instanceof Error ? e.message : "refused").slice(0, 400) };
   }
 }

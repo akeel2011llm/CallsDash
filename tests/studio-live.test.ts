@@ -72,6 +72,16 @@ describe("live read-back", () => {
     expect(rows.temperature.state).toBe("same");
   });
 
+  it("calls a temperature ElevenLabs shows for a model that never reads it 'not used', not a difference", () => {
+    const s = settings({ studio: { ...STUDIO_DEFAULTS, llm: "claude-sonnet-5-5" } });
+    const live = mapLiveAgent({ conversation_config: { agent: { prompt: { llm: "claude-sonnet-5-5", temperature: 0 } } } });
+    const rows = byId(liveRows({ settings: s, tenant, live }));
+    expect(rows.temperature.here).toBeNull();
+    expect(rows.temperature.there).toBe(0);
+    expect(rows.temperature.state).toBe("unused");
+    expect(rows.llm.state).toBe("same");
+  });
+
   it("resolves CallsDash's own voice labels to the real voice before comparing", () => {
     const rows = byId(liveRows({ settings: settings({ voiceEn: "voice_en_f", voiceAr: "voice_ar_m" }), tenant, live: liveDefault(), voiceOverrides: JSON.stringify({ voice_en_f: "EXAVITQu4vr4xnSDxMaL" }) }));
     expect(rows.voiceEn.state).toBe("same");

@@ -200,6 +200,13 @@ export interface RowsInput {
  * The rows of the model picker. With ElevenLabs' live list it is that list (minus retired models and pinned copies);
  * without it, the built-in catalogue. Every row carries the best price available: ElevenLabs' calculator, else the estimate.
  */
+/** What a model costs per voice minute and per message: ElevenLabs' own figure when it gave one, else our estimate, else a guess. */
+export function priceFor(id: string, live: LlmPrice | undefined, promptChars: number, unknown: { perMinute: number; perMessage: number }): ModelRow["price"] {
+  if (live) return { perMinute: live.perMinute, perMessage: live.perMessage, source: "elevenlabs" };
+  const meta = llmMeta(id);
+  return meta.usd ? { ...estimateUsd(meta.usd, promptChars), source: "estimate" } : { ...unknown, source: "unknown" };
+}
+
 export function modelRows(i: RowsInput): ModelRow[] {
   const keep = new Set((i.keep ?? []).filter(Boolean));
   const priceOf = new Map(i.prices.map((p) => [p.llm, p]));
@@ -213,11 +220,7 @@ export function modelRows(i: RowsInput): ModelRow[] {
     const gone = info?.deprecated?.isDeprecated === true || (days !== null && days < 0);
     if (!keep.has(id) && (gone || (i.live.length > 0 && isCheckpoint(id)))) continue;
     const meta = llmMeta(id);
-    const live = priceOf.get(id);
-    const price = live
-      ? { perMinute: live.perMinute, perMessage: live.perMessage, source: "elevenlabs" as const }
-      : meta.usd ? { ...estimateUsd(meta.usd, i.promptChars), source: "estimate" as const }
-      : { ...i.unknown, source: "unknown" as const };
+    const price = priceFor(id, priceOf.get(id), i.promptChars, i.unknown);
     rows.push({
       id, label: meta.label, provider: meta.provider, advice: meta.advice,
       maxOutputTokens: info?.maxOutputTokens, contextTokens: info?.contextTokens, parallelTools: info?.supportsParallelTools,
@@ -259,29 +262,37 @@ export interface TtsMeta {
  * ElevenLabs' voice models for agents, from its model list (2026-10): `eleven_v4_turbo` is the new default, the Flash models
  * are the fastest, and an English-only model can never speak Arabic. The plain-language note for each is the translation
  * key `studio.tts.<id>`.
+ *
+ * The English side is stricter than the list suggests: on the first real sync (2026-10-21) ElevenLabs answered 400 to
+ * `eleven_flash_v2_5` for an assistant whose main language is English and accepted `eleven_flash_v2`. So the English side lists
+ * only that model and the newest ones ElevenLabs names as its defaults (not yet tried on a real account, so a refusal is
+ * shown and nothing is saved); the multilingual v2 and v2.5 models are for the Arabic side.
  */
 export const TTS_MODELS: TtsMeta[] = [
   { id: "eleven_flash_v2", label: "Flash v2", english: true, arabic: false, latency: "~75 ms" },
-  { id: "eleven_flash_v2_5", label: "Flash v2.5", english: true, arabic: true, latency: "~75 ms" },
-  { id: "eleven_multilingual_v2", label: "Multilingual v2", english: true, arabic: true, latency: "" },
+  { id: "eleven_flash_v2_5", label: "Flash v2.5", english: false, arabic: true, latency: "~75 ms" },
+  { id: "eleven_multilingual_v2", label: "Multilingual v2", english: false, arabic: true, latency: "" },
   { id: "eleven_v3_conversational", label: "v3 Conversational", english: true, arabic: true, latency: "~280 ms", expressive: true },
   { id: "eleven_v4_turbo", label: "v4 Turbo", english: true, arabic: true, latency: "~100 ms", expressive: true },
   { id: "eleven_v4", label: "v4", english: true, arabic: true, latency: "", expressive: true, recordedOnly: true },
   { id: "eleven_turbo_v2", label: "Turbo v2", english: true, arabic: false, latency: "", deprecated: true },
-  { id: "eleven_turbo_v2_5", label: "Turbo v2.5", english: true, arabic: true, latency: "", deprecated: true },
+  { id: "eleven_turbo_v2_5", label: "Turbo v2.5", english: false, arabic: true, latency: "", deprecated: true },
 ];
 
 export const ttsMeta = (id: string): TtsMeta | undefined => TTS_MODELS.find((x) => x.id === id);
 
-/** The models to list for one side of the assistant. The model a client already has stays listed even if it is retired. */
+/** Retired models and the ones made for recordings are not offered for live calls, but a client that already has one keeps it listed. */
+const offered = (m: TtsMeta, current?: string) => (!m.deprecated && !m.recordedOnly) || m.id === current;
+
+/** The models to list for one side of the assistant. */
 export function ttsFor(lang: "en" | "ar", current?: string): TtsMeta[] {
-  return TTS_MODELS.filter((x) => (lang === "en" ? x.english : x.arabic) && (!x.deprecated || x.id === current));
+  return TTS_MODELS.filter((x) => (lang === "en" ? x.english : x.arabic) && offered(x, current));
 }
 
 /** True when `id` may be chosen for this side: a listed model that speaks the language, or the one the client already has. */
 export function ttsAllowed(lang: "en" | "ar", id: string, current?: string): boolean {
   const meta = ttsMeta(id);
-  if (meta) return lang === "en" ? meta.english : meta.arabic;
+  if (meta) return (lang === "en" ? meta.english : meta.arabic) && offered(meta, current);
   return id === current && lang === "en"; // an unknown model is kept as it is, but never put on the Arabic side
 }
 

@@ -46,7 +46,7 @@ function dynamicKeys(): string[] {
   for (const s of ["account", "library"]) k.push(`studio.vb.source.${s}`, `studio.vb.source.${s}.help`);
   for (const l of ["en", "ar"]) k.push(`studio.vb.title.${l}`, `studio.vb.use.${l}`, `studio.vb.verified.${l}`, `studio.voice.${l}`, `studio.voice.${l}.help`, `studio.voice.model.${l}`);
   for (const l of ["en", "ar", "both"]) k.push(`studio.voice.offered.lang.${l}`);
-  for (const s of ["same", "differs", "unset"]) k.push(`studio.live.state.${s}`);
+  for (const s of ["same", "differs", "unset", "unused"]) k.push(`studio.live.state.${s}`);
   for (const n of ["noLimit", "default", "notUsed"]) k.push(`studio.live.none.${n}`);
   // every row the live panel can show
   const rows = liveRows({ settings: { elevenLabsAgentId: "a", prompt: {} as never, temperature: 0.3, replyLength: "normal", formality: "polite", arabicWrittenStyle: "gulf", voiceEn: "voice_en_f", voiceAr: "voice_ar_f" }, tenant: { retentionDays: 90 }, live: mapLiveAgent({}) });

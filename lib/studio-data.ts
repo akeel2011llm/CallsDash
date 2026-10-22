@@ -2,12 +2,14 @@
  * Loads what the model picker needs: ElevenLabs' language models and what each costs for this client's instructions.
  * The live answer is cached for a few minutes (the same prompt size gives the same prices) and the last good answer is
  * kept in the database, so a day when ElevenLabs cannot be reached still shows real model names and last known prices.
+ * The model list is the same for every client and is kept once; the prices depend on the size of one client's instructions
+ * and knowledge base, so each client keeps its own (and the webhook prices a conversation from them, lib/costing.ts).
  * Takes its data layer and ElevenLabs client as arguments so the tests can feed it fakes.
  */
 import { buildPrompt, knowledgeText } from "./agent-config";
 import { modelRows, type ModelRow } from "./agent-catalog";
 import { explainCatalogError, type CatalogApi, type LlmInfo, type LlmPrice } from "./elevenlabs-catalog";
-import { MODELS_KEY, UNKNOWN_MODEL } from "./pricing";
+import { MODELS_KEY, UNKNOWN_MODEL, pricesKey } from "./pricing";
 import type { Data } from "./data/demo";
 
 export { MODELS_KEY };
@@ -16,7 +18,8 @@ const PRICE_TTL_MS = 10 * 60_000;
 /** Instructions of similar size cost the same, so prices are looked up per 1,000 characters. */
 const BUCKET = 1000;
 
-interface Saved { at: string; promptChars: number; llms: LlmInfo[]; prices: LlmPrice[] }
+interface SavedModels { at: string; llms: LlmInfo[] }
+interface SavedPrices { at: string; promptChars: number; prices: LlmPrice[] }
 export interface StudioCache { llms?: { at: number; value: LlmInfo[] }; prices: Map<number, { at: number; value: LlmPrice[] }> }
 export const newCache = (): StudioCache => ({ prices: new Map() });
 
@@ -49,18 +52,22 @@ export async function promptSize(d: Pick<StudioDeps, "data">, tenantId: string):
   return buildPrompt(settings, doctors).length + knowledgeText(items).length;
 }
 
-const isSaved = (v: unknown): v is Saved => !!v && typeof v === "object" && Array.isArray((v as Saved).llms) && Array.isArray((v as Saved).prices) && typeof (v as Saved).at === "string";
+const isModels = (v: unknown): v is SavedModels => !!v && typeof v === "object" && Array.isArray((v as SavedModels).llms) && typeof (v as SavedModels).at === "string";
+const isPrices = (v: unknown): v is SavedPrices => !!v && typeof v === "object" && Array.isArray((v as SavedPrices).prices) && typeof (v as SavedPrices).at === "string";
 
 export async function loadModelBook(d: StudioDeps, tenantId: string, opts: { force?: boolean; keep?: string[] } = {}): Promise<ModelBook> {
   const now = (d.now ?? (() => new Date()))();
   const today = now.toISOString().slice(0, 10);
   const chars = await promptSize(d, tenantId);
   const rows = (live: LlmInfo[], prices: LlmPrice[]) => modelRows({ live, prices, promptChars: chars, unknown: UNKNOWN_MODEL, keep: opts.keep, today });
+  /** What was saved after the last good answer: the model list for everyone, and the prices worked out for this client. */
+  const savedModels = async () => { const v = await d.data.getSetting(MODELS_KEY).catch(() => undefined); return isModels(v) && v.llms.length ? v : undefined; };
+  const savedPrices = async () => { const v = await d.data.getSetting(pricesKey(tenantId)).catch(() => undefined); return isPrices(v) ? v : undefined; };
 
   if (!d.catalog) {
-    const saved = await d.data.getSetting(MODELS_KEY).catch(() => undefined);
-    if (isSaved(saved) && saved.llms.length) return { rows: rows(saved.llms, saved.prices), source: "saved", at: saved.at, noKey: true, promptChars: chars };
-    return { rows: rows([], []), source: "builtin", noKey: true, promptChars: chars };
+    const [models, prices] = await Promise.all([savedModels(), savedPrices()]);
+    if (models) return { rows: rows(models.llms, prices?.prices ?? []), source: "saved", at: models.at, noKey: true, promptChars: chars };
+    return { rows: rows([], prices?.prices ?? []), source: "builtin", noKey: true, promptChars: chars };
   }
 
   const bucket = Math.round(chars / BUCKET);
@@ -84,17 +91,21 @@ export async function loadModelBook(d: StudioDeps, tenantId: string, opts: { for
       d.cache.prices.set(bucket, { at: freshPrices ? cachedPrices!.at : stamp, value: prices });
     } else {
       priceProblem = explainCatalogError(pricesRes.reason);
-      const saved = await d.data.getSetting(MODELS_KEY).catch(() => undefined);
-      if (isSaved(saved)) prices = saved.prices; // last known prices are better than none
+      prices = (await savedPrices())?.prices ?? []; // this client's last known prices are better than none (never another client's)
     }
-    if (!cachedLlms || !freshPrices) {
-      if (pricesRes.status === "fulfilled") await d.data.setSetting(MODELS_KEY, { at: now.toISOString(), promptChars: chars, llms, prices } satisfies Saved).catch(() => undefined);
+    if (!cachedLlms) await d.data.setSetting(MODELS_KEY, { at: now.toISOString(), llms } satisfies SavedModels).catch(() => undefined);
+    if (pricesRes.status === "fulfilled") {
+      // keep a copy for this client when it has none, was priced for another size of instructions, or has an old one
+      const mine = await savedPrices();
+      if (!mine || Math.round(mine.promptChars / BUCKET) !== bucket || stamp - Date.parse(mine.at) > PRICE_TTL_MS) {
+        await d.data.setSetting(pricesKey(tenantId), { at: now.toISOString(), promptChars: chars, prices } satisfies SavedPrices).catch(() => undefined);
+      }
     }
     return { rows: rows(llms, prices), source: "live", at: now.toISOString(), priceProblem, promptChars: chars };
   }
 
   const problem = llmsRes.status === "rejected" ? explainCatalogError(llmsRes.reason) : "ElevenLabs sent an empty model list.";
-  const saved = await d.data.getSetting(MODELS_KEY).catch(() => undefined);
-  if (isSaved(saved) && saved.llms.length) return { rows: rows(saved.llms, saved.prices), source: "saved", at: saved.at, problem, promptChars: chars };
-  return { rows: rows([], []), source: "builtin", problem, promptChars: chars };
+  const [models, prices] = await Promise.all([savedModels(), savedPrices()]);
+  if (models) return { rows: rows(models.llms, prices?.prices ?? []), source: "saved", at: models.at, problem, promptChars: chars };
+  return { rows: rows([], prices?.prices ?? []), source: "builtin", problem, promptChars: chars };
 }
