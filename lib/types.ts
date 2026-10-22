@@ -131,6 +131,8 @@ export interface PromptSections {
 
 export interface AgentSettings {
   elevenLabsAgentId: string;
+  /** The Assistant studio's options (lib/agent-studio.ts). Read through `studioOf`, which fills in the defaults. */
+  studio?: Partial<import("./agent-studio").AgentStudio>;
   prompt: PromptSections;
   temperature: number; // 0..1
   replyLength: "short" | "normal" | "detailed";
@@ -315,6 +317,8 @@ export interface Conversation {
 export type NewConversation = Omit<Conversation, "id" | "tenantId" | "creditsCharged" | "costUsd" | "flags" | "reviewed"> & {
   /** Flags ElevenLabs' own post-call analysis raised (the intent and urgency it read from the conversation). */
   aiFlags?: FlagKind[];
+  /** What the conversation cost us in US dollars when the caller already worked it out with the client's AI model (lib/costing.ts); otherwise a flat estimate is recorded. */
+  costUsd?: number;
 };
 
 export interface KnowledgeItem {

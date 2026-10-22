@@ -1,7 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
 import { addMonths, addTopUp, balance, creditsFor, deduct, lowBalance, renewPackage, revenuePerCredit, round2, sweepExpired, topUpKind } from "../credits";
 import { DEFAULT_CATALOGUE, PLAN_PRESETS, firstPackage, normalizePlans, type PlanInput } from "../plans";
-import { ELEVENLABS_USD_PER_MIN, ELEVENLABS_USD_PER_MSG, USD_TO_BHD, agent as defaultAgent } from "../seed";
+import { FLAT_RATES, USD_TO_BHD, agent as defaultAgent } from "../seed";
+import { conversationCostUsd } from "../costing";
 import type {
   AgentSettings, AgentToolCall, AgentVersion, Alert, AuditEntry, Booking, BookingStatus, Conversation, CreditBatch, Doctor,
   CatalogPackage, KnowledgeItem, LedgerEntry, ChatSession, Channel, Locale, Permissions, Profile, StaffRequest, Tenant, TenantSecrets, UnansweredQuestion,
@@ -403,7 +404,7 @@ export function createPgData(db: Db): Data {
       const t = await lockTenant(run, tenantId); // serialises charges per tenant
       const credits = creditsFor(conv);
       const flags = detectFlags(conv, t.alertRules);
-      const costUsd = round2(conv.mode === "voice" ? (conv.durationSec / 60) * ELEVENLABS_USD_PER_MIN : conv.messages * ELEVENLABS_USD_PER_MSG);
+      const costUsd = conv.costUsd ?? conversationCostUsd(conv, FLAT_RATES);
       const ins = await run<Row>(
         `insert into conversations (tenant_id, elevenlabs_conversation_id, channel, mode, language, started_at, duration_sec, messages, outcome, sentiment, summary, transcript, credits_charged, cost_usd, flags)
          values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)

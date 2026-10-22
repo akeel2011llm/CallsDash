@@ -10,7 +10,8 @@ export class ElevenLabsError extends Error {
 type Json = Record<string, unknown>;
 type FetchLike = typeof fetch;
 
-const BASE = "https://api.elevenlabs.io";
+/** ELEVENLABS_API_BASE exists only so tests can point the app at a local fake; in production it stays unset. */
+export const elevenLabsBase = () => (process.env.ELEVENLABS_API_BASE || "https://api.elevenlabs.io").replace(/\/+$/, "");
 
 export interface WhatsappTemplateParams {
   type: "body" | "header" | "button";
@@ -32,18 +33,24 @@ export interface ElevenLabsApi {
   transcribe(audio: Uint8Array, filename: string, mime: string): Promise<{ text: string; language?: string }>;
 }
 
-export function createElevenLabsApi(apiKey: string, fetchImpl: FetchLike = fetch): ElevenLabsApi {
-  async function call<T>(method: string, path: string, body?: Json | FormData): Promise<T> {
+/** One request to ElevenLabs with the key attached. Errors carry ElevenLabs' own message. `timeoutMs` stops a slow answer from holding up a page. */
+export function elevenLabsRequester(apiKey: string, fetchImpl: FetchLike = fetch) {
+  return async function call<T>(method: string, path: string, body?: Json | FormData, opts: { timeoutMs?: number } = {}): Promise<T> {
     const isForm = body instanceof FormData;
-    const res = await fetchImpl(`${BASE}${path}`, {
+    const res = await fetchImpl(`${elevenLabsBase()}${path}`, {
       method,
       headers: { "xi-api-key": apiKey, ...(body && !isForm ? { "content-type": "application/json" } : {}) },
       body: body ? (isForm ? body : JSON.stringify(body)) : undefined,
+      ...(opts.timeoutMs ? { signal: AbortSignal.timeout(opts.timeoutMs) } : {}),
     });
     const text = await res.text();
     if (!res.ok) throw new ElevenLabsError(res.status, text.slice(0, 500));
     return (text ? JSON.parse(text) : {}) as T;
-  }
+  };
+}
+
+export function createElevenLabsApi(apiKey: string, fetchImpl: FetchLike = fetch): ElevenLabsApi {
+  const call = elevenLabsRequester(apiKey, fetchImpl);
   return {
     createAgent: (body) => call("POST", "/v1/convai/agents/create", body),
     updateAgent: async (id, body) => { await call("PATCH", `/v1/convai/agents/${encodeURIComponent(id)}`, body); },

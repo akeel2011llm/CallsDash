@@ -449,7 +449,7 @@ pre { background: var(--surface-2); border: 1px solid var(--line); border-radius
 .checklist li.done .title { color: var(--muted); }
 .checklist .title { font-weight: 600; }
 .checklist small { display: block; color: var(--muted); }
-.scan-grid { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: .35rem 1rem; margin: 0; }
+.scan-grid { display: grid; grid-template-columns: fit-content(45%) minmax(0, 1fr); gap: .35rem 1rem; margin: 0; }
 .scan-grid dt { color: var(--muted); font-size: .85rem; }
 .scan-grid dd { margin: 0; overflow-wrap: anywhere; }
 .scan-text { max-block-size: 9rem; overflow: auto; padding: .6rem .75rem; border: 1px solid var(--line); border-radius: calc(var(--radius) - 2px); background: var(--surface-2); font-size: .88rem; white-space: pre-wrap; }
@@ -477,3 +477,67 @@ pre { background: var(--surface-2); border: 1px solid var(--line); border-radius
 /* the ElevenLabs widget's box (components/AgentTry.tsx); clicks pass through it, and the widget's own buttons take theirs */
 .widget-dock { position: fixed; inset: 0; z-index: 35; pointer-events: none; transform: translateZ(0); }
 @media (max-width: 860px) { .widget-dock { inset-block-end: calc(68px + env(safe-area-inset-bottom)); } }
+
+/* ---------- Assistant studio (app/(admin)/admin/clients/[id]/assistant, components/studio) ---------- */
+.studio-nav { display: flex; flex-wrap: wrap; gap: .4rem; position: sticky; inset-block-start: 0; z-index: 6; padding: .55rem 0; background: var(--bg); }
+.studio-nav a { padding: .3rem .75rem; border: 1px solid var(--line); border-radius: 99px; background: var(--surface); color: var(--text); font-weight: 500; font-size: .88rem; }
+.studio-nav a:hover { background: var(--surface-2); text-decoration: none; border-color: color-mix(in srgb, var(--brand) 40%, var(--line)); }
+@media (max-width: 860px) { .studio-nav { position: static; } }
+.card[id], section[id] { scroll-margin-block-start: 3.4rem; }
+
+ul.notes { margin: 0; padding-inline-start: 1.1rem; display: grid; gap: .2rem; }
+.range-value { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--muted); }
+
+/* the AI model picker */
+.model-list { border: 1px solid var(--line); border-radius: calc(var(--radius) - 2px); background: var(--surface); max-block-size: 24rem; overflow: auto; }
+.model-row {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto 4.5rem; align-items: center; gap: .65rem;
+  padding: .5rem .75rem; border-block-end: 1px solid var(--line); cursor: pointer; font-weight: 400; font-size: .93rem;
+}
+.model-row:last-child { border-block-end: 0; }
+.model-row:hover { background: var(--surface-2); }
+.model-row:has(input:checked) { background: color-mix(in srgb, var(--brand) 9%, var(--surface)); box-shadow: inset 3px 0 0 var(--brand); }
+[dir="rtl"] .model-row:has(input:checked) { box-shadow: inset -3px 0 0 var(--brand); }
+.model-row .num { font-weight: 600; }
+.model-row .badge { margin-block: 1px; }
+.model-head { cursor: default; color: var(--muted); font-size: .78rem; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; padding-block: .1rem; border-block-end: 0; }
+.model-head:hover { background: transparent; }
+.model-sum { background: var(--surface-2); box-shadow: none; display: grid; gap: .8rem; }
+@media (max-width: 560px) {
+  .model-row { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .model-row > :nth-child(4) { grid-column: 2 / -1; justify-self: start; }
+  .model-head { display: none; }
+}
+/* custom widget colours only count when "custom" is picked */
+form:has(input[name="w.colors"][value="brand"]:checked) .w-colours { opacity: .45; }
+
+/* the "live in ElevenLabs" table becomes one small card per setting on a phone */
+@media (max-width: 640px) {
+  table.live thead { display: none; }
+  table.live, table.live tbody, table.live tr, table.live td { display: block; inline-size: 100%; }
+  table.live tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .1rem .75rem; padding: .6rem 0; border-block-end: 1px solid var(--line); }
+  table.live tr:last-child { border-block-end: 0; }
+  table.live td { padding: 0; border: 0; }
+  table.live td:first-child { font-weight: 600; }
+  table.live td:last-child { grid-column: 2; grid-row: 1; inline-size: auto; }
+  table.live td:nth-child(2), table.live td:nth-child(3) { grid-column: 1 / -1; font-size: .88rem; }
+  table.live td[data-label]::before { content: attr(data-label) ": "; color: var(--muted); }
+}
+
+/* the voice picker and browser */
+.vb-current { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; justify-content: space-between; }
+.vb-current audio { max-inline-size: 100%; block-size: 36px; }
+.voice-browser { display: grid; gap: .7rem; padding: 1rem; border: 1px solid color-mix(in srgb, var(--brand) 40%, var(--line)); border-radius: var(--radius); background: var(--surface-2); }
+.vb-list { list-style: none; margin: 0; padding: 0; display: grid; gap: .5rem; max-block-size: 28rem; overflow: auto; }
+.vb-list[aria-busy="true"] { opacity: .6; }
+.vb-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .6rem; align-items: center; padding: .6rem .75rem; border: 1px solid var(--line); border-radius: calc(var(--radius) - 2px); background: var(--surface); }
+.vb-info { display: grid; gap: .15rem; min-inline-size: 0; }
+.vb-desc { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.vb-actions { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; justify-content: flex-end; }
+.vb-actions select { inline-size: auto; }
+.vb-actions audio { block-size: 32px; max-inline-size: 220px; }
+.vb-manual summary { cursor: pointer; }
+@media (max-width: 640px) {
+  .vb-row { grid-template-columns: minmax(0, 1fr); }
+  .vb-actions { justify-content: flex-start; }
+}

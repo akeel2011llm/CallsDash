@@ -3,6 +3,7 @@ import { AGENT_VERSION, buildAgentConfig, knowledgeText, toolDefinitions, widget
 import { buildExtras, withExtras, type ExtraGroup } from "./agent-extras";
 import { ElevenLabsError, type ElevenLabsApi } from "./elevenlabs-api";
 import type { Data } from "./data/demo";
+import type { AgentSettings } from "./types";
 
 export class SyncError extends Error {
   constructor(public code: "no_api_key" | "no_secret" | "bad_secret" | "no_app_url" | "unknown_client" | "failed", detail?: string) { super(detail ?? code); }
@@ -72,23 +73,32 @@ export async function applyExtras(api: ElevenLabsApi, agentId: string, core: Rec
   return warnings;
 }
 
+export interface SyncOptions {
+  /** Apply these settings instead of the saved ones. The caller saves them once ElevenLabs has accepted them, so a refused change leaves nothing half-done. */
+  settings?: AgentSettings;
+  /** Keep the knowledge document already in ElevenLabs instead of uploading the knowledge base again, for changes that do not touch it. */
+  keepKnowledge?: boolean;
+  /** Do not record a failure on the client's Channels page; the caller shows it where the change was made. */
+  quiet?: boolean;
+}
+
 /**
  * Makes the client's ElevenLabs agent match CallsDash: prompt and style, voices, booking tools, knowledge base and widget
  * allow-list. Creates the agent the first time. Safe to run again at any time.
  */
-export async function syncAgent(d: SyncDeps, tenantId: string, actor: string): Promise<{ agentId: string; created: boolean; warnings: { group: string; detail: string }[] }> {
+export async function syncAgent(d: SyncDeps, tenantId: string, actor: string, opts: SyncOptions = {}): Promise<{ agentId: string; created: boolean; warnings: { group: string; detail: string }[] }> {
   const tenant = await d.data.getTenant(tenantId);
   if (!tenant) throw new SyncError("unknown_client");
-  const settings = await d.data.getAgent(tenantId);
+  const settings = opts.settings ?? await d.data.getAgent(tenantId);
   const prevDoc = tenant.integrations.elevenlabs?.kbDocId;
+  const reuseDoc = !!(opts.keepKnowledge && prevDoc);
   let newDoc: { id: string; name: string } | undefined;
   try {
     const toolIds = await ensureTools(d);
     const items = await d.data.getKnowledge(tenantId);
-    if (items.length) {
-      const name = `Knowledge: ${tenant.name}`.slice(0, 100);
-      newDoc = { id: (await d.api.createKnowledgeText({ name, text: knowledgeText(items) })).id, name };
-    }
+    const docName = `Knowledge: ${tenant.name}`.slice(0, 100);
+    if (reuseDoc) newDoc = { id: prevDoc!, name: docName };
+    else if (items.length) newDoc = { id: (await d.api.createKnowledgeText({ name: docName, text: knowledgeText(items) })).id, name: docName };
     const doctors = await d.data.getDoctors(tenantId);
     const config = buildAgentConfig({ tenant, settings, doctors, toolIds, knowledgeDoc: newDoc, appUrl: d.appUrl, initSecret: d.initSecret });
     let agentId = settings.elevenLabsAgentId;
@@ -97,15 +107,15 @@ export async function syncAgent(d: SyncDeps, tenantId: string, actor: string): P
       agentId = (await d.api.createAgent(config)).agent_id;
       await d.data.saveAgent(tenantId, { ...settings, elevenLabsAgentId: agentId }, actor, "Created the ElevenLabs agent");
     }
-    const warnings = await applyExtras(d.api, agentId, config, buildExtras({ tenant, doctors }));
-    if (prevDoc && prevDoc !== newDoc?.id) await d.api.deleteKnowledge(prevDoc).catch(() => undefined); // the old copy is no longer attached
+    const warnings = await applyExtras(d.api, agentId, config, buildExtras({ tenant, doctors, settings }));
+    if (!reuseDoc && prevDoc && prevDoc !== newDoc?.id) await d.api.deleteKnowledge(prevDoc).catch(() => undefined); // the old copy is no longer attached
     await d.data.setIntegrations(tenantId, { ...tenant.integrations, elevenlabs: { kbDocId: newDoc?.id, syncedAt: new Date().toISOString(), widgetHosts: widgetHostnames(tenant, d.appUrl), version: AGENT_VERSION, ...(warnings.length ? { warnings } : {}) } }, actor, created ? "Created the ElevenLabs agent" : "Synced the agent to ElevenLabs");
     if (tenant.allowedDomains.length) await d.data.setChannelStatus(tenantId, "website", "connected", actor);
     return { agentId, created, warnings };
   } catch (e) {
-    if (newDoc) await d.api.deleteKnowledge(newDoc.id).catch(() => undefined);
+    if (newDoc && !reuseDoc) await d.api.deleteKnowledge(newDoc.id).catch(() => undefined);
     const detail = e instanceof ElevenLabsError ? e.message : e instanceof Error ? e.message : "unknown error";
-    await d.data.setIntegrations(tenantId, { ...tenant.integrations, elevenlabs: { ...tenant.integrations.elevenlabs, error: detail.slice(0, 300) } }, actor, `ElevenLabs sync failed: ${detail.slice(0, 120)}`);
+    if (!opts.quiet) await d.data.setIntegrations(tenantId, { ...tenant.integrations, elevenlabs: { ...tenant.integrations.elevenlabs, error: detail.slice(0, 300) } }, actor, `ElevenLabs sync failed: ${detail.slice(0, 120)}`);
     if (e instanceof SyncError) throw e;
     throw new SyncError("failed", detail);
   }

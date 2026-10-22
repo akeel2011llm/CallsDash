@@ -15,6 +15,7 @@ import { ToolError } from "./booking";
 import { cleanOpeningHours } from "./availability";
 import { cleanCatalogInput, type PlanInput } from "./plans";
 import { FLAG_KINDS, normalizeRules } from "./flags";
+import { voiceAllowed } from "./voices";
 import { FONT_STYLES, PATTERN_STYLES, RADIUS_STYLES, SIDEBAR_STYLES, coverDataUrl, isCoverUrl, isHex, isLogoUrl, logoDataUrl } from "./theme";
 import type { AgentSettings, Branding, BookingStatus, Locale, Permissions } from "./types";
 
@@ -110,8 +111,10 @@ export async function saveAgentAction(f: FormData) {
   }
   if (f.has("voiceEn")) {
     if (!tenant.permissions.editVoice) throw new Error("forbidden");
-    next.voiceEn = str(f, "voiceEn");
-    next.voiceAr = str(f, "voiceAr");
+    // only voices on the client's list (what the admin offered, or the built-in four) can be chosen; anything else keeps the current voice
+    const en = str(f, "voiceEn"), ar = str(f, "voiceAr");
+    if (voiceAllowed(cur, "en", en)) next.voiceEn = en;
+    if (voiceAllowed(cur, "ar", ar)) next.voiceAr = ar;
     changed.push("voice");
   }
   if (changed.length) { await store.saveAgent(tenant.id, next, actor, changed.join(", ")); await autoSync(tenant.id, actor); }
