@@ -370,6 +370,7 @@ export default async function AssistantStudioPage({ params, searchParams }: { pa
               {check("w.transcript", st.widget.transcript)}{check("w.textInput", st.widget.textInput)}{check("w.textOnlyMode", st.widget.textOnlyMode)}
               {check("w.languageSelector", st.widget.languageSelector)}{check("w.micMuting", st.widget.micMuting)}{check("w.defaultExpanded", st.widget.defaultExpanded)}
               {check("w.dismissible", st.widget.dismissible)}{check("w.endConfirmation", st.widget.endConfirmation)}{check("w.showConversationId", st.widget.showConversationId)}
+              {check("w.hideBanner", st.widget.hideBanner)}
             </div>
           </div>
         ))}

@@ -10,7 +10,7 @@ type Json = Record<string, unknown>;
  * admin sees which group was refused and why (lib/agent-sync.ts).
  */
 export type ExtraGroup = { name: ExtraGroupName; body: Json };
-export const EXTRA_GROUPS = ["tools", "hardening", "keywords", "guardrails", "analysis", "privacy", "limits", "widget", "model", "voice", "turn", "hearing"] as const;
+export const EXTRA_GROUPS = ["tools", "hardening", "keywords", "guardrails", "analysis", "privacy", "limits", "widget", "branding", "model", "voice", "turn", "hearing"] as const;
 export type ExtraGroupName = (typeof EXTRA_GROUPS)[number];
 
 const system = (name: string, extra: Json = {}) => ({ type: "system", name, description: "", params: { system_tool_type: name, ...extra } });
@@ -104,6 +104,8 @@ export function buildExtras(i: ExtrasInput): ExtraGroup[] {
     g("privacy", { platform_settings: { privacy: { record_voice: st.recordVoice, retention_days: Math.max(1, Math.round(i.tenant.retentionDays || 90)) } } }),
     g("limits", { platform_settings: { call_limits: { daily_limit: st.dailyLimit, ...(saved("safety") ? { agent_concurrency_limit: st.concurrencyLimit || -1, bursting_enabled: st.bursting } : {}) } } }), // a public widget must not be able to run up an unlimited bill
     g("widget", { platform_settings: { widget: saved("widget") ? studioWidget(st.widget, primary) : legacyWidget(primary) } }),
+    // The "Powered by" line has its own group: if ElevenLabs ever refuses it (a plan that does not allow it), the widget's look above is still applied.
+    g("branding", { platform_settings: { widget: { disable_banner: st.widget.hideBanner } } }),
   ];
   // The options below were added with the Assistant studio. They are sent only for a section an admin has saved.
   if (saved("model")) {

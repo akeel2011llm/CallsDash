@@ -3,6 +3,7 @@ export type Channel = "website" | "whatsapp" | "instagram" | "phone";
 export type Outcome = "booked" | "answered" | "handed_off" | "abandoned";
 export type BookingStatus = "confirmed" | "rescheduled" | "completed" | "cancelled" | "no_show";
 export type BookingSource = "ai" | "staff" | "doctor";
+export type BookingMessageStatus = "sending" | "sent" | "failed" | "skipped";
 export type ArabicStyle = "gulf" | "msa";
 export type BatchKind = "rollover" | "package" | "topup" | "payg";
 export type ZeroBalancePolicy = "pause" | "overdraft";
@@ -180,10 +181,35 @@ export interface Tenant {
 
 export interface Integrations {
   elevenlabs?: { kbDocId?: string; syncedAt?: string; error?: string; /** Hostnames the widget was allowed on at the last sync. */ widgetHosts?: string[]; /** Extra settings ElevenLabs refused on the last sync; the agent still works without them. */ warnings?: { group: string; detail: string }[]; /** AGENT_VERSION (lib/agent-config.ts) at the last sync; older means the agent misses newer rules or tools. */ version?: number };
-  whatsapp?: { phoneNumberId?: string; displayNumber?: string; confirmTemplate?: string; confirmTemplateLang?: string };
+  whatsapp?: WhatsappSettings;
   /** `accountId` is the Instagram business account id Meta sends in webhooks; `inboundUrl` is the custom channel address copied from ElevenLabs. */
   instagram?: { accountId?: string; username?: string; inboundUrl?: string };
   phone?: { number?: string; provider?: "twilio" | "sip" | "other" };
+}
+
+/** A clinic's WhatsApp number and the booking confirmation it sends (lib/whatsapp.ts has the wording). */
+export interface WhatsappSettings {
+  /** From ElevenLabs: the WhatsApp page, the account menu, "Copy phone number ID". */
+  phoneNumberId?: string;
+  displayNumber?: string;
+  /** The template's name in WhatsApp Manager. */
+  confirmTemplate?: string;
+  /** The template language used when a patient's own language has no template. */
+  confirmTemplateLang?: string;
+  /**
+   * "full" sends every booking detail (the template of lib/whatsapp.ts FULL_TEMPLATE). "short" is the earlier four-detail
+   * template. Missing = "short" for a clinic that already had a template saved, "full" for everyone else.
+   */
+  confirmWording?: "full" | "short";
+  /** The languages the template was created in at Meta. Missing = only the main language. */
+  templateLangs?: Locale[];
+  /** False stops confirmations without disconnecting WhatsApp. Missing = on. */
+  confirmations?: boolean;
+  /** Printed in the confirmation: where the clinic is, how to call it, and a map link (added after the address). */
+  address?: string;
+  addressAr?: string;
+  mapUrl?: string;
+  phone?: string;
 }
 
 /** Tokens and shared secrets for a client's channels. Stored apart from the tenant row, never shown again after saving. */
@@ -282,6 +308,23 @@ export interface Booking {
   notes?: string;
   /** Who made the booking. Bookings made before this field existed read as "ai". */
   source?: BookingSource;
+  /** The language the patient speaks or writes, for the WhatsApp confirmation. Missing = the clinic's main template language. */
+  language?: Locale;
+  /** The last attempt to send the patient their booking confirmation on WhatsApp. Missing = none was made. */
+  message?: BookingMessage;
+}
+
+/** The booking confirmation sent on WhatsApp. "sent" means ElevenLabs accepted it; Meta can still decline it afterwards. */
+export interface BookingMessage {
+  status: BookingMessageStatus;
+  /** When the attempt was made (ISO). */
+  at: string;
+  /** Why it failed, or why nothing was sent: a code such as bad_phone, or what the service answered. */
+  detail?: string;
+  /** The ElevenLabs conversation the message started; the patient's reply continues it. */
+  conversationId?: string;
+  /** The language of the template that was used. */
+  lang?: Locale;
 }
 
 export interface TranscriptLine {

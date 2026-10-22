@@ -123,6 +123,20 @@ describe("agent config", () => {
     }
     expect(Object.keys((d.reschedule_appointment as { api_schema: { request_body_schema: { properties: object } } }).api_schema.request_body_schema.properties)).toContain("doctor_id");
   });
+  it("lets the assistant tell a booking which language the patient uses, for the WhatsApp confirmation, without making it required", () => {
+    const d = toolDefinitions("https://app.example", "sec");
+    for (const name of ["book_appointment", "reschedule_appointment"]) {
+      const schema = (d[name] as { api_schema: { request_body_schema: { required: string[]; properties: Record<string, { description?: string }> } } }).api_schema.request_body_schema;
+      expect(schema.properties.language.description).toMatch(/WhatsApp confirmation/);
+      expect(schema.required).not.toContain("language"); // a tool made before this release keeps working
+    }
+  });
+  it("tells the assistant to pass the language, and to mention WhatsApp only when a confirmation is on its way", () => {
+    const prompt = buildAgentConfig({ tenant: tenant(), settings, toolIds: [], appUrl: "https://x" }).conversation_config.agent.prompt.prompt;
+    expect(prompt).toMatch(/Always pass language/);
+    expect(prompt).toMatch(/whatsappConfirmation:true/);
+    expect(prompt).toMatch(/If it is false or missing, do not mention WhatsApp/);
+  });
 });
 
 describe("voices", () => {

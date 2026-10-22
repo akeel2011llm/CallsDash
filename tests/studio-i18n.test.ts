@@ -58,7 +58,7 @@ function dynamicKeys(): string[] {
 function formFields(): string[] {
   const src = read("lib/agent-studio.ts");
   const names = [...src.matchAll(/\br\.(?:num|choice|color|str|para|on)\(\s*"([\w.]+)"/g)].map((m) => m[1]);
-  const widget = ["actionText", "startCallText", "endCallText", "listeningText", "speakingText", "transcript", "textInput", "micMuting", "languageSelector", "textOnlyMode", "defaultExpanded", "dismissible", "endConfirmation", "showConversationId"].map((n) => `w.${n}`);
+  const widget = ["actionText", "startCallText", "endCallText", "listeningText", "speakingText", "transcript", "textInput", "micMuting", "languageSelector", "textOnlyMode", "defaultExpanded", "dismissible", "endConfirmation", "showConversationId", "hideBanner"].map((n) => `w.${n}`);
   return [...names, ...widget, "llm", "backupModels", "voiceEn", "voiceAr", "ttsModelEn", "ttsModelAr", "offered", "extraKeywords", "criteriaOff", "parallelTools", "greetingEn", "greetingAr", "speculativeTurn", "protectGreeting", "guardFocus", "guardInjection", "recordVoice", "bursting", "expressive"];
 }
 

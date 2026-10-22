@@ -73,6 +73,7 @@ export const creditsOwed = call("creditsOwed");
 export const findTenantByAgent = call("findTenantByAgent");
 export const createBooking = call("createBooking");
 export const updateBooking = call("updateBooking");
+export const setBookingMessage = call("setBookingMessage");
 export const addAlert = call("addAlert");
 export const setDoctorCalendar = call("setDoctorCalendar");
 export const addDoctor = call("addDoctor");

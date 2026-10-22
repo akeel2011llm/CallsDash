@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { parsePostCall, verifySignature } from "@/lib/elevenlabs";
+import { parsePostCall, unansweredConfirmation, verifySignature } from "@/lib/elevenlabs";
 import { findTenantByAgent, getAgent, getSetting, recordConversation } from "@/lib/data";
 import { conversationCostUsd, ratesFor } from "@/lib/costing";
 import { FEES_KEY, pricesKey } from "@/lib/pricing";
@@ -21,6 +21,7 @@ export async function POST(req: Request) {
   }
   const parsed = parsePostCall(body as Record<string, unknown>);
   if (!parsed) return NextResponse.json({ ok: true, ignored: true }); // other event types are acknowledged and dropped
+  if (unansweredConfirmation(parsed.conversation)) return NextResponse.json({ ok: true, ignored: "confirmation without a reply" });
   const tenant = await findTenantByAgent(parsed.agentId);
   if (!tenant) return NextResponse.json({ error: "unknown agent" }, { status: 404 });
   // what it cost us: ElevenLabs' fee plus the share of the AI model this client's assistant uses, the same sums as the Assistant studio

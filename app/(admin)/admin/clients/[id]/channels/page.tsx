@@ -4,8 +4,9 @@ import { getT, type Key } from "@/lib/i18n";
 import * as store from "@/lib/data";
 import { appUrl } from "@/lib/app-url";
 import { fmtDateTime } from "@/lib/format";
-import { CONFIRMATION_TEMPLATE } from "@/lib/whatsapp";
-import { saveInstagramAction, savePhoneAction, saveWhatsappAction, syncAgentAction, testWhatsappAction } from "@/lib/channel-actions";
+import { testFailKey, testFailToShow } from "@/lib/whatsapp";
+import { saveInstagramAction, savePhoneAction, syncAgentAction } from "@/lib/channel-actions";
+import { WhatsappCard } from "@/components/WhatsappCard";
 import { Badge, Notice, PageHead } from "@/components/ui";
 import { SubmitButton } from "@/components/SubmitButton";
 import type { Channel } from "@/lib/types";
@@ -21,9 +22,11 @@ export default async function Channels({ params, searchParams }: { params: Promi
   const { saved, error, wa } = await searchParams;
   const tenant = await store.getTenant(id);
   if (!tenant) notFound();
-  const [{ t, locale }, agent, secrets, url] = await Promise.all([getT(), store.getAgent(id), store.getSecrets(id), appUrl()]);
+  const [{ t, locale }, agent, secrets, url, testFail] = await Promise.all([
+    getT(), store.getAgent(id), store.getSecrets(id), appUrl(),
+    wa === "failed" ? store.getSetting(testFailKey(id)).then((v) => testFailToShow(v)) : Promise.resolve(null),
+  ]);
   const el = tenant.integrations.elevenlabs;
-  const wa_ = tenant.integrations.whatsapp ?? {};
   const ig = tenant.integrations.instagram ?? {};
   const ph = tenant.integrations.phone ?? {};
   const base = `/admin/clients/${id}`;
@@ -41,7 +44,6 @@ export default async function Channels({ params, searchParams }: { params: Promi
       <PageHead title={`${t("channels.title")}: ${locale === "ar" ? tenant.branding.displayNameAr : tenant.name}`} subtitle={t("channels.subtitle")} actions={<Link className="btn ghost" href={base}>{t("common.back")}</Link>} />
       {saved && <Notice tone="ok">{saved === "1" ? t("channels.saved") : t(`channels.saved.${saved}` as Key)}</Notice>}
       {error && <Notice tone="warn">{t(`channels.err.${error}` as Key)}</Notice>}
-      {wa && <Notice tone="warn">{t(wa === "failed" ? "channels.wa.failed" : (`channels.wa.skipped.${wa}` as Key))}</Notice>}
 
       <section className="card stack">
         <div className="row" style={{ justifyContent: "space-between" }}>
@@ -74,33 +76,7 @@ export default async function Channels({ params, searchParams }: { params: Promi
         <div><strong>{t("channels.website.domains")}:</strong> <span dir="ltr">{tenant.allowedDomains.join(", ") || "–"}</span></div>
       </section>
 
-      <section className="card stack">
-        <div className="row" style={{ justifyContent: "space-between" }}>
-          <h2 style={{ margin: 0 }}>{t("channels.wa.title")}</h2>
-          <Badge tone={TONE[tenant.channels.whatsapp]}>{t(`channels.status.${tenant.channels.whatsapp}` as Key)}</Badge>
-        </div>
-        <p className="muted">{t("channels.wa.help")}</p>
-        <form action={saveWhatsappAction} className="stack">
-          {hidden}
-          <div className="grid" style={{ gap: ".75rem", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))" }}>
-            <label>{t("channels.wa.phoneNumberId")}<input name="phoneNumberId" defaultValue={wa_.phoneNumberId ?? ""} dir="ltr" inputMode="numeric" /></label>
-            <label>{t("channels.wa.number")}<input name="displayNumber" defaultValue={wa_.displayNumber ?? ""} dir="ltr" inputMode="tel" /></label>
-            <label>{t("channels.wa.template")}<input name="confirmTemplate" defaultValue={wa_.confirmTemplate ?? CONFIRMATION_TEMPLATE.name} dir="ltr" /></label>
-            <label>{t("channels.wa.lang")}<select name="confirmTemplateLang" defaultValue={wa_.confirmTemplateLang ?? "en"}><option value="en">English</option><option value="ar">العربية</option></select></label>
-            {statusSelect("whatsapp")}
-          </div>
-          <details>
-            <summary className="muted" style={{ cursor: "pointer" }}>{t("channels.wa.templateHelp")}</summary>
-            <pre style={{ whiteSpace: "pre-wrap" }}>{CONFIRMATION_TEMPLATE.en}{"\n\n"}{CONFIRMATION_TEMPLATE.ar}</pre>
-          </details>
-          <div><SubmitButton className="btn" type="submit">{t("channels.save")}</SubmitButton></div>
-        </form>
-        <form action={testWhatsappAction} className="row" style={{ alignItems: "end" }}>
-          {hidden}
-          <label style={{ flex: 1, minWidth: 220 }}>{t("channels.wa.testTo")}<input name="to" required dir="ltr" inputMode="tel" placeholder="+973 ..." /></label>
-          <SubmitButton className="btn ghost" type="submit">{t("channels.wa.test")}</SubmitButton>
-        </form>
-      </section>
+      <WhatsappCard tenant={tenant} testFail={testFail} wa={wa} />
 
       <section className="card stack">
         <div className="row" style={{ justifyContent: "space-between" }}>

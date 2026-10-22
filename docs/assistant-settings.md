@@ -10,9 +10,11 @@ Admin, client, **Assistant studio** (`/admin/clients/<id>/assistant`). One card 
 | Hearing | Speech recognition provider (Standard, or Scribe v2 Turbo), extra words to listen for (clinic and doctor names are added automatically) |
 | Safety, privacy and limits | Topic guard, prompt-injection guard, record audio, conversations per day, simultaneous calls, bursting |
 | Call analysis | Language of call summaries, which quality checks ElevenLabs runs |
-| Website widget | Brand or custom colours, size, position, texts, which controls visitors get |
+| Website widget | Brand or custom colours, size, position, texts, which controls visitors get, and the small "Powered by" line under the widget |
 
 Below the sections: **Live in ElevenLabs** (reads the assistant back from ElevenLabs and sets each value beside what CallsDash saved), **What ElevenLabs charges us** (the two fees every cost starts from) and **Try the assistant** (the same test panel as the client page).
+
+**The "Powered by" line.** The ElevenLabs widget shows a small "Powered by ElevenLabs" line under the conversation unless the agent's widget settings switch it off (`platform_settings.widget.disable_banner`; there is no attribute on the `<elevenlabs-convai>` tag for it). Every assistant is synced with that switch **on** (the line hidden), also for a client whose Website widget section was never saved; an admin can show it again with the tick-box **Hide the "Powered by" line under the widget**. It is sent as its own group (`branding`), so if ElevenLabs refuses it (ElevenLabs does not say which plans allow it) the widget's look is still applied, the page names the group and says why, and **Live in ElevenLabs** shows the row as different. Nothing else about the widget changes: it is still the original ElevenLabs widget, only without that line.
 
 A custom greeting should still say the conversation is recorded. The page warns, under the greeting fields, when a saved greeting does not mention it (English: "record"; Arabic: any form of تسجيل / مسجلة). It is a warning only; leave a greeting blank to use the built-in one, which says it.
 

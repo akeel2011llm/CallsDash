@@ -24,6 +24,7 @@ const liveDefault = () => mapLiveAgent({
   platform_settings: {
     call_limits: { daily_limit: 500 }, privacy: { record_voice: true, retention_days: 90 },
     guardrails: { focus: { is_enabled: true }, prompt_injection: { is_enabled: true } },
+    widget: { disable_banner: true },
   },
 });
 
@@ -62,6 +63,18 @@ describe("live read-back", () => {
     expect(rows.maxTokens.here).toBe(300);
     expect(rows.maxTokens.there).toBeNull(); // -1 means no limit
     expect(liveSummary(Object.values(rows)).differs).toBe(3);
+  });
+
+  it("compares the hidden \"Powered by\" line: matching once ElevenLabs hides it, a difference while the agent still shows it", () => {
+    const hidden = byId(liveRows({ settings: settings(), tenant, live: liveDefault() }));
+    expect(hidden.hideBanner).toMatchObject({ section: "widget", here: true, there: true, state: "same" });
+    // an agent made before the option existed: ElevenLabs holds no value, which means the line is shown
+    const old = byId(liveRows({ settings: settings(), tenant, live: mapLiveAgent({ platform_settings: { widget: {} } }) }));
+    expect(old.hideBanner).toMatchObject({ here: true, there: false, state: "differs" });
+    expect(byId(liveRows({ settings: settings(), tenant, live: mapLiveAgent({}) })).hideBanner.state).toBe("differs");
+    // an admin who turned the option off expects the line to be shown
+    const shown = byId(liveRows({ settings: settings({ studio: { ...STUDIO_DEFAULTS, widget: { ...STUDIO_DEFAULTS.widget, hideBanner: false } } }), tenant, live: mapLiveAgent({ platform_settings: { widget: { disable_banner: false } } }) }));
+    expect(shown.hideBanner).toMatchObject({ here: false, there: false, state: "same" });
   });
 
   it("treats a model that ignores the temperature as matching when ElevenLabs holds none", () => {

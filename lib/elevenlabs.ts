@@ -27,6 +27,13 @@ export interface ParsedCall {
 const hasArabic = (s: string) => /[؀-ۿ]/.test(s);
 
 /**
+ * A WhatsApp conversation the patient never replied to: it holds only the confirmation template CallsDash sent. That is not a
+ * conversation with the assistant, so it is neither listed nor charged.
+ */
+export const unansweredConfirmation = (c: Pick<NewConversation, "channel" | "transcript">) =>
+  c.channel === "whatsapp" && c.transcript.length > 0 && !c.transcript.some((l) => l.role === "patient");
+
+/**
  * Maps an ElevenLabs `post_call_transcription` webhook payload to a CallsDash conversation.
  * Field names follow the ElevenLabs Agents webhook docs; confirm against a real payload on the first live call.
  */

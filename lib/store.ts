@@ -11,7 +11,7 @@ import { USD_TO_BHD } from "./pricing";
 import type {
   AgentToolCall,
   NewConversation,
-  AgentSettings, Booking, BookingStatus, Channel, Conversation, ChatSession, Doctor, Locale, Permissions, Profile, StaffRequest, Tenant, TenantSecrets,
+  AgentSettings, Booking, BookingMessage, BookingStatus, Channel, Conversation, ChatSession, Doctor, Locale, Permissions, Profile, StaffRequest, Tenant, TenantSecrets,
 } from "./types";
 
 /**
@@ -321,7 +321,7 @@ export function createBooking(tenantId: string, b: Omit<Booking, "id" | "tenantI
   return booking;
 }
 
-export function updateBooking(tenantId: string, bookingId: string, patch: Partial<Pick<Booking, "startsAt" | "status" | "calendarEventId" | "notes" | "patientName" | "patientPhone" | "patientCpr" | "service" | "doctorId">>, actor: string): Booking {
+export function updateBooking(tenantId: string, bookingId: string, patch: Partial<Pick<Booking, "startsAt" | "status" | "calendarEventId" | "notes" | "patientName" | "patientPhone" | "patientCpr" | "service" | "doctorId" | "language">>, actor: string): Booking {
   const d = db();
   const b = d.bookings.find((x) => x.tenantId === tenantId && x.id === bookingId);
   if (!b) throw new Error("booking not found");
@@ -331,6 +331,13 @@ export function updateBooking(tenantId: string, bookingId: string, patch: Partia
     && (patch.startsAt || patch.doctorId || patch.status === "confirmed")) throw new SlotTakenError();
   Object.assign(b, patch);
   audit(actor, `Booking ${bookingId} updated`, tenantId);
+  return b;
+}
+
+/** Records the last attempt to send the booking's WhatsApp confirmation. It is a log of what happened, so it is not audited. */
+export function setBookingMessage(tenantId: string, bookingId: string, message: BookingMessage): Booking | undefined {
+  const b = db().bookings.find((x) => x.tenantId === tenantId && x.id === bookingId);
+  if (b) b.message = message;
   return b;
 }
 

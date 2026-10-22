@@ -22,16 +22,17 @@ const ARABIC_STYLE = {
 /**
  * Raise when the prompt rules or the tools change in a way a clinic's agent must pick up. The client screens ask for a
  * Sync while the agent's last sync was at an older version. 2: CPR numbers for booking, finding, moving and cancelling.
+ * 3: the widget hides its "Powered by" line, and a booking can carry the patient's language for the WhatsApp confirmation.
  */
-export const AGENT_VERSION = 2;
+export const AGENT_VERSION = 3;
 
 const TOOL_RULES = [
   "Always call check_availability before offering times. Never invent slots. Leave from_date empty to start from today.",
   "To book, ask for the patient's full name, phone number and CPR number (the 9-digit personal number on the Bahraini ID card). Read the CPR number back digit by digit, then confirm doctor, time, name, phone and CPR with the patient before calling book_appointment.",
-  "Call book_appointment with the doctor_id and starts_at exactly as check_availability returned them; never rewrite the time yourself.",
-  "Only say an appointment is booked after book_appointment returns ok:true, then read back its label.",
+  "Call book_appointment with the doctor_id and starts_at exactly as check_availability returned them; never rewrite the time yourself. Always pass language (en or ar): the language the patient is speaking or writing, because their WhatsApp confirmation is sent in it.",
+  "Only say an appointment is booked after book_appointment returns ok:true, then read back its label. If it returns whatsappConfirmation:true, add that a confirmation with all the details is being sent to the phone number they gave, on WhatsApp. If it is false or missing, do not mention WhatsApp.",
   "When someone asks about their booking, or wants to move or cancel it, first ask for their CPR number and call find_patient_booking with it. Only talk about the bookings it returns. Use their booking_id and the same CPR number for cancel_appointment or reschedule_appointment, and confirm the change with the patient before calling the tool.",
-  "To move a booking, call check_availability first with the doctor_id that find_patient_booking returned for the booking (or another doctor's doctor_id if the patient wants a different doctor), then call reschedule_appointment with the chosen starts_at as new_starts_at, and doctor_id only when the doctor changes.",
+  "To move a booking, call check_availability first with the doctor_id that find_patient_booking returned for the booking (or another doctor's doctor_id if the patient wants a different doctor), then call reschedule_appointment with the chosen starts_at as new_starts_at, and doctor_id only when the doctor changes. Pass language, and mention the WhatsApp confirmation the same way as for a new booking.",
   "If find_patient_booking finds nothing but the patient says they have a booking, ask for the phone number it was made with and call find_patient_booking again with both patient_cpr and patient_phone; give the same patient_phone to cancel_appointment or reschedule_appointment for that booking.",
   "Never say a CPR number aloud except to read back the one the patient just gave. If the patient has no CPR number (for example a visitor), use take_message so the team can book for them.",
   "If a tool returns ok:false, follow its message. Never promise a booking that a tool did not confirm.",
@@ -203,7 +204,7 @@ export function toolDefinitions(appUrl: string, secret: string): Record<string, 
     book_appointment: tool("book_appointment", "Book an appointment in a slot returned by check_availability.", {
       doctor_id: str("Doctor id from the slot."), starts_at: str("Slot start (ISO) exactly as returned by check_availability."),
       patient_name: str("Patient's full name."), patient_phone: str("Patient's phone number."), patient_cpr: str(CPR_HELP),
-      service: str("Reason for the visit."), conversation_id: conversationId,
+      service: str("Reason for the visit."), language: str("en or ar, the language the patient is speaking or writing. Their WhatsApp confirmation is sent in it."), conversation_id: conversationId,
     }, ["doctor_id", "starts_at", "patient_name", "patient_phone", "patient_cpr"]),
     find_patient_booking: tool("find_patient_booking", "Find a patient's upcoming bookings by their CPR number.", {
       patient_cpr: str(CPR_HELP), patient_phone: str("Only for a booking made before CPR numbers were asked: the phone number it was made with."),
@@ -215,6 +216,7 @@ export function toolDefinitions(appUrl: string, secret: string): Record<string, 
     reschedule_appointment: tool("reschedule_appointment", "Move a booking found with find_patient_booking to a new slot returned by check_availability, with the same or another doctor.", {
       booking_id: str("booking_id from find_patient_booking."), patient_cpr: str(CPR_HELP), new_starts_at: str("New slot start (ISO), the starts_at of the chosen slot."),
       doctor_id: str("Only when the patient wants another doctor: the doctor_id of the chosen slot."), patient_phone: str("Only if find_patient_booking needed the phone number too."),
+      language: str("en or ar, the language the patient is speaking or writing. Their WhatsApp confirmation is sent in it."),
     }, ["booking_id", "patient_cpr", "new_starts_at"]),
     take_message: tool("take_message", "Take a message for the clinic staff to answer later.", {
       patient_name: str("Caller's name."), patient_phone: str("Caller's phone number."), message: str("What the caller wants."), language: str("en or ar."), conversation_id: conversationId,
