@@ -23,9 +23,8 @@ const ARABIC_STYLE = {
  * Raise when the prompt rules or the tools change in a way a clinic's agent must pick up. The client screens ask for a
  * Sync while the agent's last sync was at an older version. 2: CPR numbers for booking, finding, moving and cancelling.
  * 3: the widget hides its "Powered by" line, and a booking can carry the patient's language for the WhatsApp confirmation.
- * 4: a "Longest reply" saved below the new minimum (300) is raised to it, so a booking request is no longer cut off halfway.
  */
-export const AGENT_VERSION = 4;
+export const AGENT_VERSION = 3;
 
 const TOOL_RULES = [
   "Always call check_availability before offering times. Never invent slots. Leave from_date empty to start from today.",

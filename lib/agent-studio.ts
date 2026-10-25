@@ -32,7 +32,7 @@ export const CHOICES = {
 export const LIMITS = {
   temperature: [0, 1],
   // 0 means no limit. A limit is also spent on a tool call: booking a visit is about 150 tokens of arguments, and a reply that stops
-  // inside them makes ElevenLabs end the chat with "Invalid message received: Unterminated string". 300 leaves room for a sentence before it.
+  // inside them is a half-written tool call. 300 leaves room for a sentence before it.
   maxTokens: [300, 4096],
   cascadeSeconds: [2, 15],
   stability: [0, 1],
