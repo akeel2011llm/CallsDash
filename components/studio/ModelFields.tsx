@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { PROVIDER_LABEL, rowFor, type ModelRow } from "@/lib/agent-catalog";
+import { BOOKING_TESTED, PROVIDER_LABEL, rowFor, type ModelRow } from "@/lib/agent-catalog";
 import { CHOICES, LIMITS } from "@/lib/agent-studio";
 import { costLine, fmtBhd, fmtUsd, marginOf, marginTone, monthlyCostUsd, toBhd, type Fees } from "@/lib/pricing";
 import { RangeField } from "./RangeField";
@@ -69,6 +69,7 @@ export function ModelFields({ rows, defaultLlm, value, fees, rate, usage, today,
   if (row.deprecated?.inWarning || row.deprecated?.isDeprecated) notes.push(row.deprecated.replacement ? T("studio.model.deprecatedTo", { model: row.deprecated.replacement }) : T("studio.model.deprecated"));
   if (!row.temperature) notes.push(T("studio.model.noTemperature"));
   if (row.price.source !== "elevenlabs") notes.push(T(row.price.source === "estimate" ? "studio.model.estimateNote" : "studio.model.unknownNote"));
+  if (!BOOKING_TESTED.includes(row.id)) notes.push(T("studio.model.bookingNote"));
   notes.push(T("studio.model.arabicNote"));
 
   const maxTokensMin = LIMITS.maxTokens[0];

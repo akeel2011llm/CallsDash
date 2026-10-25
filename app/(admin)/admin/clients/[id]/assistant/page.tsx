@@ -11,7 +11,7 @@ import { PROVIDER_LABEL, defaultLlm, rowFor } from "@/lib/agent-catalog";
 import { CHOICES, LIMITS, studioOf, type SectionId, type VoiceNote } from "@/lib/agent-studio";
 import { EXAMPLE_USAGE, clientRatePerCredit, costLine, fmtBhd, fmtUsd, marginOf, marginTone, toBhd } from "@/lib/pricing";
 import { catalogFromEnv, explainCatalogError, type CatalogVoice } from "@/lib/elevenlabs-catalog";
-import { liveRows, liveSummary, type LiveRow, type LiveValue } from "@/lib/studio-live";
+import { liveRows, liveSummary, liveTexts, type LiveRow, type LiveText, type LiveValue } from "@/lib/studio-live";
 import { loadFees, modelBook } from "@/lib/studio-server";
 import { failKey, failToShow } from "@/lib/studio-fail";
 import { refreshModelsAction, resetStudioSectionAction, saveFeesAction, saveStudioSectionAction } from "@/lib/studio-actions";
@@ -23,6 +23,7 @@ import { TryAssistant } from "@/components/TryAssistant";
 import { Badge, Notice, PageHead, Stat } from "@/components/ui";
 import { ModelFields } from "@/components/studio/ModelFields";
 import { RangeField } from "@/components/studio/RangeField";
+import { TextDiff } from "@/components/studio/TextDiff";
 import { VoiceFields, type BuiltinVoice } from "@/components/studio/VoiceFields";
 import { text } from "@/components/studio/text";
 
@@ -410,20 +411,23 @@ export default async function AssistantStudioPage({ params, searchParams }: { pa
 }
 
 /** What ElevenLabs reports for this client's assistant, set beside what CallsDash set. */
-async function LivePanel({ settings, tenant, T }: { settings: AgentSettings; tenant: Pick<Tenant, "retentionDays">; T: ReturnType<typeof text> }) {
+async function LivePanel({ settings, tenant, T }: { settings: AgentSettings; tenant: Tenant; T: ReturnType<typeof text> }) {
   const api = catalogFromEnv();
   if (!api) return <Notice tone="warn">{T("studio.live.noKey")}</Notice>;
   if (!settings.elevenLabsAgentId) return <p className="muted">{T("studio.live.noAgent")}</p>;
   let rows: LiveRow[];
+  let texts: LiveText[];
   let tools = 0;
   try {
-    const live = await api.getAgent(settings.elevenLabsAgentId);
+    const [live, doctors] = await Promise.all([api.getAgent(settings.elevenLabsAgentId), getDoctors(tenant.id)]);
     tools = live.toolCount ?? 0;
     rows = liveRows({ settings, tenant, live });
+    texts = liveTexts({ settings, tenant, doctors, live });
   } catch (e) {
     return <Notice tone="warn">{T("studio.live.failed")} {explainCatalogError(e)}</Notice>;
   }
   const sum = liveSummary(rows);
+  const differs = sum.differs + texts.filter((x) => x.state === "differs").length;
   const show = (r: LiveRow, v: LiveValue) =>
     v === null ? (r.none ? T(`studio.live.none.${r.none}`) : "–")
       : typeof v === "boolean" ? T(v ? "studio.live.on" : "studio.live.off")
@@ -432,10 +436,11 @@ async function LivePanel({ settings, tenant, T }: { settings: AgentSettings; ten
   return (
     <>
       <div className="row">
-        <Badge tone={sum.differs ? "bad" : "ok"}>{sum.differs ? T("studio.live.summary.differs", { n: sum.differs }) : T("studio.live.summary.same")}</Badge>
+        <Badge tone={differs ? "bad" : "ok"}>{differs ? T("studio.live.summary.differs", { n: differs }) : T("studio.live.summary.same")}</Badge>
         {sum.unset > 0 && <small className="muted">{T("studio.live.summary.unset", { n: sum.unset })}</small>}
         <small className="muted">{T("studio.live.tools", { n: tools })}</small>
       </div>
+      {differs > 0 && <Notice tone="warn">{T("studio.live.overwrite")}</Notice>}
       <div className="table-wrap">
         <table className="live">
           <thead><tr><th>{T("studio.live.col.setting")}</th><th>{T("studio.live.col.here")}</th><th>{T("studio.live.col.there")}</th><th>{T("studio.live.col.state")}</th></tr></thead>
@@ -450,6 +455,22 @@ async function LivePanel({ settings, tenant, T }: { settings: AgentSettings; ten
             ))}
           </tbody>
         </table>
+      </div>
+      <h3 style={{ margin: ".5rem 0 0" }}>{T("studio.live.texts.title")}</h3>
+      <p className="muted" style={{ margin: 0 }}>{T("studio.live.texts.help")}</p>
+      <div className="stack" style={{ gap: ".75rem" }}>
+        {texts.map((x) => (
+          <div key={x.id} className="stack" style={{ gap: ".4rem" }}>
+            <div className="row" style={{ justifyContent: "space-between" }}>
+              <strong>{T(`studio.live.text.${x.id}`)}</strong>
+              <Badge tone={x.state === "same" ? "ok" : "bad"}>{T(`studio.live.state.${x.state === "same" ? "same" : "differs"}`)}</Badge>
+            </div>
+            <details className="live-text">
+              <summary>{T(x.state === "same" ? "studio.live.texts.showSame" : "studio.live.texts.show")}</summary>
+              {x.state === "same" ? <pre className="diff" dir="ltr" tabIndex={0}>{x.here}</pre> : <TextDiff here={x.here} there={x.there} T={T} />}
+            </details>
+          </div>
+        ))}
       </div>
     </>
   );

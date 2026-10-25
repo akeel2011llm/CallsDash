@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  LLM_CATALOG, RETIRES, acceptsTemperature, daysToRetirement, defaultLlm, estimateUsd, isCheckpoint, llmMeta, modelRows, prettyModel, providerOf,
+  BOOKING_TESTED, LLM_CATALOG, RETIRES, acceptsTemperature, daysToRetirement, defaultLlm, estimateUsd, isCheckpoint, llmMeta, modelRows, prettyModel, providerOf,
   ttsAllowed, ttsFor, ttsMeta, USAGE, type RowsInput,
 } from "@/lib/agent-catalog";
 import type { LlmInfo } from "@/lib/elevenlabs-catalog";
@@ -39,6 +39,14 @@ describe("model names", () => {
     expect(defaultLlm()).toBe("gemini-2.5-flash");
     process.env.ELEVENLABS_LLM = "gpt-6-luna";
     expect(defaultLlm()).toBe("gpt-6-luna");
+    if (keep === undefined) delete process.env.ELEVENLABS_LLM; else process.env.ELEVENLABS_LLM = keep;
+  });
+  it("names the models the booking tools were tried with, and the built-in default is one of them", () => {
+    const keep = process.env.ELEVENLABS_LLM;
+    delete process.env.ELEVENLABS_LLM;
+    for (const id of BOOKING_TESTED) expect(LLM_CATALOG.some((m) => m.id === id), id).toBe(true);
+    expect(BOOKING_TESTED).toContain(defaultLlm());
+    expect(BOOKING_TESTED).not.toContain("gemini-3.5-flash-lite");
     if (keep === undefined) delete process.env.ELEVENLABS_LLM; else process.env.ELEVENLABS_LLM = keep;
   });
 });
