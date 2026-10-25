@@ -157,7 +157,7 @@ export default async function AssistantStudioPage({ params, searchParams }: { pa
         {bad.length > 0 && (
           <Notice tone="warn">
             <strong>{T("studio.bad")}</strong>
-            <ul className="notes">{bad.map(([field, key]) => <li key={field}>{f(field)}: {T(key)}</li>)}</ul>
+            <ul className="notes">{bad.map(([field, key]) => <li key={field}>{f(field)}: {T(key, { min: LIMITS.maxTokens[0] })}</li>)}</ul>
           </Notice>
         )}
         {failed && <Notice tone="warn">{T("studio.fail", { detail: failed })}</Notice>}
@@ -214,7 +214,7 @@ export default async function AssistantStudioPage({ params, searchParams }: { pa
     </div>
   );
 
-  const modelLabels = { ...labelsFor("studio.model.", "studio.effort."), "studio.model.sum.how": T(isExample ? "studio.model.sum.howExample" : "studio.model.sum.how") };
+  const modelLabels = { ...labelsFor("studio.model.", "studio.effort.", "studio.err.tokensLow"), "studio.model.sum.how": T(isExample ? "studio.model.sum.howExample" : "studio.model.sum.how") };
   const voiceLabels = labelsFor("studio.vb.", "studio.voice.", "studio.tts.", "studio.opt.textNormalisation.", "studio.f.stability", "studio.f.similarity", "studio.f.speed", "studio.f.textNormalisation", "studio.f.expressive", "studio.h.stability", "studio.h.similarity", "studio.h.speed", "studio.h.textNormalisation", "studio.h.expressive");
 
   const autoWords = [...new Set([tenant.name, tenant.branding.displayName, tenant.branding.displayNameAr, ...doctors.map((d) => d.name)].map((w) => (w ?? "").trim()).filter(Boolean))];
