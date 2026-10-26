@@ -6,7 +6,7 @@ import type { Data } from "./data/demo";
 import type { AgentSettings } from "./types";
 
 export class SyncError extends Error {
-  constructor(public code: "no_api_key" | "no_secret" | "bad_secret" | "no_app_url" | "unknown_client" | "failed", detail?: string) { super(detail ?? code); }
+  constructor(public code: "no_api_key" | "no_secret" | "bad_secret" | "no_app_url" | "unknown_client" | "connected" | "failed", detail?: string) { super(detail ?? code); }
 }
 
 export interface SyncDeps {
@@ -78,6 +78,8 @@ export interface SyncOptions {
   settings?: AgentSettings;
   /** Keep the knowledge document already in ElevenLabs instead of uploading the knowledge base again, for changes that do not touch it. */
   keepKnowledge?: boolean;
+  /** Write to an agent the admin connected by ID (`managed: false`). Only the explicit take-over on the Channels page sets this. */
+  takeOver?: boolean;
   /** Do not record a failure on the client's Channels page; the caller shows it where the change was made. */
   quiet?: boolean;
 }
@@ -89,6 +91,7 @@ export interface SyncOptions {
 export async function syncAgent(d: SyncDeps, tenantId: string, actor: string, opts: SyncOptions = {}): Promise<{ agentId: string; created: boolean; warnings: { group: string; detail: string }[] }> {
   const tenant = await d.data.getTenant(tenantId);
   if (!tenant) throw new SyncError("unknown_client");
+  if (tenant.integrations.elevenlabs?.managed === false && !opts.takeOver) throw new SyncError("connected"); // a hand-made agent is never written without an explicit take-over
   const settings = opts.settings ?? await d.data.getAgent(tenantId);
   const prevDoc = tenant.integrations.elevenlabs?.kbDocId;
   const reuseDoc = !!(opts.keepKnowledge && prevDoc);

@@ -36,7 +36,7 @@ export async function syncAgentAction(f: FormData) {
     if (!tools) throw new SyncError("no_secret");
     if (badHeaderSetting()) throw new SyncError("bad_secret", badHeaderSetting());
     if (!url.startsWith("https://")) throw new SyncError("no_app_url"); // ElevenLabs only calls https addresses
-    const r = await syncAgent({ api, data: store, appUrl: url, toolsSecret: tools, initSecret: process.env.ELEVENLABS_INIT_SECRET || tools }, id, actor);
+    const r = await syncAgent({ api, data: store, appUrl: url, toolsSecret: tools, initSecret: process.env.ELEVENLABS_INIT_SECRET || tools }, id, actor, { takeOver: f.get("takeOver") === "on" });
     if (r.created) q = "saved=created";
   } catch (e) {
     if (!(e instanceof SyncError)) throw e;

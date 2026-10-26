@@ -3,6 +3,7 @@ import { applyStudioChange, checkChoices, type ApplyDeps } from "@/lib/studio-ap
 import { modelRows } from "@/lib/agent-catalog";
 import { studioOf } from "@/lib/agent-studio";
 import { syncAgent, type SyncDeps } from "@/lib/agent-sync";
+import { switchAgent } from "@/lib/agent-switch";
 import { ElevenLabsError, type ElevenLabsApi } from "@/lib/elevenlabs-api";
 import { createPgData, type Db, type Q } from "@/lib/data/pg";
 import { makeDb } from "./helpers/pgdb";
@@ -66,6 +67,17 @@ const voiceForm = (over: Record<string, string | string[]> = {}) => form({
   stability: "0.5", similarity: "0.8", speed: "1", textNormalisation: "system_prompt", ...over,
 });
 const names = (calls: Call[]) => calls.map((c) => c.fn);
+
+describe("saving a section for an agent connected by ID", () => {
+  it("keeps the change in CallsDash only and sends nothing to ElevenLabs", async () => {
+    const { deps, data, tenant, calls } = await setup();
+    await switchAgent({ catalog: { getAgent: async () => ({ name: "Hand made" }) as never }, data }, tenant.id, "agent_handmade1", "admin");
+    const out = await applyStudioChange(deps, tenant.id, "admin", { section: "model", form: modelForm({ temperature: "0.15" }) });
+    expect(out).toEqual({ kind: "saved", reason: "connected" });
+    expect(calls).toEqual([]);
+    expect((await data.getAgent(tenant.id)).temperature).toBe(0.15);
+  });
+});
 
 describe("saving a section of the Assistant studio", () => {
   it("sends the change to ElevenLabs and stores it once ElevenLabs accepted it", async () => {

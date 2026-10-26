@@ -17,7 +17,7 @@ export type StudioOutcome =
   /** ElevenLabs accepted it and CallsDash saved it. `warnings` lists optional groups ElevenLabs did not accept. */
   | { kind: "applied"; warnings: { group: string; detail: string }[] }
   /** Saved in CallsDash only, because the assistant cannot be reached yet (`reason`). It is sent at the next sync. */
-  | { kind: "saved"; reason: "no_agent" | "no_api_key" | "no_secret" | "bad_secret" | "no_app_url" }
+  | { kind: "saved"; reason: "no_agent" | "connected" | "no_api_key" | "no_secret" | "bad_secret" | "no_app_url" }
   /** ElevenLabs refused it. Nothing was saved. */
   | { kind: "refused"; detail: string };
 
