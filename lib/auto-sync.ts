@@ -18,6 +18,7 @@ export async function autoSync(tenantId: string, actor: string) {
   const url = await appUrl();
   if (!url.startsWith("https://")) return;
   if (!(await store.getAgent(tenantId)).elevenLabsAgentId) return;
+  if ((await store.getTenant(tenantId))?.integrations.elevenlabs?.managed === false) return; // an agent connected by ID is only written when the admin presses Sync
   after(async () => {
     try {
       await syncAgent({ api, data: store, appUrl: url, toolsSecret: tools, initSecret: process.env.ELEVENLABS_INIT_SECRET || tools }, tenantId, actor);

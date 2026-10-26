@@ -74,3 +74,7 @@ ElevenLabs options that are undocumented or Enterprise only are left out on purp
 4. After the first invoice, compare it with **Usage and margin** and adjust the two fees.
 
 If ElevenLabs refuses something, the page shows its message; send that text so the request can be corrected.
+
+## Using another ElevenLabs agent
+
+Channels > *Use another ElevenLabs agent* points a client at an agent the admin made by hand in ElevenLabs (paste its `agent_…` ID). The app checks the ID exists under the API key's account and that no other client uses it, then switches. Nothing is written inside either agent. The agent left behind is listed under *Agents this client used before* with its sync state (`integrations.elevenlabs.others`), and one press switches back. A connected agent is not managed: auto-sync (`lib/auto-sync.ts`) skips it until *Sync to ElevenLabs* is pressed, which installs the booking tools and replaces the agent's text with CallsDash's. Code: `lib/agent-switch.ts`, `useAgentAction`.
