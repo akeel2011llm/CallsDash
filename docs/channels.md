@@ -84,3 +84,13 @@ The ElevenLabs request shapes below were written from the public documentation a
 - the "Powered by" line: sent as `platform_settings.widget.disable_banner`; ElevenLabs does not say whether a plan is needed, so after pressing "Update the assistant" open the website widget and look. A refusal shows as a warning on the Channels page and never loses the widget;
 - custom channel inbound `async_message` request and the reply signature (`ElevenLabs-Signature`, `t=<time>,v0=<HMAC-SHA256 of "time.body">`);
 - Instagram Graph send endpoint host and permissions for the connected account.
+
+## Duplicating a client
+
+Client page > *Duplicate client* (`/admin/clients/[id]/duplicate`, `lib/client-copy.ts`) makes a new client from an existing one under a new name, website and package.
+
+Copied: look and wording (colours, font, pattern, welcome and tagline, report footer), opening hours, closed days, alert rules, permissions, retention, low-balance rule, the assistant's instructions and studio options, and optionally the doctors (name, specialty, weekly hours) and the knowledge base. The old clinic's name (English and Arabic, any case) is replaced by the new name in all copied text.
+
+Never copied: bookings, conversations, patients, wallet and credits (the new client gets the first month of the package picked, like any new client), sign-ins, the contract, the ElevenLabs agent (the copy has none until Create or *Use another ElevenLabs agent*), Google calendar ids and doctor leave, WhatsApp, Instagram and phone settings, secrets, the logo, cover image and support contacts.
+
+Why: a client is found by its ElevenLabs agent id, its Instagram account id and its website, so two clients sharing any of them would receive each other's calls, messages and widget traffic; a shared Google calendar mixes two clinics' bookings. If anything fails while copying, the half-made client is deleted.
