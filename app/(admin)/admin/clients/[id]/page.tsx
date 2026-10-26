@@ -14,10 +14,11 @@ import { DoctorsManager } from "@/components/DoctorsManager";
 import { TryAssistant } from "@/components/TryAssistant";
 import { Badge, Notice, PageHead, Stat } from "@/components/ui";
 import { SubmitButton } from "@/components/SubmitButton";
+import { CopyChecklist } from "@/components/CopyChecklist";
 
-export default async function ClientAdmin({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ saved?: string; error?: string; cal?: string; doc?: string; clash?: string }> }) {
+export default async function ClientAdmin({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ saved?: string; error?: string; cal?: string; doc?: string; clash?: string; copied?: string }> }) {
   const { id } = await params;
-  const { saved, error, cal, doc, clash } = await searchParams;
+  const { saved, error, cal, doc, clash, copied } = await searchParams;
   const tenant = await getTenant(id);
   if (!tenant) notFound();
   const [{ t, locale }, w, agent, versions, doctors, ledger, audit, catalogue, bookings, logins, requests] = await Promise.all([
@@ -40,11 +41,24 @@ export default async function ClientAdmin({ params, searchParams }: { params: Pr
             <Link className="btn ghost" href={`/admin/clients/${id}/assistant`}>{t("nav.assistant")}</Link>
             <Link className="btn ghost" href={`/admin/clients/${id}/channels`}>{t("nav.channels")}</Link>
             <Link className="btn ghost" href={`/admin/clients/${id}/branding`}>{t("brand.open")}</Link>
+            <Link className="btn ghost" href={`/admin/clients/${id}/duplicate`}>{t("dup.open")}</Link>
             <form action={viewAsClient}><input type="hidden" name="tenantId" value={id} /><SubmitButton className="btn">{t("admin.viewAs")}</SubmitButton></form>
           </>
         }
       />
       {(error === "name" || error === "domain" || error === "confirm" || error === "plan" || error === "lastPlan" || error === "adjust" || error === "adjustTooMuch") && <Notice tone="warn">{t(`admin.err.${error}` as "admin.err.name")}</Notice>}
+      {copied && /^\d+\.\d+\.\d+$/.test(copied) && (() => {
+        const [nd, nk, nr] = copied.split(".");
+        return (
+          <Notice tone="ok">
+            <div className="stack" style={{ gap: ".5rem" }}>
+              <strong>{t("dup.done").replace("{doctors}", nd).replace("{knowledge}", nk).replace("{renamed}", nr)}</strong>
+              <span>{t("dup.careful.title")}</span>
+              <CopyChecklist t={t} />
+            </div>
+          </Notice>
+        );
+      })()}
       {asked.length > 0 && (
         <Notice tone="warn">
           {asked.map((r) => (

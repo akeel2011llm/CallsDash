@@ -8,6 +8,7 @@ import { safePath } from "./format";
 import { supabaseConfigured, supabaseServer } from "./supabase";
 import * as store from "./data";
 import { DuplicateError } from "./errors";
+import { duplicateClient, type CopyReport } from "./client-copy";
 import { nameKey } from "./tenant-keys";
 import { bookingService } from "./booking-service";
 import { autoSync } from "./auto-sync";
@@ -445,6 +446,31 @@ export async function adminCreateTenantAction(f: FormData) {
   }
   revalidatePath("/admin", "layout");
   redirect(`/admin/clients/${tenantId}/setup`);
+}
+
+/** A new client from an existing one (lib/client-copy.ts): same look, hours, rules and assistant text, none of its people, money or connections. */
+export async function adminDuplicateTenantAction(f: FormData) {
+  const { actor } = await requireAdmin();
+  const sourceId = str(f, "sourceId");
+  const fail = (q: string) => `/admin/clients/${sourceId}/duplicate?${q}`;
+  if (!(await store.getTenant(sourceId))) redirect("/admin");
+  const name = str(f, "name").replace(/\s+/g, " ");
+  if (!name) redirect(fail("error=name"));
+  const plan = await planFromForm(f);
+  if (!plan) redirect(fail("error=plan"));
+  const color = str(f, "color");
+  let report: CopyReport;
+  try {
+    report = await duplicateClient(store, sourceId, {
+      name: name.slice(0, 120), nameAr: str(f, "nameAr").slice(0, 120), domain: str(f, "domain").toLowerCase().slice(0, 200),
+      color: hex.test(color) ? color : "#0e7c86", plan, copyDoctors: f.get("copyDoctors") === "on", copyKnowledge: f.get("copyKnowledge") === "on",
+    }, actor);
+  } catch (e) {
+    if (e instanceof DuplicateError) redirect(fail(`error=${e.field}`));
+    throw e;
+  }
+  revalidatePath("/admin", "layout");
+  redirect(`/admin/clients/${report.tenantId}?copied=${report.doctors}.${report.knowledge}.${report.renamed}`);
 }
 
 /** Permanent. The admin must type the client's exact name; that is checked here, not only in the browser. */
