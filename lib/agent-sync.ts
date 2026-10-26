@@ -109,7 +109,7 @@ export async function syncAgent(d: SyncDeps, tenantId: string, actor: string, op
     }
     const warnings = await applyExtras(d.api, agentId, config, buildExtras({ tenant, doctors, settings }));
     if (!reuseDoc && prevDoc && prevDoc !== newDoc?.id) await d.api.deleteKnowledge(prevDoc).catch(() => undefined); // the old copy is no longer attached
-    await d.data.setIntegrations(tenantId, { ...tenant.integrations, elevenlabs: { kbDocId: newDoc?.id, syncedAt: new Date().toISOString(), widgetHosts: widgetHostnames(tenant, d.appUrl), version: AGENT_VERSION, ...(warnings.length ? { warnings } : {}) } }, actor, created ? "Created the ElevenLabs agent" : "Synced the agent to ElevenLabs");
+    await d.data.setIntegrations(tenantId, { ...tenant.integrations, elevenlabs: { kbDocId: newDoc?.id, syncedAt: new Date().toISOString(), widgetHosts: widgetHostnames(tenant, d.appUrl), version: AGENT_VERSION, managed: true, ...(tenant.integrations.elevenlabs?.others ? { others: tenant.integrations.elevenlabs.others } : {}), ...(warnings.length ? { warnings } : {}) } }, actor, created ? "Created the ElevenLabs agent" : "Synced the agent to ElevenLabs");
     if (tenant.allowedDomains.length) await d.data.setChannelStatus(tenantId, "website", "connected", actor);
     return { agentId, created, warnings };
   } catch (e) {

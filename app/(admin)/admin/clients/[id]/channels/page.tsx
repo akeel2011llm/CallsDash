@@ -5,7 +5,7 @@ import * as store from "@/lib/data";
 import { appUrl } from "@/lib/app-url";
 import { fmtDateTime } from "@/lib/format";
 import { testFailKey, testFailToShow } from "@/lib/whatsapp";
-import { saveInstagramAction, savePhoneAction, syncAgentAction } from "@/lib/channel-actions";
+import { saveInstagramAction, savePhoneAction, syncAgentAction, useAgentAction } from "@/lib/channel-actions";
 import { WhatsappCard } from "@/components/WhatsappCard";
 import { Badge, Notice, PageHead } from "@/components/ui";
 import { SubmitButton } from "@/components/SubmitButton";
@@ -64,6 +64,28 @@ export default async function Channels({ params, searchParams }: { params: Promi
         </dl>
         <small className="muted">{t("channels.agent.extras")}</small>
         <form action={syncAgentAction}>{hidden}<SubmitButton className="btn" type="submit">{agent.elevenLabsAgentId ? t("channels.agent.sync") : t("channels.agent.create")}</SubmitButton></form>
+        <div className="stack" style={{ gap: ".5rem", borderTop: "1px solid var(--line)", paddingTop: ".75rem" }}>
+          <h3 style={{ margin: 0 }}>{t("channels.agent.other.title")}</h3>
+          <p className="muted" style={{ margin: 0 }}>{t("channels.agent.other.help")}</p>
+          <form action={useAgentAction} className="row" style={{ alignItems: "flex-end", flexWrap: "wrap" }}>
+            {hidden}
+            <label style={{ flex: "1 1 18rem" }}>{t("channels.agent.other.id")}<input name="agentId" dir="ltr" placeholder="agent_…" required autoComplete="off" spellCheck={false} /></label>
+            <SubmitButton className="btn" type="submit">{t("channels.agent.other.use")}</SubmitButton>
+          </form>
+          {el?.others?.length ? (
+            <>
+              <strong>{t("channels.agent.other.before")}</strong>
+              <ul className="stack" style={{ listStyle: "none", padding: 0, margin: 0, gap: ".4rem" }}>
+                {el.others.map((o) => (
+                  <li key={o.id} className="row" style={{ justifyContent: "space-between", flexWrap: "wrap" }}>
+                    <span dir="ltr">{o.name ? `${o.name} · ` : ""}<code>{o.id}</code></span>
+                    <form action={useAgentAction}>{hidden}<input type="hidden" name="agentId" value={o.id} /><SubmitButton className="btn ghost" type="submit">{t("channels.agent.other.switch")}</SubmitButton></form>
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : null}
+        </div>
       </section>
 
       <section className="card stack">

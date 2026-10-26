@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { PROVIDER_LABEL, rowFor, type ModelRow } from "@/lib/agent-catalog";
+import { BOOKING_TESTED, PROVIDER_LABEL, rowFor, type ModelRow } from "@/lib/agent-catalog";
 import { CHOICES, LIMITS } from "@/lib/agent-studio";
 import { costLine, fmtBhd, fmtUsd, marginOf, marginTone, monthlyCostUsd, toBhd, type Fees } from "@/lib/pricing";
 import { RangeField } from "./RangeField";
@@ -69,9 +69,13 @@ export function ModelFields({ rows, defaultLlm, value, fees, rate, usage, today,
   if (row.deprecated?.inWarning || row.deprecated?.isDeprecated) notes.push(row.deprecated.replacement ? T("studio.model.deprecatedTo", { model: row.deprecated.replacement }) : T("studio.model.deprecated"));
   if (!row.temperature) notes.push(T("studio.model.noTemperature"));
   if (row.price.source !== "elevenlabs") notes.push(T(row.price.source === "estimate" ? "studio.model.estimateNote" : "studio.model.unknownNote"));
+  if (!BOOKING_TESTED.includes(row.id)) notes.push(T("studio.model.bookingNote"));
   notes.push(T("studio.model.arabicNote"));
 
-  const maxTokensCap = Math.min(LIMITS.maxTokens[1], row.maxOutputTokens ?? LIMITS.maxTokens[1]);
+  const maxTokensMin = LIMITS.maxTokens[0];
+  const maxTokensCap = Math.max(maxTokensMin, Math.min(LIMITS.maxTokens[1], row.maxOutputTokens ?? LIMITS.maxTokens[1]));
+  // 0 (no limit) or at least the minimum: the browser cannot express that gap with min/max alone
+  const checkTokens = (el: HTMLInputElement) => el.setCustomValidity(el.value !== "" && Number(el.value) > 0 && Number(el.value) < maxTokensMin ? T("studio.err.tokensLow", { min: maxTokensMin }) : "");
 
   return (
     <div className="stack">
@@ -165,8 +169,8 @@ export function ModelFields({ rows, defaultLlm, value, fees, rate, usage, today,
       <div className="grid two">
         <RangeField name="temperature" label={T("studio.model.temperature")} hint={row.temperature ? T("studio.model.temperatureHelp") : T("studio.model.noTemperature")} min={LIMITS.temperature[0]} max={LIMITS.temperature[1]} step={0.05} defaultValue={value.temperature} disabled={!row.temperature} />
         <label>{T("studio.model.maxTokens")}
-          <input type="number" name="maxTokens" min={0} max={maxTokensCap} step={1} defaultValue={value.maxTokens} inputMode="numeric" dir="ltr" />
-          <small className="muted">{T("studio.model.maxTokensHelp", { max: maxTokensCap })}</small>
+          <input type="number" name="maxTokens" min={0} max={maxTokensCap} step={1} defaultValue={value.maxTokens} inputMode="numeric" dir="ltr" onInput={(e) => checkTokens(e.currentTarget)} />
+          <small className="muted">{T("studio.model.maxTokensHelp", { min: maxTokensMin, max: maxTokensCap })}</small>
         </label>
         <label>{T("studio.model.effort")}
           <select name="reasoningEffort" value={effortValue} onChange={(e) => setEffort(e.target.value)}>

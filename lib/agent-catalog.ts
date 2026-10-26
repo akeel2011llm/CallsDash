@@ -98,6 +98,13 @@ export function daysToRetirement(id: string, today: string): number | null {
 /** The model an assistant uses until an admin picks one: ELEVENLABS_LLM on the server, else Gemini 2.5 Flash. */
 export const defaultLlm = () => process.env.ELEVENLABS_LLM || "gemini-2.5-flash";
 
+/**
+ * The models seen booking an appointment through these tools on a real assistant (Gemini 2.5 Flash, 2026-10-21). Any other
+ * model may work, but the screen asks for a test first: a real booking call on Gemini 3.5 Flash Lite ended with an error
+ * on 2026-10-25, and Google's forum has reports of Gemini 3 models going silent after a booking tool call.
+ */
+export const BOOKING_TESTED: readonly string[] = ["gemini-2.5-flash"];
+
 /** Anthropic's models from 4.7 on reject a custom temperature, so the agent is told to leave it out for them. */
 export const acceptsTemperature = (id: string) => !/^claude-(opus-4-[7-9]|opus-[5-9]|sonnet-[5-9]|haiku-[5-9])/i.test(id);
 

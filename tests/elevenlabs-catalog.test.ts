@@ -147,6 +147,11 @@ describe("reading the live agent", () => {
     });
     expect(mapLiveAgent(undefined)).toMatchObject({ toolCount: 0 });
   });
+  it("reads the instructions and the greetings", () => {
+    const live = mapLiveAgent({ conversation_config: { agent: { first_message: "Hi", prompt: { prompt: "# Role" } }, language_presets: { ar: { overrides: { agent: { first_message: "هلا" } } } } } });
+    expect(live).toMatchObject({ prompt: "# Role", firstMessage: "Hi", arabicFirstMessage: "هلا" });
+    expect(mapLiveAgent({}).prompt).toBeUndefined();
+  });
   it("fetches the agent by id", async () => {
     const { f, calls } = fakeFetch(() => ({ name: "A", conversation_config: {} }));
     expect((await createCatalogApi("k", f).getAgent("agent/1")).name).toBe("A");

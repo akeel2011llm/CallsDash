@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { applyExtras, ensureSharedTools, syncAgent, SyncError, TOOLS_KEY, type SyncDeps, type ToolsSetting } from "@/lib/agent-sync";
 import { AGENT_VERSION } from "@/lib/agent-config";
+import { switchAgent, SwitchError } from "@/lib/agent-switch";
 import { buildExtras, deepMerge, readableOn } from "@/lib/agent-extras";
 import { ElevenLabsError, createElevenLabsApi, type ElevenLabsApi } from "@/lib/elevenlabs-api";
 import { createPgData, type Db, type Q } from "@/lib/data/pg";
@@ -253,5 +254,57 @@ describe("ElevenLabs client requests", () => {
   it("turns an error response into an ElevenLabsError", async () => {
     const api = createElevenLabsApi("k", (async () => new Response("nope", { status: 401 })) as unknown as typeof fetch);
     await expect(api.createAgent({})).rejects.toMatchObject({ status: 401, detail: "nope" });
+  });
+});
+
+describe("connecting another agent", () => {
+  const catalog = (names: Record<string, string>) => ({
+    getAgent: async (id: string) => { if (!(id in names)) throw new ElevenLabsError(404, "not found"); return { name: names[id], toolCount: 0 } as never; },
+  });
+
+  it("switches to an agent made by hand, remembers the old one and switches back with its sync state", async () => {
+    const { deps, data, tenant } = await setup();
+    await syncAgent(deps, tenant.id, "admin");
+    const first = (await data.getAgent(tenant.id)).elevenLabsAgentId;
+    const before = (await data.getTenant(tenant.id))!.integrations.elevenlabs!;
+    const d = { catalog: catalog({ [first]: "CallsDash: Sync Clinic", agent_other12345: "Almosawi" }), data };
+
+    expect(await switchAgent(d, tenant.id, "  agent_other12345 ", "admin")).toEqual({ agentId: "agent_other12345", name: "Almosawi" });
+    expect((await data.getAgent(tenant.id)).elevenLabsAgentId).toBe("agent_other12345");
+    const now = (await data.getTenant(tenant.id))!.integrations.elevenlabs!;
+    expect(now).toMatchObject({ managed: false });
+    expect(now.kbDocId).toBeUndefined();
+    expect(now.others).toEqual([expect.objectContaining({ id: first, name: "CallsDash: Sync Clinic", syncedAt: before.syncedAt, version: before.version })]);
+
+    await switchAgent(d, tenant.id, first, "admin");
+    const back = (await data.getTenant(tenant.id))!.integrations.elevenlabs!;
+    expect(back).toMatchObject({ syncedAt: before.syncedAt, version: before.version, managed: true });
+    expect(back.others?.map((o) => o.id)).toEqual(["agent_other12345"]);
+  });
+
+  it("keeps the list of other agents when a sync runs, and a sync takes over the agent again", async () => {
+    const { deps, data, tenant } = await setup();
+    await syncAgent(deps, tenant.id, "admin");
+    const first = (await data.getAgent(tenant.id)).elevenLabsAgentId;
+    await switchAgent({ catalog: catalog({ [first]: "x", agent_other12345: "y" }), data }, tenant.id, "agent_other12345", "admin");
+    await syncAgent(deps, tenant.id, "admin");
+    const el = (await data.getTenant(tenant.id))!.integrations.elevenlabs!;
+    expect(el.managed).toBe(true);
+    expect(el.others?.map((o) => o.id)).toEqual([first]);
+  });
+
+  it("refuses bad ids, unknown agents, the same agent, a missing key and an agent another client uses", async () => {
+    const { deps, data, tenant } = await setup();
+    await syncAgent(deps, tenant.id, "admin");
+    const cur = (await data.getAgent(tenant.id)).elevenLabsAgentId;
+    const d = { catalog: catalog({ agent_other12345: "y" }), data };
+    const code = (p: Promise<unknown>) => p.then(() => "ok", (e) => (e as SwitchError).code);
+    expect(await code(switchAgent(d, tenant.id, "my agent", "a"))).toBe("bad_id");
+    expect(await code(switchAgent(d, tenant.id, "agent_missing1234", "a"))).toBe("not_found");
+    expect(await code(switchAgent(d, tenant.id, cur, "a"))).toBe("same");
+    expect(await code(switchAgent({ ...d, catalog: null }, tenant.id, "agent_other12345", "a"))).toBe("no_api_key");
+    const two = await data.createTenant({ name: "Second Clinic", nameAr: "", color: "#112233", domain: "second.example.bh", planType: "package", actor: "admin" });
+    await switchAgent(d, two.id, "agent_other12345", "admin");
+    expect(await code(switchAgent(d, tenant.id, "agent_other12345", "a"))).toBe("in_use");
   });
 });

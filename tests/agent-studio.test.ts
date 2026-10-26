@@ -70,6 +70,14 @@ describe("reading the stored studio", () => {
     const s = resolveStudio({ maxTokens: 0, silenceEndSeconds: 0, softTimeoutSeconds: 0, concurrencyLimit: 0 });
     expect([s.maxTokens, s.silenceEndSeconds, s.softTimeoutSeconds, s.concurrencyLimit]).toEqual([0, 0, 0, 0]);
   });
+  it("raises a saved longest reply that is too low to hold a booking request, and leaves 0 (no limit) alone", () => {
+    expect(LIMITS.maxTokens[0]).toBeGreaterThanOrEqual(300);
+    for (const stored of [1, 50, 120, 299]) expect(resolveStudio({ maxTokens: stored }).maxTokens).toBe(LIMITS.maxTokens[0]);
+    expect(resolveStudio({ maxTokens: LIMITS.maxTokens[0] }).maxTokens).toBe(LIMITS.maxTokens[0]);
+    expect(resolveStudio({ maxTokens: 800 }).maxTokens).toBe(800);
+    expect(resolveStudio({ maxTokens: 0 }).maxTokens).toBe(0);
+    expect(resolveStudio({ maxTokens: -5 }).maxTokens).toBe(0);
+  });
   it("splits a typed list of words on lines, commas and Arabic commas, without repeats or long entries", () => {
     expect(parseWordList("Al Noor, Dr Ali\nDr Ali؛ ، Zainab\n" + "y".repeat(60), 20, 50)).toEqual(["Al Noor", "Dr Ali", "Zainab"]);
     expect(parseWordList("a,b,c,d", 2, 50)).toEqual(["a", "b"]);
@@ -88,10 +96,22 @@ describe("saving a section", () => {
     expect(r.studio.parallelTools).toBe(false);
   });
   it("refuses numbers outside the allowed range and says which field", () => {
-    const r = parseSection("model", form({ llm: "", temperature: "1.5", maxTokens: "20", reasoningEffort: "", backupMode: "default", cascadeSeconds: "1" }), base());
+    const r = parseSection("model", form({ llm: "", temperature: "1.5", maxTokens: "9999", reasoningEffort: "", backupMode: "default", cascadeSeconds: "1" }), base());
     expect(r.errors.map((e) => e.field).sort()).toEqual(["cascadeSeconds", "maxTokens", "temperature"]);
     expect(r.errors.every((e) => e.key === "studio.err.range")).toBe(true);
     expect(r.top.temperature).toBe(0.3); // the saved value stays
+  });
+  it("refuses a longest reply too short for a booking request with a message that says why, and keeps the saved value", () => {
+    const fields = { llm: "", temperature: "0.3", reasoningEffort: "", backupMode: "default", cascadeSeconds: "4" };
+    const saved = { ...base(), studio: { maxTokens: 500 } };
+    for (const v of ["1", "50", "299"]) {
+      const r = parseSection("model", form({ ...fields, maxTokens: v }), saved);
+      expect(r.errors).toEqual([{ field: "maxTokens", key: "studio.err.tokensLow" }]);
+      expect(r.studio.maxTokens).toBe(500);
+    }
+    expect(parseSection("model", form({ ...fields, maxTokens: "50" }), base()).studio.maxTokens).toBe(0);
+    for (const v of ["0", "300", "4096"]) expect(parseSection("model", form({ ...fields, maxTokens: v }), saved).errors).toEqual([]);
+    expect(parseSection("model", form({ ...fields, maxTokens: "-1" }), saved).errors).toEqual([{ field: "maxTokens", key: "studio.err.range" }]);
   });
   it("refuses a model the page never offered", () => {
     const r = parseSection("model", form({ llm: "gpt-evil", temperature: "0.3", maxTokens: "0", reasoningEffort: "", backupMode: "default", cascadeSeconds: "4" }), base(), { llms: ["gpt-5.4-mini"] });
@@ -259,6 +279,13 @@ describe("an agent whose studio was saved", () => {
       conversation_config: { agent: { prompt: { max_tokens: 300, reasoning_effort: "low", enable_parallel_tool_calls: true, backup_llm_config: { preference: "override", order: ["gpt-4.1", "gemini-2.5-flash"] }, cascade_timeout_seconds: 6 } } },
     });
     expect((groupOf(saved("model", { backupMode: "disabled" }), "model") as { conversation_config: { agent: { prompt: { backup_llm_config: unknown } } } }).conversation_config.agent.prompt.backup_llm_config).toEqual({ preference: "disabled" });
+  });
+  it("never sends a longest reply below the minimum, even for a value saved before there was one", () => {
+    const sent = (maxTokens: number) => (groupOf(saved("model", { maxTokens }), "model") as { conversation_config: { agent: { prompt: { max_tokens: number } } } }).conversation_config.agent.prompt.max_tokens;
+    expect(sent(50)).toBe(LIMITS.maxTokens[0]);
+    expect(sent(299)).toBe(LIMITS.maxTokens[0]);
+    expect(sent(800)).toBe(800);
+    expect(sent(0)).toBe(-1);
   });
   it("puts the chosen model, voice models, duration and greetings into the core agent", () => {
     const s = saved("model", { llm: "gpt-5.4-mini", ttsModelEn: "eleven_multilingual_v2", ttsModelAr: "eleven_v3_conversational", maxDurationSeconds: 1200, greetingEn: "Welcome to {name}!", greetingAr: "أهلا في {name}" }, { temperature: 0.6, voiceEn: "ENvoice12345", voiceAr: "ARvoice12345" });

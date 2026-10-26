@@ -488,6 +488,14 @@ pre { background: var(--surface-2); border: 1px solid var(--line); border-radius
 .card[id], section[id] { scroll-margin-block-start: 3.4rem; }
 
 ul.notes { margin: 0; padding-inline-start: 1.1rem; display: grid; gap: .2rem; }
+
+/* line-by-line comparison of the assistant's instructions (Live in ElevenLabs) */
+pre.diff { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; max-block-size: 26rem; overflow: auto; padding: .5rem 0; }
+pre.diff span { display: block; padding-inline: .75rem; }
+pre.diff .diff-only-here { background: color-mix(in srgb, var(--bad) 12%, transparent); }
+pre.diff .diff-only-there { background: color-mix(in srgb, var(--ok) 13%, transparent); }
+pre.diff .diff-skip { color: var(--muted); font-style: italic; }
+.live-text > summary { cursor: pointer; }
 .range-value { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--muted); }
 
 /* the AI model picker */

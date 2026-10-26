@@ -97,6 +97,10 @@ export interface LiveAgent {
   guardrailsPromptInjection?: boolean;
   /** The widget's "Powered by" line is switched off (platform_settings.widget.disable_banner). */
   disableBanner?: boolean;
+  /** The assistant's instructions, its English greeting and its Arabic greeting (the Arabic language preset), as ElevenLabs holds them. */
+  prompt?: string;
+  firstMessage?: string;
+  arabicFirstMessage?: string;
 }
 
 export interface CatalogApi {
@@ -195,7 +199,8 @@ export function mapLiveAgent(raw: unknown): LiveAgent {
   const tts = obj(cc.tts);
   const turn = obj(cc.turn);
   const asr = obj(cc.asr);
-  const ar = obj(obj(obj(obj(cc.language_presets).ar).overrides).tts);
+  const arPreset = obj(obj(obj(cc.language_presets).ar).overrides);
+  const ar = obj(arPreset.tts);
   const ps = obj(a.platform_settings);
   const guard = obj(ps.guardrails);
   const tools = obj(prompt.built_in_tools);
@@ -209,6 +214,7 @@ export function mapLiveAgent(raw: unknown): LiveAgent {
     toolCount: arr(prompt.tool_ids).length + Object.values(tools).filter((t) => obj(t).name || obj(t).type).length,
     guardrailsFocus: bool(obj(guard.focus).is_enabled), guardrailsPromptInjection: bool(obj(guard.prompt_injection).is_enabled),
     disableBanner: bool(obj(ps.widget).disable_banner),
+    prompt: str(prompt.prompt), firstMessage: str(agent.first_message), arabicFirstMessage: str(obj(arPreset.agent).first_message),
   };
 }
 

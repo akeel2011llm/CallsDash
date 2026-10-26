@@ -3,8 +3,10 @@
  * the admin's real question after a change, "did that really reach the assistant?". Pure, so it is tested without ElevenLabs.
  */
 import { acceptsTemperature, defaultLlm } from "./agent-catalog";
+import { buildPrompt, greeting } from "./agent-config";
 import { studioOf, type SectionId } from "./agent-studio";
 import type { LiveAgent } from "./elevenlabs-catalog";
+import { normalizeText } from "./text-diff";
 import type { AgentSettings, Tenant } from "./types";
 import { resolveVoiceId } from "./voices";
 
@@ -77,6 +79,39 @@ export function liveRows(i: {
   // ElevenLabs leaves the field out while it is at its default (the line is shown), so a missing value reads as "shown"
   add("hideBanner", "widget", st.widget.hideBanner, live.disableBanner ?? false, true);
   return rows;
+}
+
+/** A longer text the assistant is given: its instructions and its two greetings. `there` is null when ElevenLabs holds no such text. */
+export interface LiveText {
+  id: "prompt" | "greetingEn" | "greetingAr";
+  /** What a sync from CallsDash would send, and what ElevenLabs holds now; both with whitespace tidied (see `normalizeText`). */
+  here: string;
+  there: string | null;
+  state: "same" | "differs";
+}
+
+/**
+ * The instructions and greetings next to what ElevenLabs holds. Someone can edit these inside ElevenLabs, and the next save in
+ * the studio (or Update the assistant) would put the CallsDash text back, so the page shows the difference line by line.
+ */
+export function liveTexts(i: {
+  settings: AgentSettings;
+  tenant: Pick<Tenant, "name" | "branding">;
+  doctors: Parameters<typeof buildPrompt>[1];
+  live: LiveAgent;
+}): LiveText[] {
+  const st = studioOf(i.settings);
+  const style = i.settings.arabicWrittenStyle;
+  const text = (id: LiveText["id"], here: string, there: string | undefined): LiveText => {
+    const h = normalizeText(here);
+    const t = there === undefined ? null : normalizeText(there);
+    return { id, here: h, there: t, state: t !== null && h === t ? "same" : "differs" };
+  };
+  return [
+    text("prompt", buildPrompt(i.settings, i.doctors), i.live.prompt),
+    text("greetingEn", greeting(i.tenant, "en", style, st.greetingEn), i.live.firstMessage),
+    text("greetingAr", greeting(i.tenant, "ar", style, st.greetingAr), i.live.arabicFirstMessage),
+  ];
 }
 
 /** How many rows disagree: what the page shows at a glance. */

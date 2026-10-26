@@ -8,6 +8,8 @@ import { appUrl } from "./app-url";
 import { safePath } from "./format";
 import { syncAgent, SyncError } from "./agent-sync";
 import { elevenLabsFromEnv } from "./elevenlabs-api";
+import { catalogFromEnv } from "./elevenlabs-catalog";
+import { switchAgent, SwitchError } from "./agent-switch";
 import { TEMPLATES, mainLanguage, sendBookingConfirmation, testFailKey, wordingOf, type Wording } from "./whatsapp";
 import { bookingRef } from "./booking-ref";
 import { badHeaderSetting } from "./header-safe";
@@ -43,6 +45,22 @@ export async function syncAgentAction(f: FormData) {
   done(id);
   const back = safePath(f.get("returnTo"), "");
   redirect(back ? `${back}${back.includes("?") ? "&" : "?"}${q}` : page(id, q));
+}
+
+/** Points the client at another ElevenLabs agent the admin already has (or back at one used before). Changes nothing inside ElevenLabs. */
+export async function useAgentAction(f: FormData) {
+  const { actor } = await requireAdmin();
+  const id = str(f, "tenantId");
+  await only(id);
+  let q = "saved=agent_switched";
+  try {
+    await switchAgent({ catalog: catalogFromEnv(), data: store }, id, str(f, "agentId"), actor);
+  } catch (e) {
+    if (!(e instanceof SwitchError)) throw e;
+    q = `error=agent_${e.code}`;
+  }
+  done(id);
+  redirect(page(id, q));
 }
 
 const httpsUrl = (s: string) => { try { return new URL(s).protocol === "https:"; } catch { return false; } };

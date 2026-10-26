@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { liveRows, liveSummary } from "@/lib/studio-live";
+import { liveRows, liveSummary, liveTexts } from "@/lib/studio-live";
 import { mapLiveAgent } from "@/lib/elevenlabs-catalog";
 import { applySection, parseSection, STUDIO_DEFAULTS } from "@/lib/agent-studio";
 import type { AgentSettings } from "@/lib/types";
@@ -111,5 +111,27 @@ describe("live read-back", () => {
     expect(rows.stability.state).toBe("same");
     expect(rows.similarity.state).toBe("same");
     expect(rows.speed.state).toBe("same");
+  });
+});
+
+describe("instructions and greetings read-back", () => {
+  const full = settings({ prompt: { identity: "You are Sara.", languages: "English and Arabic.", mayDo: "Book.", neverDo: "Diagnose.", emergencies: "Say 999.", handoff: "Take a message." } as never });
+  const t = { name: "MioC", branding: { displayName: "MioCclinic", displayNameAr: "" } } as never;
+  const texts = (live: ReturnType<typeof liveDefault>) => Object.fromEntries(liveTexts({ settings: full, tenant: t, doctors: [], live }).map((x) => [x.id, x]));
+
+  it("matches when ElevenLabs holds what a sync would send, ignoring whitespace", () => {
+    const here = texts({ ...liveDefault(), prompt: "x" });
+    const live = { ...liveDefault(), prompt: here.prompt.here.replace(/\n/g, "  \r\n"), firstMessage: here.greetingEn.here, arabicFirstMessage: here.greetingAr.here };
+    const r = texts(live);
+    expect([r.prompt.state, r.greetingEn.state, r.greetingAr.state]).toEqual(["same", "same", "same"]);
+  });
+
+  it("flags a hand-edited greeting and a missing Arabic one", () => {
+    const live = { ...liveDefault(), prompt: "x", firstMessage: "Hello!!, you are speaking with the AI assistant." };
+    const r = texts(live);
+    expect(r.greetingEn.state).toBe("differs");
+    expect(r.greetingEn.there).toBe("Hello!!, you are speaking with the AI assistant.");
+    expect(r.greetingAr.there).toBeNull();
+    expect(r.greetingAr.state).toBe("differs");
   });
 });

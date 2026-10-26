@@ -31,7 +31,9 @@ export const CHOICES = {
 /** Numeric limits, from ElevenLabs' documentation. `[min, max]`; a value of `off` means the option is switched off. */
 export const LIMITS = {
   temperature: [0, 1],
-  maxTokens: [50, 4096], // 0 means no limit
+  // 0 means no limit. A limit is also spent on a tool call: booking a visit is about 150 tokens of arguments, and a reply that stops
+  // inside them is a half-written tool call. 300 leaves room for a sentence before it.
+  maxTokens: [300, 4096],
   cascadeSeconds: [2, 15],
   stability: [0, 1],
   similarity: [0, 1],
@@ -371,7 +373,7 @@ export function parseSection(section: SectionId, f: FormData, current: AgentSett
       s.llm = llm && validModelId(llm) ? llm : d.llm;
       out.top.temperature = r.num("temperature", LIMITS.temperature, current.temperature, { step: 0.05 });
       s.maxTokens = r.num("maxTokens", [0, LIMITS.maxTokens[1]], d.maxTokens, { zero: true });
-      if (s.maxTokens !== 0 && s.maxTokens < LIMITS.maxTokens[0]) { r.bad("maxTokens"); s.maxTokens = d.maxTokens; }
+      if (s.maxTokens !== 0 && s.maxTokens < LIMITS.maxTokens[0]) { r.bad("maxTokens", "studio.err.tokensLow"); s.maxTokens = d.maxTokens; }
       s.reasoningEffort = r.choice("reasoningEffort", ["", ...CHOICES.reasoningEffort] as const, d.reasoningEffort);
       s.parallelTools = r.on("parallelTools");
       s.backupMode = r.choice("backupMode", CHOICES.backupMode, d.backupMode);

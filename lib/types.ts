@@ -130,6 +130,9 @@ export interface PromptSections {
   handoff: string;
 }
 
+/** An ElevenLabs agent a client is not using right now, with what CallsDash knew about it. */
+export interface StashedAgent { id: string; name?: string; kbDocId?: string; syncedAt?: string; version?: number; managed?: boolean }
+
 export interface AgentSettings {
   elevenLabsAgentId: string;
   /** The Assistant studio's options (lib/agent-studio.ts). Read through `studioOf`, which fills in the defaults. */
@@ -180,7 +183,7 @@ export interface Tenant {
 }
 
 export interface Integrations {
-  elevenlabs?: { kbDocId?: string; syncedAt?: string; error?: string; /** Hostnames the widget was allowed on at the last sync. */ widgetHosts?: string[]; /** Extra settings ElevenLabs refused on the last sync; the agent still works without them. */ warnings?: { group: string; detail: string }[]; /** AGENT_VERSION (lib/agent-config.ts) at the last sync; older means the agent misses newer rules or tools. */ version?: number };
+  elevenlabs?: { kbDocId?: string; syncedAt?: string; error?: string; /** Hostnames the widget was allowed on at the last sync. */ widgetHosts?: string[]; /** Extra settings ElevenLabs refused on the last sync; the agent still works without them. */ warnings?: { group: string; detail: string }[]; /** AGENT_VERSION (lib/agent-config.ts) at the last sync; older means the agent misses newer rules or tools. */ version?: number; /** Agents this client used before; each keeps its own knowledge document and sync state so the admin can switch back (lib/agent-switch.ts). */ others?: StashedAgent[]; /** False for an agent the admin connected by ID: CallsDash does not write to it on its own (auto-sync) until Sync is pressed. Missing means CallsDash manages it. */ managed?: boolean };
   whatsapp?: WhatsappSettings;
   /** `accountId` is the Instagram business account id Meta sends in webhooks; `inboundUrl` is the custom channel address copied from ElevenLabs. */
   instagram?: { accountId?: string; username?: string; inboundUrl?: string };
