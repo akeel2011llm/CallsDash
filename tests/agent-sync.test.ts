@@ -287,7 +287,7 @@ describe("connecting another agent", () => {
     await syncAgent(deps, tenant.id, "admin");
     const first = (await data.getAgent(tenant.id)).elevenLabsAgentId;
     await switchAgent({ catalog: catalog({ [first]: "x", agent_other12345: "y" }), data }, tenant.id, "agent_other12345", "admin");
-    await syncAgent(deps, tenant.id, "admin");
+    await syncAgent(deps, tenant.id, "admin", { takeOver: true });
     const el = (await data.getTenant(tenant.id))!.integrations.elevenlabs!;
     expect(el.managed).toBe(true);
     expect(el.others?.map((o) => o.id)).toEqual([first]);
@@ -306,5 +306,23 @@ describe("connecting another agent", () => {
     const two = await data.createTenant({ name: "Second Clinic", nameAr: "", color: "#112233", domain: "second.example.bh", planType: "package", actor: "admin" });
     await switchAgent(d, two.id, "agent_other12345", "admin");
     expect(await code(switchAgent(d, tenant.id, "agent_other12345", "a"))).toBe("in_use");
+  });
+});
+
+describe("an agent connected by ID is never written without a take-over", () => {
+  it("refuses a sync, writes nothing to ElevenLabs, and takes over only when asked", async () => {
+    const { deps, data, tenant, calls } = await setup();
+    await syncAgent(deps, tenant.id, "admin");
+    const first = (await data.getAgent(tenant.id)).elevenLabsAgentId;
+    await switchAgent({ catalog: { getAgent: async () => ({ name: "Hand made" }) as never }, data }, tenant.id, "agent_handmade1", "admin");
+    calls.length = 0;
+    await expect(syncAgent(deps, tenant.id, "admin")).rejects.toMatchObject({ code: "connected" });
+    await expect(syncAgent(deps, tenant.id, "admin", { settings: await data.getAgent(tenant.id), keepKnowledge: true, quiet: true })).rejects.toMatchObject({ code: "connected" });
+    expect(calls).toEqual([]);
+    expect((await data.getAgent(tenant.id)).elevenLabsAgentId).toBe("agent_handmade1");
+    await syncAgent(deps, tenant.id, "admin", { takeOver: true });
+    expect(calls.map((c) => c.fn)).toContain("updateAgent");
+    expect((await data.getTenant(tenant.id))!.integrations.elevenlabs!.managed).toBe(true);
+    expect(first).toBeTruthy();
   });
 });

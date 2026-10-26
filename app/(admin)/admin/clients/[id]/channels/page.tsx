@@ -27,6 +27,7 @@ export default async function Channels({ params, searchParams }: { params: Promi
     wa === "failed" ? store.getSetting(testFailKey(id)).then((v) => testFailToShow(v)) : Promise.resolve(null),
   ]);
   const el = tenant.integrations.elevenlabs;
+  const connected = Boolean(agent.elevenLabsAgentId) && el?.managed === false;
   const ig = tenant.integrations.instagram ?? {};
   const ph = tenant.integrations.phone ?? {};
   const base = `/admin/clients/${id}`;
@@ -48,9 +49,9 @@ export default async function Channels({ params, searchParams }: { params: Promi
       <section className="card stack">
         <div className="row" style={{ justifyContent: "space-between" }}>
           <h2 style={{ margin: 0 }}>{t("channels.agent.title")}</h2>
-          <Badge tone={agent.elevenLabsAgentId ? "ok" : "warn"}>{agent.elevenLabsAgentId ? t("channels.agent.ready") : t("channels.agent.none")}</Badge>
+          <Badge tone={agent.elevenLabsAgentId ? "ok" : "warn"}>{agent.elevenLabsAgentId ? t(connected ? "channels.agent.connected" : "channels.agent.ready") : t("channels.agent.none")}</Badge>
         </div>
-        <p className="muted">{t("channels.agent.help")}</p>
+        <p className="muted">{t(connected ? "channels.agent.connected.help" : "channels.agent.help")}</p>
         {el?.error && <Notice tone="warn"><strong>{t("channels.agent.error")}:</strong> <span dir="ltr">{el.error}</span></Notice>}
         {el?.warnings?.length ? (
           <Notice tone="warn">
@@ -62,8 +63,22 @@ export default async function Channels({ params, searchParams }: { params: Promi
           {agent.elevenLabsAgentId && <><dt>ID</dt><dd dir="ltr"><code>{agent.elevenLabsAgentId}</code> · <a href={`https://elevenlabs.io/app/agents`} target="_blank" rel="noreferrer">{t("channels.agent.open")}</a></dd></>}
           {el?.syncedAt && <><dt>{t("channels.agent.synced")}</dt><dd>{fmtDateTime(el.syncedAt, locale)}</dd></>}
         </dl>
-        <small className="muted">{t("channels.agent.extras")}</small>
-        <form action={syncAgentAction}>{hidden}<SubmitButton className="btn" type="submit">{agent.elevenLabsAgentId ? t("channels.agent.sync") : t("channels.agent.create")}</SubmitButton></form>
+        {connected ? (
+          <details className="confirm">
+            <summary className="muted" style={{ cursor: "pointer" }}>{t("channels.agent.takeover.title")}</summary>
+            <form action={syncAgentAction} className="stack" style={{ gap: ".5rem", marginBlockStart: ".5rem" }}>
+              {hidden}
+              <small className="muted">{t("channels.agent.takeover.warn")}</small>
+              <label className="inline"><input type="checkbox" name="takeOver" required />{t("channels.agent.takeover.tick")}</label>
+              <div><SubmitButton className="btn small danger" type="submit">{t("channels.agent.takeover.button")}</SubmitButton></div>
+            </form>
+          </details>
+        ) : (
+          <>
+            <small className="muted">{t("channels.agent.extras")}</small>
+            <form action={syncAgentAction}>{hidden}<SubmitButton className="btn" type="submit">{agent.elevenLabsAgentId ? t("channels.agent.sync") : t("channels.agent.create")}</SubmitButton></form>
+          </>
+        )}
         <div className="stack" style={{ gap: ".5rem", borderTop: "1px solid var(--line)", paddingTop: ".75rem" }}>
           <h3 style={{ margin: 0 }}>{t("channels.agent.other.title")}</h3>
           <p className="muted" style={{ margin: 0 }}>{t("channels.agent.other.help")}</p>

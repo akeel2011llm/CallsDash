@@ -234,6 +234,7 @@ export default async function AssistantStudioPage({ params, searchParams }: { pa
         }
       />
 
+      {tenant.integrations.elevenlabs?.managed === false && <Notice tone="ok">{T("studio.connected")} <Link href={`/admin/clients/${id}/channels`}>{T("nav.channels")}</Link></Notice>}
       {!agent.elevenLabsAgentId && <Notice tone="warn">{T("studio.noAgent")} <Link href={`/admin/clients/${id}/channels`}>{T("nav.channels")}</Link></Notice>}
 
       <div className="grid">
