@@ -490,6 +490,11 @@ pre { background: var(--surface-2); border: 1px solid var(--line); border-radius
 ul.notes { margin: 0; padding-inline-start: 1.1rem; display: grid; gap: .2rem; }
 
 /* line-by-line comparison of the assistant's instructions (Live in ElevenLabs) */
+.guide { display: flex; gap: .5rem; align-items: flex-start; }
+.guide.plain { border: 1px solid var(--line); border-radius: .6rem; padding: .6rem .75rem; }
+.guide > details { flex: 1; min-inline-size: 0; }
+.guide > details > summary { cursor: pointer; font-weight: 600; }
+.guide-x { flex: none; line-height: 1; font-size: 1.25rem; padding-block: .15rem; padding-inline: .6rem; }
 pre.diff { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; max-block-size: 26rem; overflow: auto; padding: .5rem 0; }
 pre.diff span { display: block; padding-inline: .75rem; }
 pre.diff .diff-only-here { background: color-mix(in srgb, var(--bad) 12%, transparent); }

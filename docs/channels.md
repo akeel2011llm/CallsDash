@@ -94,3 +94,7 @@ Copied: look and wording (colours, font, pattern, welcome and tagline, report fo
 Never copied: bookings, conversations, patients, wallet and credits (the new client gets the first month of the package picked, like any new client), sign-ins, the contract, the ElevenLabs agent (the copy has none until Create or *Use another ElevenLabs agent*), Google calendar ids and doctor leave, WhatsApp, Instagram and phone settings, secrets, the logo, cover image and support contacts.
 
 Why: a client is found by its ElevenLabs agent id, its Instagram account id and its website, so two clients sharing any of them would receive each other's calls, messages and widget traffic; a shared Google calendar mixes two clinics' bookings. If anything fails while copying, the half-made client is deleted.
+
+## Guides you can fold, hide and bring back
+
+A setup guide or a list of precautions is a `Guide` (`components/Guide.tsx`): folded by default, with an x that hides it for that person only (stored per person in `app_settings` as `guides.hidden.<user id>`). *Account* (the link at the bottom of the sidebar) lists the hidden guides with *Show again* and *Show all guides again*. To make another guide hideable, add its id and title key to `GUIDES` in `lib/guides.ts` and wrap it in `<Guide id="...">`. Today: the precautions after copying a client (`copy`) and the WhatsApp setup steps on Channels (`whatsapp`).

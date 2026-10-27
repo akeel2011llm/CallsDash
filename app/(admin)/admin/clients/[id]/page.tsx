@@ -15,6 +15,7 @@ import { TryAssistant } from "@/components/TryAssistant";
 import { Badge, Notice, PageHead, Stat } from "@/components/ui";
 import { SubmitButton } from "@/components/SubmitButton";
 import { CopyChecklist } from "@/components/CopyChecklist";
+import { Guide } from "@/components/Guide";
 
 export default async function ClientAdmin({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ saved?: string; error?: string; cal?: string; doc?: string; clash?: string; copied?: string }> }) {
   const { id } = await params;
@@ -50,13 +51,10 @@ export default async function ClientAdmin({ params, searchParams }: { params: Pr
       {copied && /^\d+\.\d+\.\d+$/.test(copied) && (() => {
         const [nd, nk, nr] = copied.split(".");
         return (
-          <Notice tone="ok">
-            <div className="stack" style={{ gap: ".5rem" }}>
-              <strong>{t("dup.done").replace("{doctors}", nd).replace("{knowledge}", nk).replace("{renamed}", nr)}</strong>
-              <span>{t("dup.careful.title")}</span>
-              <CopyChecklist t={t} />
-            </div>
-          </Notice>
+          <>
+            <Notice tone="ok">{t("dup.done").replace("{doctors}", nd).replace("{knowledge}", nk).replace("{renamed}", nr)}</Notice>
+            <Guide id="copy"><CopyChecklist t={t} /></Guide>
+          </>
         );
       })()}
       {asked.length > 0 && (
