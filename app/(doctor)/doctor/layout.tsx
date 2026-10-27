@@ -17,6 +17,7 @@ export default async function DoctorLayout({ children }: { children: React.React
         { href: "/doctor", label: t("doctor.nav.today"), icon: "home", exact: true, tab: true, group: t("nav.g.overview") },
         { href: "/doctor/bookings", label: t("nav.bookings"), icon: "check", tab: true },
         { href: "/doctor/bookings/new", label: t("bookings.new"), icon: "calendar", tab: true },
+        { href: "/doctor/settings", label: t("nav.settings"), icon: "gear" },
       ]}
     >
       {children}

@@ -11,8 +11,8 @@ export interface TabItem { href: string; label: string; icon?: string; exact?: b
  * The frame around every signed-in page. On a computer it is just the sidebar and the page. On a phone the sidebar
  * becomes a drawer opened from a top bar, and the most-used pages sit in a bar at the bottom within thumb reach.
  */
-export function ShellFrame({ style, sidebar, title, logo, tabs, menuLabel, moreLabel, children }: {
-  style?: React.CSSProperties; sidebar: React.ReactNode; title: string; logo: React.ReactNode; tabs: TabItem[];
+export function ShellFrame({ style, sidebar, title, logo, home, settings, tabs, menuLabel, moreLabel, children }: {
+  style?: React.CSSProperties; sidebar: React.ReactNode; title: string; logo: React.ReactNode; home: string; settings?: { href: string; label: string }; tabs: TabItem[];
   menuLabel: string; moreLabel: string; children: React.ReactNode;
 }) {
   const path = usePathname();
@@ -32,8 +32,11 @@ export function ShellFrame({ style, sidebar, title, logo, tabs, menuLabel, moreL
         <button type="button" className="icon-btn" aria-label={menuLabel} aria-expanded={open} onClick={() => setOpen((o) => !o)}>
           <Icon name={open ? "close" : "menu"} size={22} />
         </button>
-        <span className="logo" aria-hidden>{logo}</span>
-        <strong className="topbar-title">{title}</strong>
+        <Link href={home} className="topbar-home">
+          <span className="logo" aria-hidden>{logo}</span>
+          <strong className="topbar-title">{title}</strong>
+        </Link>
+        {settings && <Link href={settings.href} className="icon-btn" aria-label={settings.label}><Icon name="gear" size={22} /></Link>}
       </header>
       {sidebar}
       <div className="backdrop" onClick={() => setOpen(false)} aria-hidden />

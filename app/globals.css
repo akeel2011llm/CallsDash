@@ -81,7 +81,8 @@ small { font-size: .82rem; }
   --sb-bg: var(--brand); --sb-text: var(--on-brand); --sb-muted: color-mix(in srgb, var(--on-brand) 72%, transparent); --sb-line: color-mix(in srgb, var(--on-brand) 18%, transparent);
   --sb-hover: color-mix(in srgb, var(--on-brand) 12%, transparent); --sb-active-bg: color-mix(in srgb, var(--on-brand) 22%, transparent); --sb-active-text: var(--on-brand);
 }
-.brand { display: flex; gap: .75rem; align-items: center; padding: .25rem .4rem; }
+.brand { display: flex; gap: .75rem; align-items: center; padding: .25rem .4rem; color: inherit; border-radius: calc(var(--radius) - 2px); }
+a.brand:hover { text-decoration: none; background: var(--sb-hover); }
 .brand strong { font-family: var(--font-head); line-height: 1.2; display: block; }
 .brand small { display: block; color: var(--sb-muted); }
 .logo {
@@ -365,6 +366,8 @@ pre { background: var(--surface-2); border: 1px solid var(--line); border-radius
     background: var(--surface); border-block-end: 1px solid var(--line); box-shadow: var(--shadow);
   }
   .topbar .logo { inline-size: 34px; block-size: 34px; }
+  .topbar-home { display: flex; align-items: center; gap: .6rem; min-inline-size: 0; flex: 1; color: inherit; }
+  .topbar-home:hover { text-decoration: none; }
   .topbar-title { font-family: var(--font-head); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .sidebar {
     position: fixed; inset-block: 0; inset-inline-start: 0; z-index: 50; block-size: 100dvh; inline-size: min(310px, 86vw);
