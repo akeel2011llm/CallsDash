@@ -35,17 +35,21 @@ export async function Shell({
   const support = branding?.supportPhone || branding?.supportEmail;
   const tabs = (nav.some((n) => n.tab) ? nav.filter((n) => n.tab) : nav).slice(0, 4);
   const logo = branding?.logoUrl ? <img src={branding.logoUrl} alt="" /> : title.trim().charAt(0);
+  // the first item of every portal's menu is its home page
+  const home = nav[0]?.href ?? "/";
   return (
     <ShellFrame
       style={vars as React.CSSProperties | undefined}
       title={title}
       logo={logo}
+      home={home}
+      settings={nav.find((n) => n.icon === "gear")}
       tabs={tabs.map((n) => ({ ...n, label: n.short ?? n.label }))}
       menuLabel={t("nav.menu")}
       moreLabel={t("nav.more")}
       sidebar={(
       <aside className="sidebar" data-style={branding ? sidebarOf(branding) : "dark"}>
-        <div className="brand">
+        <Link className="brand" href={home} aria-label={`${title}: ${t("nav.home")}`}>
           <span className="logo" aria-hidden>
             {logo}
           </span>
@@ -53,7 +57,7 @@ export async function Shell({
             <strong>{title}</strong>
             {subtitle && <small>{subtitle}</small>}
           </div>
-        </div>
+        </Link>
         <nav>
           {nav.map((n) => (
             <div key={n.href} style={{ display: "contents" }}>
@@ -74,7 +78,6 @@ export async function Shell({
           )}
           <InstallPrompt label={t("pwa.install")} iosHint={t("pwa.iosHint")} />
           <Suspense fallback={null}><LocaleSwitch locale={locale} /></Suspense>
-          <Link className="btn ghost" href="/account"><Icon name="user" size={18} />{t("nav.account")}</Link>
           <form action={logout}><SubmitButton className="btn ghost" type="submit"><Icon name="logout" size={18} />{t("nav.signOut")}</SubmitButton></form>
           {!branding?.hidePoweredBy && <div className="powered">Powered by CallsDash</div>}
         </div>
