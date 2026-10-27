@@ -5,6 +5,7 @@ import { adminDuplicateTenantAction } from "@/lib/actions";
 import { getDoctors, getKnowledge, getTenant, listPackages } from "@/lib/data";
 import { PlanPicker } from "@/components/PlanPicker";
 import { CopyChecklist } from "@/components/CopyChecklist";
+import { Guide } from "@/components/Guide";
 import { Notice, PageHead } from "@/components/ui";
 import { SubmitButton } from "@/components/SubmitButton";
 
@@ -34,10 +35,7 @@ export default async function DuplicateClient({ params, searchParams }: { params
         <label className="inline"><input type="checkbox" name="copyKnowledge" defaultChecked />{t("dup.copyKnowledge").replace("{n}", String(knowledge.length))}</label>
         <SubmitButton className="btn" type="submit">{t("dup.create")}</SubmitButton>
       </form>
-      <section className="card stack" style={{ maxWidth: 560 }}>
-        <h2 style={{ margin: 0 }}>{t("dup.careful.title")}</h2>
-        <CopyChecklist t={t} />
-      </section>
+      <div style={{ maxWidth: 560 }}><Guide id="copy"><CopyChecklist t={t} /></Guide></div>
     </>
   );
 }

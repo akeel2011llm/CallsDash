@@ -6,6 +6,7 @@ import {
 import type { Channel, Locale, Tenant } from "@/lib/types";
 import { Badge, Notice } from "@/components/ui";
 import { CopyButton } from "@/components/CopyButton";
+import { Guide } from "@/components/Guide";
 import { SubmitButton } from "@/components/SubmitButton";
 
 const TONE = { off: "neutral", pending: "warn", connected: "ok" } as const;
@@ -125,9 +126,7 @@ export async function WhatsappCard({ tenant, testFail, wa }: { tenant: Tenant; t
         <div><SubmitButton className="btn" type="submit">{t("channels.save")}</SubmitButton></div>
       </form>
 
-      <details open={missing.phoneId || missing.template || undefined}>
-        <summary style={{ cursor: "pointer" }}><strong>{t("channels.wa.make.title")}</strong></summary>
-        <div className="stack" style={{ marginBlockStart: ".75rem" }}>
+      <Guide id="whatsapp" plain>
           <strong>{t("channels.wa.link.title")}</strong>
           <ol className="stack" style={{ gap: ".4rem", paddingInlineStart: "1.2rem", margin: 0 }}>
             <li>{t("channels.wa.link.s1")}</li>
@@ -175,8 +174,7 @@ export async function WhatsappCard({ tenant, testFail, wa }: { tenant: Tenant; t
             </div>
           ))}
           <small className="muted">{t("channels.wa.cost")}</small>
-        </div>
-      </details>
+      </Guide>
 
       <div className="stack" style={{ gap: ".5rem" }}>
         <strong>{t("channels.wa.preview.title")}</strong>

@@ -15,7 +15,7 @@ const read = (p: string) => readFileSync(join(root, p), "utf8");
 
 const SCREENS = [
   "components/WhatsappCard.tsx", "components/BookingDetailView.tsx", "components/NewBookingView.tsx", "components/BookingList.tsx",
-  "lib/channel-actions.ts", "lib/manage-actions.ts", "lib/actions.ts",
+  "lib/channel-actions.ts", "lib/manage-actions.ts", "lib/actions.ts", "lib/guides.ts",
 ];
 const FAMILIES = /^(?:bookings\.wa\.|channels\.wa\.|bookings\.ref$|channels\.err\.(?:badMapUrl|sameTemplate)$|channels\.saved\.wa_test$)/;
 const SKIPPED = ["channel_off", "confirmations_off", "not_configured", "bad_phone", "no_agent"];
