@@ -21,6 +21,7 @@ export interface DB {
   alerts: Alert[];
   audit: import("./types").AuditEntry[];
   staffRequests: import("./types").StaffRequest[];
+  customers: import("./types").Customer[];
   toolCalls: import("./types").AgentToolCall[];
   profiles: import("./types").Profile[];
   secrets: Record<string, import("./types").TenantSecrets>;
@@ -323,6 +324,18 @@ export function seed(): DB {
       { id: "u_manager_smile", tenantId: "t_smile", role: "manager", fullName: "Dr. Yusuf Ebrahim", email: "yusuf@smile.example.bh", disabled: false, mustChangePassword: true, createdAt: iso(nowMs - 11 * DAY) },
     ],
     toolCalls: [],
+    customers: [
+      {
+        id: "cu1", tenantId: "t_alnoor", phone: "+97336001122", name: "Hessa Al Mannai", language: "ar", notes: "Prefers appointments after 4 pm.",
+        createdAt: iso(nowMs - 40 * DAY), updatedAt: iso(nowMs - 3 * 3_600_000), lastContactAt: iso(nowMs - 3 * 3_600_000), conversationIds: [],
+        history: [{ at: iso(nowMs - 3 * 3_600_000), channel: "phone", summary: "Asked to speak to the doctor about test results; staff will call back." }],
+      },
+      {
+        id: "cu2", tenantId: "t_alnoor", phone: "+97339887766", name: "Omar Yusuf", language: "en", email: "omar@example.com", notes: "",
+        createdAt: iso(nowMs - 12 * DAY), updatedAt: iso(nowMs - 26 * 3_600_000), lastContactAt: iso(nowMs - 26 * 3_600_000), conversationIds: [],
+        history: [{ at: iso(nowMs - 26 * 3_600_000), channel: "whatsapp", summary: "Asked for a call back about last week's invoice." }],
+      },
+    ],
     staffRequests: [
       { id: "sr1", tenantId: "t_alnoor", kind: "handoff", name: "Hessa Al Mannai", phone: "+97336001122", text: "Wants to speak to the doctor about test results.", urgent: true, language: "ar", status: "open", createdAt: iso(nowMs - 3 * 3_600_000) },
       { id: "sr2", tenantId: "t_alnoor", kind: "message", name: "Omar Yusuf", phone: "+97339887766", text: "Please call back about the invoice for last week's visit.", urgent: false, language: "en", status: "open", createdAt: iso(nowMs - 26 * 3_600_000) },

@@ -91,7 +91,7 @@ Client page > *Duplicate client* (`/admin/clients/[id]/duplicate`, `lib/client-c
 
 Copied: look and wording (colours, font, pattern, welcome and tagline, report footer), opening hours, closed days, alert rules, permissions, retention, low-balance rule, the assistant's instructions and studio options, and optionally the doctors (name, specialty, weekly hours) and the knowledge base. The old clinic's name (English and Arabic, any case) is replaced by the new name in all copied text.
 
-Never copied: bookings, conversations, patients, wallet and credits (the new client gets the first month of the package picked, like any new client), sign-ins, the contract, the ElevenLabs agent (the copy has none until Create or *Use another ElevenLabs agent*), Google calendar ids and doctor leave, WhatsApp, Instagram and phone settings, secrets, the logo, cover image and support contacts.
+Never copied: bookings, conversations, patients, customers, wallet and credits (the new client gets the first month of the package picked, like any new client), sign-ins, the contract, the ElevenLabs agent (the copy has none until Create or *Use another ElevenLabs agent*), Google calendar ids and doctor leave, WhatsApp, Instagram and phone settings, secrets, the logo, cover image and support contacts.
 
 Why: a client is found by its ElevenLabs agent id, its Instagram account id and its website, so two clients sharing any of them would receive each other's calls, messages and widget traffic; a shared Google calendar mixes two clinics' bookings. If anything fails while copying, the half-made client is deleted.
 

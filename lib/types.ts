@@ -67,6 +67,39 @@ export interface StaffRequest {
   handledAt?: string;
 }
 
+/** One conversation with a customer, kept on their record so staff and the assistant can see what happened before. */
+export interface CustomerVisit {
+  at: string;
+  channel: Channel;
+  conversationId?: string;
+  summary: string;
+}
+
+/**
+ * Someone the assistant has talked to, found again by phone number (the last 8 digits, so +973 and local forms match). The
+ * assistant may greet a returning customer by first name; anything more (notes, history) is only given once the CPR number
+ * the customer states matches the one on file.
+ */
+export interface Customer {
+  id: string;
+  tenantId: string;
+  phone: string;
+  name: string;
+  /** The 9-digit CPR number, when the customer has given it. */
+  cpr?: string;
+  language?: Locale;
+  email?: string;
+  /** What staff or the assistant noted: preferences, things to remember. Not for medical details. */
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
+  lastContactAt?: string;
+  /** ElevenLabs conversation ids the assistant linked to this customer, so the post-call save finds them again. */
+  conversationIds: string[];
+  /** Newest first, at most 50. */
+  history: CustomerVisit[];
+}
+
 export interface Permissions {
   editPrompt: boolean;
   editVoice: boolean;

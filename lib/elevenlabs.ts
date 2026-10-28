@@ -22,6 +22,8 @@ export interface ParsedCall {
   agentId: string;
   externalId: string;
   conversation: NewConversation;
+  /** The customer's phone number when the payload carries one (a phone call or WhatsApp chat), as ElevenLabs wrote it. */
+  callerPhone?: string;
 }
 
 const hasArabic = (s: string) => /[؀-ۿ]/.test(s);
@@ -71,9 +73,13 @@ export function parsePostCall(body: Json): ParsedCall | null {
 
   const language: Locale = String(meta.main_language ?? "").startsWith("ar") || hasArabic(transcript.map((t) => t.text).join(" ")) ? "ar" : "en";
   const startedSec = Number(meta.start_time_unix_secs);
+  // the number our own start-of-conversation webhook was given (lib/agent-context.ts), else the ones ElevenLabs records itself
+  const callerPhone = [dyn.caller_phone, dyn.system__caller_id, meta.phone_call?.external_number, meta.whatsapp?.whatsapp_user_id]
+    .map((v) => String(v ?? "").trim()).find((v) => v.replace(/\D/g, "").length >= 8);
   return {
     agentId,
     externalId,
+    ...(callerPhone ? { callerPhone } : {}),
     conversation: {
       channel, mode, language, outcome, transcript,
       startedAt: new Date((Number.isFinite(startedSec) && startedSec > 0 ? startedSec : Date.now() / 1000) * 1000).toISOString(),

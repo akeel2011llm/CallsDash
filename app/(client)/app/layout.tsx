@@ -26,6 +26,7 @@ export default async function ClientLayout({ children }: { children: React.React
         { href: "/app/attention", label: t("nav.attention"), short: t("nav.attention.short"), icon: "flag", tab: true, badge: attention || undefined },
         { href: "/app/messages", label: t("nav.messages"), icon: "inbox", badge: openRequests || undefined },
         { href: "/app/bookings", label: t("nav.bookings"), icon: "check", tab: true },
+        { href: "/app/customers", label: t("nav.customers"), icon: "contact" },
         { href: "/app/calendar", label: t("nav.calendar"), icon: "calendar" },
         { href: "/app/knowledge", label: t("nav.knowledge"), icon: "book", group: t("nav.g.receptionist") },
         { href: "/app/agent", label: t("nav.agent"), icon: "sliders" },

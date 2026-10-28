@@ -11,7 +11,7 @@ import { USD_TO_BHD } from "./pricing";
 import type {
   AgentToolCall,
   NewConversation,
-  AgentSettings, Booking, BookingMessage, BookingStatus, Channel, Conversation, ChatSession, Doctor, Locale, Permissions, Profile, StaffRequest, Tenant, TenantSecrets,
+  AgentSettings, Booking, BookingMessage, BookingStatus, Channel, Conversation, ChatSession, Customer, Doctor, Locale, Permissions, Profile, StaffRequest, Tenant, TenantSecrets,
 } from "./types";
 
 /**
@@ -120,6 +120,32 @@ export const getAlerts = (tenantId?: string) =>
   db().alerts.filter((a) => !tenantId || a.tenantId === tenantId).sort((a, b) => b.at.localeCompare(a.at));
 export const getStaffRequests = (tenantId: string) =>
   db().staffRequests.filter((r) => r.tenantId === tenantId).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+
+/** Customers of a client, the most recently in touch first. */
+export const getCustomers = (tenantId: string) =>
+  (db().customers ??= []).filter((c) => c.tenantId === tenantId).sort((a, b) => (b.lastContactAt ?? b.createdAt).localeCompare(a.lastContactAt ?? a.createdAt));
+export const getCustomer = (tenantId: string, customerId: string) => (db().customers ??= []).find((c) => c.tenantId === tenantId && c.id === customerId);
+/** Finds a customer by the last 8 digits of the phone number or by a linked ElevenLabs conversation id. */
+export const findCustomer = (tenantId: string, by: { phoneKey?: string; conversationId?: string }) =>
+  (db().customers ??= []).find((c) => c.tenantId === tenantId
+    && ((by.phoneKey && c.phone.replace(/\D/g, "").slice(-8) === by.phoneKey) || (by.conversationId && c.conversationIds.includes(by.conversationId))));
+/** Adds the customer (no existing id) or replaces the stored one; the new id is returned inside the record. */
+export function putCustomer(tenantId: string, c: Omit<Customer, "id" | "tenantId"> & { id?: string }, actor: string): Customer {
+  const list = (db().customers ??= []);
+  const i = c.id ? list.findIndex((x) => x.tenantId === tenantId && x.id === c.id) : -1;
+  const saved: Customer = { ...structuredClone(c), id: i >= 0 ? list[i].id : id("cu"), tenantId };
+  if (i >= 0) list[i] = saved; else list.push(saved);
+  // the assistant saves after every conversation; only people's own changes belong in the audit log
+  if (actor !== "assistant") audit(actor, `${i >= 0 ? "Customer updated" : "Customer added"}: ${saved.name || saved.phone}`, tenantId);
+  return saved;
+}
+export function deleteCustomer(tenantId: string, customerId: string, actor: string) {
+  const d = db();
+  const list = (d.customers ??= []);
+  const before = list.length;
+  d.customers = list.filter((x) => !(x.tenantId === tenantId && x.id === customerId));
+  if (d.customers.length < before) audit(actor, "Customer deleted", tenantId);
+}
 
 export function addStaffRequest(tenantId: string, r: Pick<StaffRequest, "kind" | "name" | "phone" | "text" | "urgent" | "language"> & { conversationId?: string }) {
   const req: StaffRequest = { ...r, id: id("sr"), tenantId, status: "open", createdAt: now().toISOString() };
@@ -435,7 +461,7 @@ export function deleteTenant(tenantId: string, actor: string) {
   delete d.agents[tenantId];
   delete d.secrets[tenantId];
   const lists = d as unknown as Record<string, { tenantId?: string }[]>;
-  for (const k of ["agentVersions", "doctors", "bookings", "conversations", "knowledge", "unanswered", "batches", "ledger", "alerts", "audit", "topUpRequests", "staffRequests", "profiles", "chatSessions"])
+  for (const k of ["agentVersions", "doctors", "bookings", "conversations", "knowledge", "unanswered", "batches", "ledger", "alerts", "audit", "topUpRequests", "staffRequests", "customers", "profiles", "chatSessions"])
     lists[k] = lists[k].filter((x) => x.tenantId !== tenantId);
   audit(actor, `Deleted client "${t.name}"`);
 }
