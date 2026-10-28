@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { parsePostCall, unansweredConfirmation, verifySignature } from "@/lib/elevenlabs";
-import { findTenantByAgent, getAgent, getSetting, recordConversation } from "@/lib/data";
+import { findTenantByAgent, getAgent, getData, getSetting, recordConversation } from "@/lib/data";
 import { conversationCostUsd, ratesFor } from "@/lib/costing";
 import { FEES_KEY, pricesKey } from "@/lib/pricing";
+import { recordVisit } from "@/lib/customers";
 
 export const dynamic = "force-dynamic";
 
@@ -30,5 +31,12 @@ export async function POST(req: Request) {
     .then(([agent, fees, prices]) => conversationCostUsd(parsed.conversation, ratesFor(agent, fees, prices)))
     .catch(() => undefined);
   const res = await recordConversation(tenant.id, { ...parsed.conversation, costUsd });
+  // the customer's record gets this conversation (a failure here must never lose or fail the conversation that is already stored)
+  if (!res.duplicate) {
+    const c = parsed.conversation;
+    await recordVisit(await getData(), tenant.id, {
+      conversationId: parsed.externalId, phone: parsed.callerPhone, channel: c.channel, language: c.language, summary: c.summary || c.transcript.find((l) => l.role === "patient")?.text || "", at: c.startedAt,
+    }).catch((e) => console.error("could not save the customer's conversation", e));
+  }
   return NextResponse.json({ ok: true, duplicate: res.duplicate, credits: res.conversation.creditsCharged });
 }

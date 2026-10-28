@@ -67,7 +67,7 @@ function brandingFor(src: Tenant, input: CopyInput, rename: (s: string) => strin
  * Makes a new client from an existing one: look, hours, closures, rules, permissions, assistant instructions and options, and
  * optionally the doctors and the knowledge base, with the old clinic's name replaced by the new one.
  *
- * Never copied, because each would tie the two clinics together or leak one clinic's data to the other: patients, bookings,
+ * Never copied, because each would tie the two clinics together or leak one clinic's data to the other: patients, customers, bookings,
  * conversations, credits and the wallet, sign-ins, the ElevenLabs agent, Google calendar ids, WhatsApp, Instagram and phone
  * settings, secrets, the contract, the logo and the support contacts. A failure part-way removes the half-made client.
  */

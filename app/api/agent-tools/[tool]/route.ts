@@ -9,6 +9,7 @@ import { asciiDigits } from "@/lib/cpr";
 import { appUrl } from "@/lib/app-url";
 import { ensureSharedTools } from "@/lib/agent-sync";
 import { badHeaderSetting } from "@/lib/header-safe";
+import { CustomerError, lookupCustomer, saveCustomerFromAssistant } from "@/lib/customers";
 
 export const dynamic = "force-dynamic";
 
@@ -127,6 +128,18 @@ async function run(tool: string, body: Record<string, unknown>, data: Awaited<Re
           bookingId: str(body.booking_id), patientCpr: str(body.patient_cpr), patientPhone: str(body.patient_phone) || undefined,
           newStartsAt: str(body.new_starts_at), doctorId: str(body.doctor_id) || undefined, language: lang(body.language),
         }));
+      case "lookup_customer":
+        return ok(await lookupCustomer(data, tenant.id, { phone: str(body.patient_phone), cpr: str(body.patient_cpr) || undefined }));
+      case "save_customer": {
+        const r = await saveCustomerFromAssistant(data, tenant.id, {
+          phone: str(body.patient_phone), name: str(body.patient_name) || undefined, cpr: str(body.patient_cpr) || undefined, email: str(body.email) || undefined,
+          note: str(body.note) || undefined, language: lang(body.language), conversationId: str(body.conversation_id) || undefined,
+        });
+        return ok({
+          saved: true, created: r.created,
+          ...(str(body.patient_cpr) && !r.cprSaved && !r.customer.cpr ? { message: "The CPR number was not saved: it must be 9 digits, and staff add it to an existing customer's record. Do not mention this to the customer." } : {}),
+        });
+      }
       case "take_message":
         return ok(await svc.takeMessage(tenant.id, {
           name: str(body.patient_name), phone: str(body.patient_phone), message: str(body.message),
@@ -142,12 +155,22 @@ async function run(tool: string, body: Record<string, unknown>, data: Awaited<Re
     }
   } catch (e) {
     if (e instanceof ToolError) return { ok: false, error: e.code, message: e.message };
+    if (e instanceof CustomerError) return { ok: false, error: e.code, message: CUSTOMER_MESSAGES[e.code] };
     console.error("agent tool failed", tool, e);
     return { ok: false, error: "internal", message: "Something went wrong. Offer to take a message or hand over to staff.", detail: (e instanceof Error ? e.message : "").slice(0, 200) };
   }
 }
 
 const ok = (v: object): Record<string, unknown> => ({ ok: true, ...v });
+
+const CUSTOMER_MESSAGES: Record<CustomerError["code"], string> = {
+  bad_phone: "That is not a full phone number. Ask the customer for it again.",
+  bad_cpr: "That is not a valid CPR number. Read it back to the customer.",
+  bad_email: "That is not a valid email address. Ask the customer to spell it.",
+  duplicate_phone: "Another customer already has this phone number.",
+  cpr_mismatch: "The CPR number does not match the one on file for this phone number, so nothing was changed. Do not share anything about this customer.",
+  unknown: "No such customer.",
+};
 
 /** What the agent asked, for the log: the fields that decide a booking, with only the last 3 digits of a phone or CPR number. */
 function summarize(body: Record<string, unknown>) {
@@ -165,5 +188,7 @@ function outcome(res: Record<string, unknown>) {
   if (Array.isArray(res.bookings)) return `${res.bookings.length} bookings found`;
   if (res.cancelled) return "cancelled";
   if (res.requestId) return "saved for staff";
+  if (res.saved) return res.created ? "customer added" : "customer updated";
+  if ("found" in res) return res.found ? (res.verified ? "customer found, verified by CPR" : "customer found") : "no customer";
   return "ok";
 }

@@ -5,7 +5,7 @@ import { FLAT_RATES, USD_TO_BHD, agent as defaultAgent } from "../seed";
 import { conversationCostUsd } from "../costing";
 import type {
   AgentSettings, AgentToolCall, AgentVersion, Alert, AuditEntry, Booking, BookingMessage, BookingStatus, Conversation, CreditBatch, Doctor,
-  CatalogPackage, KnowledgeItem, LedgerEntry, ChatSession, Channel, Locale, Permissions, Profile, StaffRequest, Tenant, TenantSecrets, UnansweredQuestion,
+  CatalogPackage, KnowledgeItem, LedgerEntry, ChatSession, Channel, Customer, Locale, Permissions, Profile, StaffRequest, Tenant, TenantSecrets, UnansweredQuestion,
 } from "../types";
 import type { Data } from "./demo";
 import { DuplicateError, SlotTakenError } from "../errors";
@@ -61,6 +61,11 @@ const sessionOf = (r: Row): ChatSession => ({ tenantId: r.tenant_id, channel: r.
 const staffRequestOf = (r: Row): StaffRequest => ({
   id: r.id, tenantId: r.tenant_id, kind: r.kind, name: r.name, phone: r.phone, text: r.text, urgent: r.urgent, language: r.language,
   conversationId: r.conversation_id ?? undefined, status: r.status, createdAt: iso(r.created_at), handledAt: r.handled_at ? iso(r.handled_at) : undefined,
+});
+const customerOf = (r: Row): Customer => ({
+  id: r.id, tenantId: r.tenant_id, phone: r.phone, name: r.name, cpr: r.cpr ?? undefined, language: r.language ?? undefined, email: r.email ?? undefined,
+  notes: r.notes ?? "", createdAt: iso(r.created_at), updatedAt: iso(r.updated_at), lastContactAt: r.last_contact_at ? iso(r.last_contact_at) : undefined,
+  conversationIds: r.conversation_ids ?? [], history: r.history == null ? [] : jsonish(r.history),
 });
 const convOf = (r: Row): Conversation => ({
   id: r.id, tenantId: r.tenant_id, channel: r.channel, mode: r.mode, language: r.language, startedAt: iso(r.started_at),
@@ -163,6 +168,25 @@ export const SCHEMA_ADDITIONS = [
      primary key (tenant_id, channel, external_id))`,
   `create index if not exists chat_sessions_conversation on chat_sessions (conversation_id)`,
   `alter table chat_sessions enable row level security`,
+  // the people the assistant has talked to, found again by the last 8 digits of their phone number
+  `create table if not exists customers (
+     id uuid primary key default gen_random_uuid(),
+     tenant_id uuid not null references tenants on delete cascade,
+     phone text not null,
+     phone_key text not null,
+     name text not null default '',
+     cpr text,
+     language text,
+     email text,
+     notes text not null default '',
+     conversation_ids text[] not null default '{}',
+     history jsonb not null default '[]',
+     last_contact_at timestamptz,
+     created_at timestamptz not null default now(),
+     updated_at timestamptz not null default now())`,
+  `create unique index if not exists customers_phone on customers (tenant_id, phone_key)`,
+  `create index if not exists customers_conversations on customers using gin (conversation_ids)`,
+  `alter table customers enable row level security`,
   `create index if not exists conversations_flagged on conversations (tenant_id, started_at desc) where cardinality(flags) > 0`,
 ];
 
@@ -477,6 +501,49 @@ export function createPgData(db: Db): Data {
         `insert into staff_requests (tenant_id, kind, name, phone, text, urgent, language, conversation_id) values ($1,$2,$3,$4,$5,$6,$7,$8) returning *`,
         [tenantId, r.kind, r.name, r.phone, r.text, r.urgent, r.language, r.conversationId ?? null]);
       return staffRequestOf(rows[0]);
+    }),
+
+    getCustomers: async (tenantId) => {
+      await ensureSchema();
+      return (await q<Row>(`select * from customers where tenant_id = $1 order by coalesce(last_contact_at, created_at) desc limit 5000`, [tenantId])).map(customerOf);
+    },
+    getCustomer: async (tenantId, customerId) => {
+      await ensureSchema();
+      if (!/^[0-9a-f-]{36}$/i.test(customerId)) return undefined;
+      const rows = await q<Row>(`select * from customers where tenant_id = $1 and id = $2`, [tenantId, customerId]);
+      return rows[0] ? customerOf(rows[0]) : undefined;
+    },
+    findCustomer: async (tenantId, by) => {
+      await ensureSchema();
+      const rows = await q<Row>(
+        `select * from customers where tenant_id = $1 and (($2::text is not null and phone_key = $2) or ($3::text is not null and $3 = any(conversation_ids))) limit 1`,
+        [tenantId, by.phoneKey || null, by.conversationId || null]);
+      return rows[0] ? customerOf(rows[0]) : undefined;
+    },
+    putCustomer: async (tenantId, c, actor) => tx(async (run) => {
+      const phoneKey = c.phone.replace(/\D/g, "").slice(-8);
+      const values = [tenantId, c.phone, phoneKey, c.name, c.cpr ?? null, c.language ?? null, c.email ?? null, c.notes, c.conversationIds, JSON.stringify(c.history), c.lastContactAt ?? null];
+      let rows: Row[];
+      if (c.id) {
+        rows = await run<Row>(
+          `update customers set phone = $2, phone_key = $3, name = $4, cpr = $5, language = $6, email = $7, notes = $8, conversation_ids = $9, history = $10, last_contact_at = $11, updated_at = now()
+           where tenant_id = $1 and id = $12 returning *`, [...values, c.id]);
+      } else {
+        // two calls from the same phone at once: the second finds the first one's row instead of failing
+        rows = await run<Row>(
+          `insert into customers (tenant_id, phone, phone_key, name, cpr, language, email, notes, conversation_ids, history, last_contact_at)
+           values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) on conflict (tenant_id, phone_key) do nothing returning *`, values);
+        if (!rows[0]) rows = await run<Row>(`select * from customers where tenant_id = $1 and phone_key = $2`, [tenantId, phoneKey]);
+      }
+      if (!rows[0]) throw new Error("customer not found");
+      // the assistant saves after every conversation; only people's own changes belong in the audit log
+      if (actor !== "assistant") await audit(run, actor, `${c.id ? "Customer updated" : "Customer added"}: ${c.name || c.phone}`, tenantId);
+      return customerOf(rows[0]);
+    }),
+    deleteCustomer: async (tenantId, customerId, actor) => tx(async (run) => {
+      if (!/^[0-9a-f-]{36}$/i.test(customerId)) return;
+      const r = await run(`delete from customers where tenant_id = $1 and id = $2 returning id`, [tenantId, customerId]);
+      if (r[0]) await audit(run, actor, "Customer deleted", tenantId);
     }),
 
     setStaffRequestStatus: async (tenantId, requestId, status, actor) => tx(async (run) => {
