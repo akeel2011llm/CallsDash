@@ -15,6 +15,8 @@ import { TryAssistant } from "@/components/TryAssistant";
 import { Badge, Notice, PageHead, Stat } from "@/components/ui";
 import { SubmitButton } from "@/components/SubmitButton";
 import { CopyChecklist } from "@/components/CopyChecklist";
+import { Fold } from "@/components/Fold";
+import { FoldControls } from "@/components/FoldControls";
 import { Guide } from "@/components/Guide";
 
 export default async function ClientAdmin({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ saved?: string; error?: string; cal?: string; doc?: string; clash?: string; copied?: string }> }) {
@@ -86,9 +88,10 @@ export default async function ClientAdmin({ params, searchParams }: { params: Pr
 
       <TryAssistant tenant={tenant} admin returnTo={returnTo} sp={{ saved, error }} />
 
-      <div className="grid two">
-        <section className="card stack" id="wallet">
-          <h2>{t("admin.wallet")}</h2>
+      <FoldControls openAll={t("fold.openAll")} closeAll={t("fold.closeAll")} />
+
+      <div className="grid two fold-grid">
+        <Fold id="wallet" open title={t("admin.wallet")}>
           <div className="table-wrap">
             <table>
               <thead><tr><th>{t("common.kind")}</th><th>{t("common.remaining")}</th><th>{t("common.expires")}</th></tr></thead>
@@ -120,12 +123,11 @@ export default async function ClientAdmin({ params, searchParams }: { params: Pr
             </form>
             <small className="muted">{t("admin.adjust.help")}</small>
           </details>
-        </section>
+        </Fold>
 
-        <section className="card" id="profile">
+        <Fold id="profile" title={t("admin.profile")}>
           <form action={adminClientProfileAction} className="stack">
             <input type="hidden" name="tenantId" value={id} /><input type="hidden" name="returnTo" value={returnTo} />
-            <h2>{t("admin.profile")}</h2>
             <label>{t("admin.profile.name")}<input name="name" required maxLength={120} defaultValue={tenant.name} /></label>
             <label>{t("common.status")}
               <select name="status" defaultValue={tenant.status === "suspended" ? "suspended" : "live"}>
@@ -143,23 +145,21 @@ export default async function ClientAdmin({ params, searchParams }: { params: Pr
             <small className="muted">{t("admin.profile.lowHelp")}</small>
             <SubmitButton className="btn" type="submit">{t("common.save")}</SubmitButton>
           </form>
-        </section>
+        </Fold>
 
-        <section className="card">
+        <Fold title={t("admin.permissions")}>
           <form action={adminPermissionsAction} className="stack">
             <input type="hidden" name="tenantId" value={id} /><input type="hidden" name="returnTo" value={returnTo} />
-            <h2>{t("admin.permissions")}</h2>
             {perms.map(([k, label]) => (
               <label key={k} className="inline"><input type="checkbox" name={k} defaultChecked={tenant.permissions[k]} />{t(label)}</label>
             ))}
             <SubmitButton className="btn" type="submit">{t("common.save")}</SubmitButton>
           </form>
-        </section>
+        </Fold>
 
-        <section className="card">
+        <Fold title={t("admin.branding")}>
           <form action={adminTenantSettingsAction} className="stack">
             <input type="hidden" name="tenantId" value={id} /><input type="hidden" name="returnTo" value={returnTo} />
-            <h2>{t("admin.branding")}</h2>
             <label>{t("admin.displayName")}<input name="displayName" defaultValue={tenant.branding.displayName} /></label>
             <label>{t("admin.displayNameAr")}<input name="displayNameAr" defaultValue={tenant.branding.displayNameAr} dir="rtl" /></label>
             <label>{t("admin.color")}<input type="color" name="primaryColor" defaultValue={tenant.branding.primaryColor} /></label>
@@ -173,10 +173,9 @@ export default async function ClientAdmin({ params, searchParams }: { params: Pr
             </label>
             <SubmitButton className="btn" type="submit">{t("common.save")}</SubmitButton>
           </form>
-        </section>
+        </Fold>
 
-        <section className="card stack">
-          <h2>{t("admin.versions")}</h2>
+        <Fold title={t("admin.versions")}>
           <div className="table-wrap">
             <table>
               <tbody>
@@ -196,13 +195,12 @@ export default async function ClientAdmin({ params, searchParams }: { params: Pr
               </tbody>
             </table>
           </div>
-        </section>
+        </Fold>
       </div>
 
       <DoctorsManager tenant={tenant} doctors={doctors} bookings={bookings} logins={logins} returnTo={returnTo} sp={{ doc, cal, clash }} t={t} locale={locale} />
 
-      <section className="card stack">
-        <h2>{t("credits.history")}</h2>
+      <Fold title={t("credits.history")}>
         <div className="table-wrap">
           <table>
             <tbody>
@@ -217,10 +215,9 @@ export default async function ClientAdmin({ params, searchParams }: { params: Pr
             </tbody>
           </table>
         </div>
-      </section>
+      </Fold>
 
-      <section className="card stack">
-        <h2>{t("admin.audit")}</h2>
+      <Fold title={t("admin.audit")}>
         <div className="table-wrap">
           <table>
             <tbody>
@@ -230,11 +227,9 @@ export default async function ClientAdmin({ params, searchParams }: { params: Pr
             </tbody>
           </table>
         </div>
-      </section>
+      </Fold>
 
-      <section className="card stack">
-        <h2>{t("plans.title")}</h2>
-        <p className="muted">{t("plans.help")}</p>
+      <Fold title={t("plans.title")} hint={t("plans.help")}>
         <div className="table-wrap">
           <table>
             <tbody>
@@ -280,17 +275,15 @@ export default async function ClientAdmin({ params, searchParams }: { params: Pr
             <div><SubmitButton className="btn" type="submit">{t("plans.add")}</SubmitButton></div>
           </form>
         ) : <Notice>{t("plans.none")}</Notice>}
-      </section>
+      </Fold>
 
-      <section className="card stack danger-zone">
-        <h2>{t("admin.delete.title")}</h2>
-        <p className="muted">{t("admin.delete.help")}</p>
+      <Fold tone="danger" title={t("admin.delete.title")} hint={t("admin.delete.help")}>
         <form action={adminDeleteTenantAction} className="row">
           <input type="hidden" name="tenantId" value={id} />
           <label style={{ flex: 1 }}>{tenant.name}<input name="confirmName" required autoComplete="off" placeholder={tenant.name} /></label>
           <SubmitButton className="btn danger" type="submit">{t("admin.delete.button")}</SubmitButton>
         </form>
-      </section>
+      </Fold>
     </>
   );
 }

@@ -11,6 +11,8 @@ import { failToShow, profileFailKey } from "@/lib/studio-fail";
 import { BUILTIN_IDS, BUILTIN_VALUES, FIELDS, diffValues, fieldOf, loadProfiles, type BuiltinId, type StudioProfile } from "@/lib/studio-profiles";
 import { applyProfileAction, deleteProfileAction, importLiveAction, renameProfileAction, saveProfileAction } from "@/lib/studio-profile-actions";
 import { ConfirmDelete } from "@/components/Confirm";
+import { Fold } from "@/components/Fold";
+import { FoldControls } from "@/components/FoldControls";
 import { Guide } from "@/components/Guide";
 import { SubmitButton } from "@/components/SubmitButton";
 import { Badge, Notice, PageHead } from "@/components/ui";
@@ -102,9 +104,7 @@ export default async function ProfilesPage({ params, searchParams }: { params: P
   const reading = sp.read === "1";
   const live = reading && !sp.fail ? await previewLive({ data: store, catalog: catalogFromEnv() }, id) : null;
   const readCard = (
-    <section className="card stack" id="read">
-      <h2 style={{ margin: 0 }}>{T("prof.read.title")}</h2>
-      <p className="muted" style={{ margin: 0 }}>{T("prof.read.help")}</p>
+    <Fold id="read" open={reading || Boolean(sp.readErr) || ["imported", "nothing"].includes(sp.done ?? "")} title={T("prof.read.title")} hint={T("prof.read.help")}>
       {sp.readErr === "no_key" && <Notice tone="warn">{T("prof.read.noKey")}</Notice>}
       {sp.readErr === "no_agent" && <Notice tone="warn">{T("prof.read.noAgent")} <Link href={`/admin/clients/${id}/channels`}>{T("nav.channels")}</Link></Notice>}
       {reading && sp.fail && <Notice tone="warn">{T("prof.read.failed", { detail: refused ?? T("studio.fail.noDetail") })}</Notice>}
@@ -147,7 +147,7 @@ export default async function ProfilesPage({ params, searchParams }: { params: P
       )}
       {live && <div><Link className="btn small ghost" href={`${base}/profiles#read`}>{T("prof.preview.cancel")}</Link></div>}
       <small className="muted">{T("prof.read.notRead")}</small>
-    </section>
+    </Fold>
   );
 
   /* ----- profiles ----- */
@@ -187,22 +187,18 @@ export default async function ProfilesPage({ params, searchParams }: { params: P
 
   const profileCard = (r: Row) => {
     const n = diffValues(agent, r.values).changes.length;
+    const badge = r.builtin === "recommended" ? <Badge tone="ok">{T("prof.badge.recommended")}</Badge> : r.builtin ? <Badge>{T("prof.badge.builtin")}</Badge> : <Badge tone="info">{T("prof.badge.saved", { date: r.saved?.createdAt ? fmtDateTime(r.saved.createdAt, locale) : "–", by: r.saved?.by || "–" })}</Badge>;
     return (
-      <article className="card stack" key={r.id} id={`p-${r.id}`}>
-        <div className="row" style={{ justifyContent: "space-between" }}>
-          <h3 style={{ margin: 0 }}>{r.name}</h3>
-          {r.builtin === "recommended" ? <Badge tone="ok">{T("prof.badge.recommended")}</Badge> : r.builtin ? <Badge>{T("prof.badge.builtin")}</Badge> : <Badge tone="info">{T("prof.badge.saved", { date: r.saved?.createdAt ? fmtDateTime(r.saved.createdAt, locale) : "–", by: r.saved?.by || "–" })}</Badge>}
-        </div>
-        {r.builtin ? (
+      <Fold key={r.id} id={`p-${r.id}`} title={r.name} badge={badge} hint={r.builtin ? T(`prof.b.${r.builtin}.who`) : r.saved?.note || undefined}>
+        {r.builtin && (
           <>
-            <p style={{ margin: 0 }}>{T(`prof.b.${r.builtin}.who`)}</p>
             <p className="muted" style={{ margin: 0 }}><strong>{T("prof.impact")}:</strong> {T(`prof.b.${r.builtin}.impact`)}</p>
             <details>
               <summary>{T("prof.why")}</summary>
               <ul className="notes">{[1, 2, 3].map((i) => <li key={i}>{T(`prof.b.${r.builtin}.why${i}`)}</li>)}</ul>
             </details>
           </>
-        ) : r.saved?.note ? <p className="muted" style={{ margin: 0 }}>{r.saved.note}</p> : null}
+        )}
         <div className="row">
           <Badge tone={n === 0 ? "ok" : "neutral"}>{n === 0 ? T("prof.close.same") : T("prof.close.n", { n })}</Badge>
           <Link className="btn small" href={`${base}/profiles?profile=${encodeURIComponent(r.id)}#preview`}>{T("prof.view")}</Link>
@@ -226,7 +222,7 @@ export default async function ProfilesPage({ params, searchParams }: { params: P
             <ConfirmDelete action={deleteProfileAction} summary={T("prof.delete.summary")} warning={T("prof.delete.warning")} tick={T("prof.delete.tick")} button={T("prof.delete.button")} fields={{ tenantId: id, profile: r.id }} />
           </>
         )}
-      </article>
+      </Fold>
     );
   };
 
@@ -234,8 +230,7 @@ export default async function ProfilesPage({ params, searchParams }: { params: P
   const preview = chosen ? (() => {
     const { changes } = diffValues(agent, chosen.values);
     return (
-      <section className="card stack" id="preview">
-        <h2 style={{ margin: 0 }}>{T("prof.preview.title", { name: chosen.name })}</h2>
+      <Fold id="preview" open title={T("prof.preview.title", { name: chosen.name })}>
         {refused && <Notice tone="warn">{T("prof.fail", { detail: refused })}</Notice>}
         {changes.length === 0 ? <p className="muted" style={{ margin: 0 }}>{T("prof.preview.none")}</p> : (
           <>
@@ -266,7 +261,7 @@ export default async function ProfilesPage({ params, searchParams }: { params: P
             <Link className="btn ghost" href={`${base}/profiles#profiles`}>{T("prof.preview.cancel")}</Link>
           </div>
         </form>
-      </section>
+      </Fold>
     );
   })() : null;
 
@@ -281,6 +276,7 @@ export default async function ProfilesPage({ params, searchParams }: { params: P
         <ol className="notes">{[1, 2, 3, 4, 5].map((i) => <li key={i}>{T(`prof.guide.${i}`)}</li>)}</ol>
       </Guide>
       {notices}
+      <FoldControls openAll={T("fold.openAll")} closeAll={T("fold.closeAll")} />
       {readCard}
       {preview}
       <section className="stack" id="profiles">
@@ -290,16 +286,14 @@ export default async function ProfilesPage({ params, searchParams }: { params: P
         </div>
         {rows.map(profileCard)}
       </section>
-      <section className="card stack" id="save">
-        <h2 style={{ margin: 0 }}>{T("prof.save.title")}</h2>
-        <p className="muted" style={{ margin: 0 }}>{T("prof.save.help")}</p>
+      <Fold id="save" open={err === "name" || err === "nameTaken" || err === "full"} title={T("prof.save.title")} hint={T("prof.save.help")}>
         <form action={saveProfileAction} className="stack">
           <input type="hidden" name="tenantId" value={id} />
           <label>{T("prof.save.name")}<input type="text" name="name" maxLength={60} required /></label>
           <label>{T("prof.save.note")}<input type="text" name="note" maxLength={240} /></label>
           <div><SubmitButton className="btn" type="submit">{T("prof.save.button")}</SubmitButton></div>
         </form>
-      </section>
+      </Fold>
     </>
   );
 }

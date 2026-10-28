@@ -565,3 +565,19 @@ form:has(input[name="w.colors"][value="brand"]:checked) .w-colours { opacity: .4
   .vb-row { grid-template-columns: minmax(0, 1fr); }
   .vb-actions { justify-content: flex-start; }
 }
+
+/* Folded sections: the title row always shows, the content opens on a click */
+details.fold { padding: 0; }
+details.fold > summary { display: flex; align-items: center; gap: .75rem; padding: .95rem 1.2rem; cursor: pointer; list-style: none; }
+details.fold > summary::-webkit-details-marker { display: none; }
+details.fold > summary:hover { background: var(--bg); border-radius: var(--radius); }
+.fold-head { flex: 1; min-inline-size: 0; display: grid; gap: .15rem; }
+.fold-head h2 { margin: 0; font-size: 1.05rem; }
+.fold-badge { flex: none; }
+.fold-chev { flex: none; inline-size: .55rem; block-size: .55rem; border-inline-end: 2px solid var(--muted); border-block-end: 2px solid var(--muted); transform: rotate(45deg); transition: transform .15s; margin-inline-end: .3rem; }
+details.fold[open] > summary .fold-chev { transform: rotate(-135deg); }
+details.fold[open] > summary { border-block-end: 1px solid var(--line); }
+.fold-body { padding: 1rem 1.2rem 1.2rem; }
+.fold-controls { justify-content: flex-end; }
+.fold-grid { align-items: start; }
+@media (max-width: 640px) { details.fold > summary { padding: .85rem 1rem; } .fold-body { padding: .9rem 1rem 1.1rem; } }

@@ -7,6 +7,7 @@ import {
 import type { Channel, Locale, Tenant } from "@/lib/types";
 import { Badge, Notice } from "@/components/ui";
 import { CopyButton } from "@/components/CopyButton";
+import { Fold } from "@/components/Fold";
 import { Guide } from "@/components/Guide";
 import { SubmitButton } from "@/components/SubmitButton";
 
@@ -63,11 +64,7 @@ export async function WhatsappCard({ tenant, testFail, wa, photo }: { tenant: Te
   ];
 
   return (
-    <section className="card stack" id="whatsapp">
-      <div className="row" style={{ justifyContent: "space-between" }}>
-        <h2 style={{ margin: 0 }}>{t("channels.wa.title")}</h2>
-        <Badge tone={TONE[tenant.channels.whatsapp]}>{t(`channels.status.${tenant.channels.whatsapp}` as Key)}</Badge>
-      </div>
+    <Fold id="whatsapp" open={Boolean(wa)} title={t("channels.wa.title")} badge={<Badge tone={TONE[tenant.channels.whatsapp]}>{t(`channels.status.${tenant.channels.whatsapp}` as Key)}</Badge>}>
       <p className="muted">{t("channels.wa.help")}</p>
       {wa && !wa.startsWith("photo_") && <Notice tone="warn">{t(wa === "failed" ? "channels.wa.failed" : (`channels.wa.skipped.${wa}` as Key))}</Notice>}
       {wa === "failed" && testFail && (
@@ -247,6 +244,6 @@ export async function WhatsappCard({ tenant, testFail, wa, photo }: { tenant: Te
           <small className="muted">{t("channels.wa.photo.testHelp")}</small>
         </div>
       )}
-    </section>
+    </Fold>
   );
 }
