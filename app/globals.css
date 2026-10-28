@@ -581,3 +581,11 @@ details.fold[open] > summary { border-block-end: 1px solid var(--line); }
 .fold-controls { justify-content: flex-end; }
 .fold-grid { align-items: start; }
 @media (max-width: 640px) { details.fold > summary { padding: .85rem 1rem; } .fold-body { padding: .9rem 1rem 1.1rem; } }
+
+/* Data screen: one row per stored thing, with a tick box for bulk actions and its edit form folded inside */
+.data-row { display: grid; gap: .5rem; padding-block: .75rem; border-block-start: 1px solid var(--line); }
+.data-row:first-of-type { border-block-start: 0; }
+.bulk-bar { padding-block: .25rem; }
+.clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.import-row { padding-block: .25rem; }
+.import-row input[type="file"] { max-inline-size: 100%; }

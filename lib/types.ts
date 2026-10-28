@@ -128,6 +128,8 @@ export interface Permissions {
   editVoice: boolean;
   editBehaviour: boolean;
   editKnowledge: boolean;
+  /** The Data screen (photos, texts, storage, import and export). The admin always has it; a clinic only when the admin grants it. Missing = no. */
+  dataManager?: boolean;
 }
 
 export type SidebarStyle = "light" | "dark" | "brand";
@@ -351,6 +353,8 @@ export interface Doctor {
   /** The doctor's own weekly hours. Missing = the clinic's opening hours. */
   hours?: Record<string, [string, string][]> | null;
   timeOff?: DateRange[];
+  /** When the doctor's photo was last set; missing means no photo. The photo itself is stored apart (getDoctorImage) so lists stay light. */
+  photoAt?: string;
 }
 
 export interface Booking {

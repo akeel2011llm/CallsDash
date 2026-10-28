@@ -12,6 +12,7 @@ export const GUIDES = {
   catalogue: "catalogue.guide.title",
   waPhotos: "channels.wa.photo.guide.title",
   studioProfiles: "prof.guide.title",
+  data: "data.guide.title",
 } as const satisfies Record<string, Key>;
 
 export type GuideId = keyof typeof GUIDES;

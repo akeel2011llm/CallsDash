@@ -56,6 +56,7 @@ const profileOf = (r: Row): Profile => ({
 const doctorOf = (r: Row): Doctor => ({
   id: r.id, tenantId: r.tenant_id, name: r.name, specialty: r.specialty ?? "", color: r.color, googleCalendarId: r.google_calendar_id ?? undefined,
   active: r.active ?? true, hours: r.hours == null ? null : jsonish(r.hours), timeOff: r.time_off == null ? [] : jsonish(r.time_off),
+  photoAt: r.photo_at ? iso(r.photo_at) : undefined,
 });
 const sessionOf = (r: Row): ChatSession => ({ tenantId: r.tenant_id, channel: r.channel, externalId: r.external_id, conversationId: r.conversation_id, lastAt: iso(r.last_at) });
 const staffRequestOf = (r: Row): StaffRequest => ({
@@ -209,6 +210,13 @@ export const SCHEMA_ADDITIONS = [
      updated_at timestamptz not null default now())`,
   `create index if not exists items_tenant on items (tenant_id, name)`,
   `alter table items enable row level security`,
+  // a doctor's photo (a small data: URL) lives apart from the doctors table so every doctor list stays light
+  `create table if not exists doctor_photos (
+     doctor_id uuid primary key references doctors on delete cascade,
+     tenant_id uuid not null references tenants on delete cascade,
+     image text not null,
+     updated_at timestamptz not null default now())`,
+  `alter table doctor_photos enable row level security`,
   `create index if not exists customers_cpr on customers (tenant_id, cpr) where cpr is not null`,
   `create index if not exists conversations_flagged on conversations (tenant_id, started_at desc) where cardinality(flags) > 0`,
 ];
@@ -393,7 +401,8 @@ export function createPgData(db: Db): Data {
       (await q<Row>(`select * from agent_versions where tenant_id = $1 order by created_at desc`, [tenantId])).map((r): AgentVersion => ({
         id: r.id, tenantId: r.tenant_id, createdAt: iso(r.created_at), author: r.author, summary: r.summary, settings: jsonish(r.settings) })),
     getDoctors: async (tenantId) =>
-      (await ensureSchema(), await q<Row>(`select * from doctors where tenant_id = $1 order by name`, [tenantId])).map(doctorOf),
+      (await ensureSchema(), await q<Row>(
+        `select d.*, (select p.updated_at from doctor_photos p where p.doctor_id = d.id) as photo_at from doctors d where d.tenant_id = $1 order by d.name`, [tenantId])).map(doctorOf),
     getBookings: async (tenantId) =>
       (await q<Row>(`select * from bookings where tenant_id = $1 order by starts_at`, [tenantId])).map(bookingOf),
     getConversations: async (tenantId) =>
@@ -606,6 +615,35 @@ export function createPgData(db: Db): Data {
       const r = await run<Row>(`delete from items where tenant_id = $1 and id = $2 returning name`, [tenantId, itemId]);
       if (r[0]) await audit(run, actor, `Catalogue item deleted: ${r[0].name}`, tenantId);
     }),
+
+    getDoctorImage: async (tenantId, doctorId) => {
+      await ensureSchema();
+      if (!/^[0-9a-f-]{36}$/i.test(doctorId)) return undefined;
+      const rows = await q<Row>(`select image from doctor_photos where tenant_id = $1 and doctor_id = $2`, [tenantId, doctorId]);
+      return rows[0]?.image ?? undefined;
+    },
+    setDoctorImage: async (tenantId, doctorId, image, actor) => tx(async (run) => {
+      const d = await run<Row>(`select name from doctors where tenant_id = $1 and id = $2`, [tenantId, doctorId]);
+      if (!d[0]) throw new Error("doctor not found");
+      if (image) {
+        await run(`insert into doctor_photos (doctor_id, tenant_id, image) values ($1,$2,$3) on conflict (doctor_id) do update set image = $3, updated_at = now()`, [doctorId, tenantId, image]);
+      } else {
+        await run(`delete from doctor_photos where doctor_id = $1 and tenant_id = $2`, [doctorId, tenantId]);
+      }
+      await audit(run, actor, `Doctor photo ${image ? "set" : "removed"}: ${d[0].name}`, tenantId);
+    }),
+    getPhotoUsage: async (tenantId) => {
+      await ensureSchema();
+      const items = await q<Row>(`select id, name, octet_length(image) as bytes from items where tenant_id = $1 and image is not null`, [tenantId]);
+      const docs = await q<Row>(`select p.doctor_id as id, d.name, octet_length(p.image) as bytes from doctor_photos p join doctors d on d.id = p.doctor_id where p.tenant_id = $1`, [tenantId]);
+      return [
+        ...items.map((r) => ({ kind: "item" as const, id: r.id as string, name: r.name as string, bytes: Math.round(Number(r.bytes) * 3 / 4) })),
+        ...docs.map((r) => ({ kind: "doctor" as const, id: r.id as string, name: r.name as string, bytes: Math.round(Number(r.bytes) * 3 / 4) })),
+      ];
+    },
+    databaseSize: async () => {
+      try { return Number((await q<Row>(`select pg_database_size(current_database()) as n`))[0].n); } catch { return undefined; }
+    },
 
     setStaffRequestStatus: async (tenantId, requestId, status, actor) => tx(async (run) => {
       const rows = await run(`update staff_requests set status = $3, handled_at = case when $3 = 'done' then now() else null end where tenant_id = $1 and id = $2 returning id`, [tenantId, requestId, status]);
