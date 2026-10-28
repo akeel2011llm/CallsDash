@@ -22,9 +22,11 @@ export default async function Channels({ params, searchParams }: { params: Promi
   const { saved, error, wa } = await searchParams;
   const tenant = await store.getTenant(id);
   if (!tenant) notFound();
-  const [{ t, locale }, agent, secrets, url, testFail] = await Promise.all([
+  const [{ t, locale }, agent, secrets, url, testFail, photoFail, items] = await Promise.all([
     getT(), store.getAgent(id), store.getSecrets(id), appUrl(),
     wa === "failed" ? store.getSetting(testFailKey(id)).then((v) => testFailToShow(v)) : Promise.resolve(null),
+    wa === "photo_failed" ? store.getSetting(`wa.photo.fail.${id}`).then((v) => testFailToShow(v)) : Promise.resolve(null),
+    store.getItems(id),
   ]);
   const el = tenant.integrations.elevenlabs;
   const connected = Boolean(agent.elevenLabsAgentId) && el?.managed === false;
@@ -113,7 +115,7 @@ export default async function Channels({ params, searchParams }: { params: Promi
         <div><strong>{t("channels.website.domains")}:</strong> <span dir="ltr">{tenant.allowedDomains.join(", ") || "–"}</span></div>
       </section>
 
-      <WhatsappCard tenant={tenant} testFail={testFail} wa={wa} />
+      <WhatsappCard tenant={tenant} testFail={testFail} wa={wa} photo={{ hasToken: Boolean(secrets.whatsappToken), fail: photoFail, items: items.filter((i) => i.active && i.hasImage).map((i) => ({ id: i.id, name: i.name })) }} />
 
       <section className="card stack">
         <div className="row" style={{ justifyContent: "space-between" }}>

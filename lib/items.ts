@@ -47,7 +47,7 @@ export function scoreItem(i: Pick<Item, "name" | "nameAr" | "details" | "details
   return hit === 0 ? 0 : score + (hit / q.length);
 }
 
-export interface FoundItem { item_id: string; name: string; details: string; price?: string; image_url?: string }
+export interface FoundItem { item_id: string; name: string; details: string; price?: string; image_url?: string; page_url: string }
 
 const MAX_FOUND = 3;
 
@@ -71,14 +71,19 @@ export async function findItems(d: ItemDeps, tenant: { id: string; slug: string 
       details: ((ar && i.detailsAr) || i.details).slice(0, 800),
       ...(i.price ? { price: i.price } : {}),
       ...(i.hasImage ? { image_url: itemImageUrl(origin, tenant.slug, i) } : {}),
+      page_url: itemPageUrl(origin, tenant.slug, i.id, ar ? "ar" : "en"),
     })),
-    message: "Use only these details. If the customer wants to see it and image_url is present, call show_image with that image_url.",
+    message: "Use only these details. Show the photo the way your instructions say for this channel; page_url is a link to a page with the photo and details, for channels that cannot show a picture.",
   };
 }
 
 /** The public address of an item's photo; the version changes whenever the item changes, so a replaced photo is never served from cache. */
 export const itemImageUrl = (origin: string, slug: string, i: Pick<Item, "id" | "updatedAt">) =>
   `${origin}/api/items/${encodeURIComponent(slug)}/${i.id}/image?v=${Date.parse(i.updatedAt) || 0}`;
+
+/** The public page of an item (photo, details and price). A chat app shows a picture preview for its link. */
+export const itemPageUrl = (origin: string, slug: string, itemId: string, language: Locale = "en") =>
+  `${origin}/i/${encodeURIComponent(slug)}/${itemId}${language === "ar" ? "?lang=ar" : ""}`;
 
 export interface StaffItemInput { id?: string; name: string; nameAr?: string; details?: string; detailsAr?: string; price?: string; keywords?: string; active: boolean }
 

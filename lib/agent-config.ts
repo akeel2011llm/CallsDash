@@ -26,8 +26,9 @@ const ARABIC_STYLE = {
  * 4: lookup_customer and save_customer, so the assistant knows returning customers and keeps their details.
  * 5: the clinic chooses whether customers are found by phone number or CPR number; find_item looks up the catalogue and show_image
  *    shows a photo in website chat.
+ * 6: send_item_photo sends a catalogue photo in a WhatsApp chat; Instagram and other chats get a link with a picture preview.
  */
-export const AGENT_VERSION = 5;
+export const AGENT_VERSION = 6;
 
 /** How the assistant finds and saves returning customers, which depends on what the clinic chose on its Customers screen. */
 export function customerRules(mode: "phone" | "cpr"): string[] {
@@ -55,7 +56,9 @@ const BOOKING_RULES = [
 /** Catalogue rules: what to look up, what to say, and when a photo may be shown (only the website chat can draw one). */
 const CATALOGUE_RULES = [
   "When a customer asks about a product, treatment or package the clinic offers, call find_item with what they asked, then answer only from the details it returns. If it finds nothing, do not guess; say it is not listed and offer to take a message.",
-  "If find_item returns an image_url and the customer is chatting on the website (Channel: website), call show_image with that image_url and a short caption after you describe the item. On a phone call, WhatsApp or Instagram do not call show_image; just describe it.",
+  "If find_item returns an image_url and the customer is chatting on the website (Channel: website), call show_image with that image_url and a short caption after you describe the item. Only the website chat can use show_image.",
+  "If find_item returns an image_url and the customer is on WhatsApp (Channel: whatsapp), describe the item, then call send_item_photo with its item_id. If it returns sent:true, say the photo is being sent; do not add a link. If it returns sent:false, put the link it gives in your reply instead.",
+  "On Instagram, if find_item returns a page_url, put it in your reply after describing the item (the app shows a picture preview for it). On a phone call, describe the item in words and never read out a link.",
 ];
 
 const CLOSING_RULES = [
@@ -254,6 +257,11 @@ export function toolDefinitions(appUrl: string, secret: string): Record<string, 
     find_item: tool("find_item", "Look up something the clinic offers (a product, treatment or package) in its catalogue, with its details, price and a photo address.", {
       query: str("What the customer asked about, in a few words, in their own language."), language: str("en or ar, the language to answer in."),
     }, ["query"]),
+    send_item_photo: tool("send_item_photo", "Send the photo of a catalogue item to the customer in their WhatsApp chat. Use it only on WhatsApp.", {
+      item_id: str("The item_id from find_item."), language: str("en or ar, the language of the caption."),
+      // filled from the chat's own variable, never chosen by the assistant, so a photo can only go to the person in the chat
+      caller_phone: { type: "string", dynamic_variable: "caller_phone" },
+    }, ["item_id"]),
     // not a webhook: the customer's browser runs it (public/widget.js draws the photo), so it needs no address or secret
     show_image: {
       type: "client", name: "show_image", expects_response: false,
