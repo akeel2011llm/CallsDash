@@ -9,6 +9,7 @@ import type { Session } from "./types";
 export const GUIDES = {
   copy: "dup.careful.title",
   whatsapp: "channels.wa.make.title",
+  catalogue: "catalogue.guide.title",
 } as const satisfies Record<string, Key>;
 
 export type GuideId = keyof typeof GUIDES;

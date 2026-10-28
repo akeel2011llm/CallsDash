@@ -42,7 +42,7 @@ describe("agent sync", () => {
     await data.addKnowledge(tenant.id, "Hours?", "8 to 9", "en", "admin");
     const r = await syncAgent(deps, tenant.id, "admin");
     expect(r).toEqual({ agentId: "agent_1", created: true, warnings: [] });
-    expect(names(calls).filter((f) => f === "createWebhookTool")).toHaveLength(9);
+    expect(names(calls).filter((f) => f === "createWebhookTool")).toHaveLength(11);
     expect(names(calls)).toContain("createKnowledgeText");
     expect(names(calls)).toContain("createAgent");
     expect((await data.getAgent(tenant.id)).elevenLabsAgentId).toBe("agent_1");
@@ -53,7 +53,7 @@ describe("agent sync", () => {
     expect(t.integrations.elevenlabs?.version).toBe(AGENT_VERSION); // the client screens stop asking for a Sync
     expect(t.channels.website).toBe("connected");
     const body = calls.find((c) => c.fn === "createAgent")!.args[0] as { conversation_config: { agent: { prompt: { tool_ids: string[] } } } };
-    expect(body.conversation_config.agent.prompt.tool_ids).toHaveLength(9);
+    expect(body.conversation_config.agent.prompt.tool_ids).toHaveLength(11);
   });
   it("brings only the shared tools up to date when their saved definition is older, and does nothing when it is current", async () => {
     const { deps, data, tenant, calls } = await setup();
@@ -64,7 +64,7 @@ describe("agent sync", () => {
     const saved = (await data.getSetting(TOOLS_KEY)) as ToolsSetting;
     await data.setSetting(TOOLS_KEY, { ...saved, hash: "from-an-older-release" }); // ElevenLabs still holds the previous definitions
     await ensureSharedTools(deps);
-    expect(names(calls)).toEqual(Array(9).fill("updateTool")); // no agent is touched
+    expect(names(calls)).toEqual(Array(11).fill("updateTool")); // no agent is touched
     calls.length = 0;
     await ensureSharedTools(deps);
     expect(calls).toEqual([]);
@@ -90,7 +90,7 @@ describe("agent sync", () => {
     await syncAgent(deps, tenant.id, "admin");
     calls.length = 0;
     await syncAgent({ ...deps, appUrl: "https://new.example" }, tenant.id, "admin");
-    expect(names(calls).filter((f) => f === "updateTool")).toHaveLength(9);
+    expect(names(calls).filter((f) => f === "updateTool")).toHaveLength(11);
   });
   it("sends no knowledge document when there is no knowledge yet", async () => {
     const { deps, tenant, calls } = await setup();

@@ -100,6 +100,29 @@ export interface Customer {
   history: CustomerVisit[];
 }
 
+/**
+ * Something the clinic offers that the assistant can look up and show: a product, treatment or package, with its details and
+ * a photo. The photo is stored apart (see getItemImage) so lists stay light; `hasImage` says whether there is one.
+ */
+export interface Item {
+  id: string;
+  tenantId: string;
+  name: string;
+  nameAr?: string;
+  details: string;
+  detailsAr?: string;
+  /** Free text, as the clinic wants it shown (for example "BHD 25" or "from BHD 40"). */
+  price?: string;
+  /** Extra words people may use for it, separated by commas, in either language. Helps the assistant find it. */
+  keywords: string;
+  /** Hidden items are never offered by the assistant or served as a picture. */
+  active: boolean;
+  hasImage: boolean;
+  /** Changes whenever the item or its photo changes; makes the photo address new so caches never show an old picture. */
+  updatedAt: string;
+  createdAt: string;
+}
+
 export interface Permissions {
   editPrompt: boolean;
   editVoice: boolean;
@@ -168,6 +191,8 @@ export interface StashedAgent { id: string; name?: string; kbDocId?: string; syn
 
 export interface AgentSettings {
   elevenLabsAgentId: string;
+  /** What the assistant uses to find a returning customer: their phone number (the default) or their CPR number. Chosen by the clinic on the Customers screen. */
+  customerLookup?: "phone" | "cpr";
   /** The Assistant studio's options (lib/agent-studio.ts). Read through `studioOf`, which fills in the defaults. */
   studio?: Partial<import("./agent-studio").AgentStudio>;
   prompt: PromptSections;

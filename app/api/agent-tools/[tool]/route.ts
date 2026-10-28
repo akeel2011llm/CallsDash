@@ -9,7 +9,8 @@ import { asciiDigits } from "@/lib/cpr";
 import { appUrl } from "@/lib/app-url";
 import { ensureSharedTools } from "@/lib/agent-sync";
 import { badHeaderSetting } from "@/lib/header-safe";
-import { CustomerError, lookupCustomer, saveCustomerFromAssistant } from "@/lib/customers";
+import { findItems } from "@/lib/items";
+import { CustomerError, lookupCustomer, lookupModeOf, saveCustomerFromAssistant } from "@/lib/customers";
 
 export const dynamic = "force-dynamic";
 
@@ -129,16 +130,21 @@ async function run(tool: string, body: Record<string, unknown>, data: Awaited<Re
           newStartsAt: str(body.new_starts_at), doctorId: str(body.doctor_id) || undefined, language: lang(body.language),
         }));
       case "lookup_customer":
-        return ok(await lookupCustomer(data, tenant.id, { phone: str(body.patient_phone), cpr: str(body.patient_cpr) || undefined }));
+        return ok(await lookupCustomer(data, tenant.id, { phone: str(body.patient_phone), cpr: str(body.patient_cpr) || undefined }, lookupModeOf(await data.getAgent(tenant.id))));
       case "save_customer": {
         const r = await saveCustomerFromAssistant(data, tenant.id, {
           phone: str(body.patient_phone), name: str(body.patient_name) || undefined, cpr: str(body.patient_cpr) || undefined, email: str(body.email) || undefined,
           note: str(body.note) || undefined, language: lang(body.language), conversationId: str(body.conversation_id) || undefined,
-        });
+        }, lookupModeOf(await data.getAgent(tenant.id)));
         return ok({
           saved: true, created: r.created,
           ...(str(body.patient_cpr) && !r.cprSaved && !r.customer.cpr ? { message: "The CPR number was not saved: it must be 9 digits, and staff add it to an existing customer's record. Do not mention this to the customer." } : {}),
         });
+      }
+      case "find_item": {
+        const t = await data.getTenant(tenant.id);
+        if (!t) return null;
+        return ok(await findItems(data, { id: t.id, slug: t.slug }, { query: str(body.query), language: body.language === "ar" ? "ar" : "en" }, await appUrl()));
       }
       case "take_message":
         return ok(await svc.takeMessage(tenant.id, {
@@ -174,7 +180,7 @@ const CUSTOMER_MESSAGES: Record<CustomerError["code"], string> = {
 
 /** What the agent asked, for the log: the fields that decide a booking, with only the last 3 digits of a phone or CPR number. */
 function summarize(body: Record<string, unknown>) {
-  const keys = ["doctor_id", "from_date", "days", "starts_at", "new_starts_at", "booking_id", "patient_name", "patient_phone", "patient_cpr", "service", "urgent"];
+  const keys = ["doctor_id", "from_date", "days", "starts_at", "new_starts_at", "booking_id", "patient_name", "patient_phone", "patient_cpr", "service", "urgent", "query"];
   return keys.filter((k) => body[k] !== undefined && body[k] !== "").map((k) => {
     const v = String(body[k]).slice(0, 60);
     return `${k}=${k === "patient_phone" || k === "patient_cpr" ? `…${asciiDigits(v).replace(/\D/g, "").slice(-3)}` : v}`;
@@ -188,6 +194,7 @@ function outcome(res: Record<string, unknown>) {
   if (Array.isArray(res.bookings)) return `${res.bookings.length} bookings found`;
   if (res.cancelled) return "cancelled";
   if (res.requestId) return "saved for staff";
+  if (Array.isArray(res.items)) return `${res.items.length} catalogue items found`;
   if (res.saved) return res.created ? "customer added" : "customer updated";
   if ("found" in res) return res.found ? (res.verified ? "customer found, verified by CPR" : "customer found") : "no customer";
   return "ok";

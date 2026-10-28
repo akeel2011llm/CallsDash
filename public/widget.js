@@ -33,6 +33,33 @@
     return n;
   }
 
+  // The assistant's show_image tool (a client tool, run here in the visitor's browser) draws a catalogue photo above the chat.
+  // Only pictures served by this CallsDash address are drawn, whatever the assistant asks for.
+  function photoUrl(raw) {
+    try {
+      var u = new URL(String(raw), base);
+      return u.origin === base && /^\/api\/items\/[^/]+\/[^/]+\/image$/.test(u.pathname) ? u.href : null;
+    } catch (e) { return null; }
+  }
+
+  function showPhoto(raw, caption, rtl, side) {
+    var href = photoUrl(raw);
+    if (!href) return "That picture cannot be shown.";
+    Array.prototype.forEach.call(document.querySelectorAll('[data-callsdash-widget="photo"]'), function (n) { n.remove(); });
+    var close = el("button", { type: "button", "aria-label": rtl ? "إغلاق" : "Close", text: "\u00d7", style: {
+      position: "absolute", top: "4px", border: "0", background: "rgba(255,255,255,.9)", borderRadius: "999px", width: "28px", height: "28px", fontSize: "18px", lineHeight: "1", cursor: "pointer", color: "#14202b" } });
+    close.style[rtl ? "left" : "right"] = "4px";
+    var kids = [el("img", { src: href, alt: caption || "", style: { display: "block", width: "100%", maxHeight: "260px", objectFit: "cover" } }), close];
+    if (caption) kids.push(el("div", { text: String(caption).slice(0, 200), style: { padding: "8px 12px", fontSize: "14px", lineHeight: "1.4" } }));
+    var card = el("div", { "data-callsdash-widget": "photo", role: "dialog", dir: rtl ? "rtl" : "ltr", style: {
+      position: "fixed", bottom: "100px", width: "260px", maxWidth: "calc(100vw - 40px)", background: "#fff", color: "#14202b", borderRadius: "14px", overflow: "hidden",
+      boxShadow: "0 8px 30px rgba(0,0,0,.28)", zIndex: 2147483001, fontFamily: "system-ui, 'Noto Sans Arabic', sans-serif" } }, kids);
+    card.style[side] = "20px";
+    close.addEventListener("click", function () { card.remove(); });
+    document.body.appendChild(card);
+    return "Shown.";
+  }
+
   function init(cfg) {
     // the dashboard previews the widget (data-preview); if that screen was left before the settings arrived, show nothing
     if (script.hasAttribute("data-preview") && !script.isConnected) { window.__callsdashWidget = false; return; }
@@ -68,7 +95,16 @@
       if (!cfg.agentId) { show([text("Demo: the ElevenLabs agent is not connected yet.")]); return; }
       var loader = el("script", { src: "https://unpkg.com/@elevenlabs/convai-widget-embed", async: "", type: "text/javascript" });
       document.head.appendChild(loader);
-      document.body.appendChild(el("elevenlabs-convai", { "data-callsdash-widget": "embed", "agent-id": cfg.agentId, "dynamic-variables": JSON.stringify(cfg.dynamicVariables || {}) }));
+      var embed = el("elevenlabs-convai", { "data-callsdash-widget": "embed", "agent-id": cfg.agentId, "dynamic-variables": JSON.stringify(cfg.dynamicVariables || {}) });
+      // the tool must also exist on the agent under the same name (Update the assistant adds it)
+      embed.addEventListener("elevenlabs-convai:call", function (event) {
+        var config = event.detail && event.detail.config;
+        if (!config) return;
+        config.clientTools = Object.assign({}, config.clientTools, {
+          show_image: function (p) { return showPhoto(p && p.image_url, p && p.caption, rtl, side); },
+        });
+      });
+      document.body.appendChild(embed);
     }
 
     function consentCard() {

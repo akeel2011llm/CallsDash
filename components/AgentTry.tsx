@@ -14,7 +14,15 @@ export type TryLabels = Record<
 >;
 
 type Lang = "en" | "ar";
-type Line = { id: number; who: "user" | "agent" | "note"; text: string };
+type Line = { id: number; who: "user" | "agent" | "note"; text: string; image?: string };
+
+/** Only pictures this app serves for a catalogue item are drawn, whatever the assistant asks for. */
+const catalogueImage = (raw: unknown): string | null => {
+  try {
+    const u = new URL(String(raw), window.location.origin);
+    return u.origin === window.location.origin && /^\/api\/items\/[^/]+\/[^/]+\/image$/.test(u.pathname) ? u.href : null;
+  } catch { return null; }
+};
 
 /**
  * The clinic's real ElevenLabs agent on a dashboard screen, two ways: the website widget exactly as visitors get it
@@ -71,7 +79,32 @@ function FloatingWidget({ agentId, language, openingHours }: { agentId: string; 
     // today, open now and so on are worked out when the widget is put on the screen, not when the page was built
     w.setAttribute("dynamic-variables", JSON.stringify(agentVariables({ openingHours: JSON.parse(hours) }, new Date(), { channel: "website" })));
     w.setAttribute("override-language", language);
-    dock.appendChild(w);
+    // the show_image tool draws a catalogue photo, as it does on the clinic's website (public/widget.js)
+    const card = document.createElement("div");
+    card.className = "try-photo";
+    card.hidden = true;
+    const img = document.createElement("img");
+    const x = document.createElement("button");
+    x.type = "button";
+    x.textContent = "\u00d7";
+    x.addEventListener("click", () => { card.hidden = true; });
+    card.append(img, x);
+    w.addEventListener("elevenlabs-convai:call", (event) => {
+      const config = (event as CustomEvent).detail?.config;
+      if (!config) return;
+      config.clientTools = {
+        ...config.clientTools,
+        show_image: (p: { image_url?: string; caption?: string }) => {
+          const href = catalogueImage(p?.image_url);
+          if (!href) return "That picture cannot be shown.";
+          img.src = href;
+          img.alt = p?.caption ?? "";
+          card.hidden = false;
+          return "Shown.";
+        },
+      };
+    });
+    dock.append(w, card);
     document.body.appendChild(dock);
     return () => dock.remove();
   }, [agentId, language, hours]);
@@ -103,8 +136,8 @@ function TextChat({ agentId, language, openingHours, labels, suggestions }: {
   }, []);
   useEffect(() => { log.current?.scrollTo({ top: log.current.scrollHeight }); }, [lines, waiting]);
 
-  const add = (who: Line["who"], text: string) => {
-    const line = { id: ++seq.current, who, text };
+  const add = (who: Line["who"], text: string, image?: string) => {
+    const line: Line = { id: ++seq.current, who, text, ...(image ? { image } : {}) };
     if (who !== "note") history.current = [...history.current, line];
     setLines((x) => [...x, line]);
   };
@@ -131,6 +164,14 @@ function TextChat({ agentId, language, openingHours, labels, suggestions }: {
           setWaiting(false);
           setWorking(false);
           add("agent", text);
+        },
+        clientTools: {
+          show_image: (p: { image_url?: string; caption?: string }) => {
+            const href = catalogueImage(p?.image_url);
+            if (!href) return "That picture cannot be shown.";
+            add("agent", p?.caption?.trim() ?? "", href);
+            return "Shown.";
+          },
         },
         onAgentToolRequest: () => setWorking(true),
         onDisconnect: (d) => {
@@ -187,7 +228,8 @@ function TextChat({ agentId, language, openingHours, labels, suggestions }: {
           : (
             <div key={l.id} className={`bubble ${l.who === "user" ? "patient" : "agent"}`}>
               <small>{l.who === "user" ? labels.you : labels.assistant}</small>
-              <span dir="auto" style={{ display: "block" }}>{l.text}</span>
+              {l.image && <img src={l.image} alt={l.text} className="try-photo-inline" />}
+              {l.text && <span dir="auto" style={{ display: "block" }}>{l.text}</span>}
             </div>
           ))}
         {(status === "connecting" || waiting) && (

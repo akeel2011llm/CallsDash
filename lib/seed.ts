@@ -22,6 +22,9 @@ export interface DB {
   audit: import("./types").AuditEntry[];
   staffRequests: import("./types").StaffRequest[];
   customers: import("./types").Customer[];
+  /** Catalogue items and their photos (data: URLs), by item id. Missing until the first item is added. */
+  items?: import("./types").Item[];
+  itemImages?: Record<string, string>;
   toolCalls: import("./types").AgentToolCall[];
   profiles: import("./types").Profile[];
   secrets: Record<string, import("./types").TenantSecrets>;
