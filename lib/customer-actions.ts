@@ -5,6 +5,8 @@ import { revalidatePath } from "next/cache";
 import { requireClient } from "./auth";
 import { CustomerError, saveCustomerByStaff } from "./customers";
 import { getData } from "./data";
+import { autoSync } from "./auto-sync";
+import { lookupModeOf } from "./customers";
 import type { Locale } from "./types";
 
 const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
@@ -38,4 +40,19 @@ export async function deleteCustomerAction(f: FormData) {
   await (await getData()).deleteCustomer(tenant.id, id, actor);
   revalidatePath("/app", "layout");
   redirect("/app/customers?deleted=1");
+}
+
+/** Chooses how the assistant finds a returning customer: by phone number or by CPR number. Managers only; the assistant is updated on its own. */
+export async function saveLookupModeAction(f: FormData) {
+  const { tenant, actor, staffRole } = await requireClient();
+  if (staffRole !== "manager") redirect("/app/customers");
+  const mode = str(f, "mode") === "cpr" ? "cpr" : "phone";
+  const data = await getData();
+  const cur = await data.getAgent(tenant.id);
+  if (lookupModeOf(cur) !== mode) {
+    await data.saveAgent(tenant.id, { ...cur, customerLookup: mode }, actor, `Customers are found by ${mode === "cpr" ? "CPR number" : "phone number"}`);
+    await autoSync(tenant.id, actor);
+  }
+  revalidatePath("/app", "layout");
+  redirect("/app/customers?mode=1");
 }

@@ -106,9 +106,9 @@ describe("agent config", () => {
   it("turns knowledge items into one text document", () => {
     expect(knowledgeText([{ question: " Hours?\n", answer: "8  to 9" }, { question: "Parking?", answer: "Yes" }])).toBe("Q: Hours?\nA: 8 to 9\n\nQ: Parking?\nA: Yes");
   });
-  it("defines all nine tools with the secret and the agent id variable", () => {
+  it("defines all eleven tools with the secret and the agent id variable", () => {
     const d = toolDefinitions("https://app.example", "sec");
-    expect(Object.keys(d).sort()).toEqual(["book_appointment", "cancel_appointment", "check_availability", "find_patient_booking", "handoff_to_staff", "lookup_customer", "reschedule_appointment", "save_customer", "take_message"]);
+    expect(Object.keys(d).sort()).toEqual(["book_appointment", "cancel_appointment", "check_availability", "find_item", "find_patient_booking", "handoff_to_staff", "lookup_customer", "reschedule_appointment", "save_customer", "show_image", "take_message"]);
     const t = d.book_appointment as { api_schema: { url: string; request_headers: Record<string, string>; request_body_schema: { required: string[]; properties: Record<string, { dynamic_variable?: string }> } } };
     expect(t.api_schema.url).toBe("https://app.example/api/agent-tools/book_appointment");
     expect(t.api_schema.request_headers.Authorization).toBe("Bearer sec");
@@ -121,6 +121,9 @@ describe("agent config", () => {
       expect(schema.required).toContain("patient_cpr");
       expect(schema.required).not.toContain("patient_phone");
     }
+    // the photo tool runs in the customer's browser, so it has no address and no secret
+    expect(d.show_image).toMatchObject({ type: "client", expects_response: false });
+    expect(JSON.stringify(d.show_image)).not.toContain("sec");
     expect(Object.keys((d.reschedule_appointment as { api_schema: { request_body_schema: { properties: object } } }).api_schema.request_body_schema.properties)).toContain("doctor_id");
   });
   it("lets the assistant tell a booking which language the patient uses, for the WhatsApp confirmation, without making it required", () => {
@@ -148,7 +151,8 @@ describe("voices", () => {
   });
   it("sets only one of description or dynamic_variable on each tool property (ElevenLabs returns 422 otherwise)", () => {
     for (const [name, def] of Object.entries(toolDefinitions("https://app.example", "sec"))) {
-      const props = (def as { api_schema: { request_body_schema: { properties: Record<string, Record<string, unknown>> } } }).api_schema.request_body_schema.properties;
+      const schema = (def as { api_schema?: { request_body_schema: { properties: Record<string, Record<string, unknown>> } }; parameters?: { properties: Record<string, Record<string, unknown>> } });
+      const props = schema.api_schema?.request_body_schema.properties ?? schema.parameters?.properties ?? {};
       for (const [prop, cfg] of Object.entries(props)) {
         const exclusive = ["description", "dynamic_variable", "constant_value", "is_system_provided", "is_omitted"].filter((k) => cfg[k] !== undefined);
         expect(exclusive.length, `${name}.${prop}`).toBeLessThanOrEqual(1);

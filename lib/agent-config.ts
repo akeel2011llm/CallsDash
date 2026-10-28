@@ -24,10 +24,24 @@ const ARABIC_STYLE = {
  * Sync while the agent's last sync was at an older version. 2: CPR numbers for booking, finding, moving and cancelling.
  * 3: the widget hides its "Powered by" line, and a booking can carry the patient's language for the WhatsApp confirmation.
  * 4: lookup_customer and save_customer, so the assistant knows returning customers and keeps their details.
+ * 5: the clinic chooses whether customers are found by phone number or CPR number; find_item looks up the catalogue and show_image
+ *    shows a photo in website chat.
  */
-export const AGENT_VERSION = 4;
+export const AGENT_VERSION = 5;
 
-const TOOL_RULES = [
+/** How the assistant finds and saves returning customers, which depends on what the clinic chose on its Customers screen. */
+export function customerRules(mode: "phone" | "cpr"): string[] {
+  const keep = "Put only preferences and practical notes in note, never medical details. Never tell a customer what another customer's record holds.";
+  return mode === "cpr" ? [
+    "This clinic knows its customers by CPR number. When someone starts to need their own details (a booking, a change, or a returning customer), ask for their CPR number (9 digits), read it back digit by digit, and call lookup_customer with it as patient_cpr. If it returns found:true, greet them by name and use the details it returns. If not, carry on and learn their name.",
+    `Once you know a customer's name and CPR number, or learn something worth remembering (their language, email, a preference), call save_customer with patient_cpr, patient_name, their phone number as patient_phone if you know it, the language and the conversation_id. ${keep}`,
+  ] : [
+    "When the caller's phone number is known (a phone call or WhatsApp chat), call lookup_customer with it as patient_phone before you greet them. On the website, call it once the customer has given their number. If the customer is found, greet them by their first name. Share nothing else about them unless lookup_customer returns verified:true; it only does so when you also pass their CPR number as patient_cpr, which you ask for only when they need their own notes or earlier conversations.",
+    `Once you know a customer's name, or learn something worth remembering (their language, email, a preference), call save_customer with their phone number as patient_phone, their patient_name, the language and the conversation_id. ${keep}`,
+  ];
+}
+
+const BOOKING_RULES = [
   "Always call check_availability before offering times. Never invent slots. Leave from_date empty to start from today.",
   "To book, ask for the patient's full name, phone number and CPR number (the 9-digit personal number on the Bahraini ID card). Read the CPR number back digit by digit, then confirm doctor, time, name, phone and CPR with the patient before calling book_appointment.",
   "Call book_appointment with the doctor_id and starts_at exactly as check_availability returned them; never rewrite the time yourself. Always pass language (en or ar): the language the patient is speaking or writing, because their WhatsApp confirmation is sent in it.",
@@ -36,8 +50,15 @@ const TOOL_RULES = [
   "To move a booking, call check_availability first with the doctor_id that find_patient_booking returned for the booking (or another doctor's doctor_id if the patient wants a different doctor), then call reschedule_appointment with the chosen starts_at as new_starts_at, and doctor_id only when the doctor changes. Pass language, and mention the WhatsApp confirmation the same way as for a new booking.",
   "If find_patient_booking finds nothing but the patient says they have a booking, ask for the phone number it was made with and call find_patient_booking again with both patient_cpr and patient_phone; give the same patient_phone to cancel_appointment or reschedule_appointment for that booking.",
   "Never say a CPR number aloud except to read back the one the patient just gave. If the patient has no CPR number (for example a visitor), use take_message so the team can book for them.",
-  "When the caller's phone number is known (a phone call or WhatsApp chat), call lookup_customer with it as patient_phone before you greet them. On the website, call it once the customer has given their number. If the customer is found, greet them by their first name. Share nothing else about them unless lookup_customer returns verified:true; it only does so when you also pass their CPR number as patient_cpr, which you ask for only when they need their own notes or earlier conversations.",
-  "Once you know a customer's name, or learn something worth remembering (their language, email, a preference), call save_customer with their phone number as patient_phone, their patient_name, the language and the conversation_id. Put only preferences and practical notes in note, never medical details. Never tell a customer what another customer's record holds.",
+];
+
+/** Catalogue rules: what to look up, what to say, and when a photo may be shown (only the website chat can draw one). */
+const CATALOGUE_RULES = [
+  "When a customer asks about a product, treatment or package the clinic offers, call find_item with what they asked, then answer only from the details it returns. If it finds nothing, do not guess; say it is not listed and offer to take a message.",
+  "If find_item returns an image_url and the customer is chatting on the website (Channel: website), call show_image with that image_url and a short caption after you describe the item. On a phone call, WhatsApp or Instagram do not call show_image; just describe it.",
+];
+
+const CLOSING_RULES = [
   "If a tool returns ok:false, follow its message. Never promise a booking that a tool did not confirm.",
   "Use take_message when the patient wants staff to call back. Use handoff_to_staff when a person must take over; there is no live transfer, so say that staff will call back.",
   "For a medical emergency tell the caller to call 999 immediately and also call handoff_to_staff with urgent set to true.",
@@ -65,7 +86,7 @@ export function buildPrompt(settings: AgentSettings, doctors: DoctorLine[] = [])
     `# Style\n${REPLY_LENGTH[settings.replyLength]} ${FORMALITY[settings.formality]} Answer only from the knowledge base and the facts below; if you do not know, say so and offer to take a message.`,
     `# Facts for this conversation\nToday is {{today}}. The clinic is open now: {{open_now}}. Opening hours today: {{hours_today}}. If closed, it next opens {{next_opening}}. Channel: {{channel}}. The caller's phone number, if known: {{caller_phone}} (ask them to confirm it before booking).`,
     doctorSection(doctors),
-    `# Tools\n${TOOL_RULES.map((r) => `- ${r}`).join("\n")}`,
+    `# Tools\n${[...BOOKING_RULES, ...customerRules(settings.customerLookup === "cpr" ? "cpr" : "phone"), ...CATALOGUE_RULES, ...CLOSING_RULES].map((r) => `- ${r}`).join("\n")}`,
   ].filter(Boolean).join("\n\n");
 }
 
@@ -189,7 +210,7 @@ const agentId: Prop = { type: "string", dynamic_variable: "system__agent_id" };
 const conversationId: Prop = { type: "string", dynamic_variable: "system__conversation_id" };
 const CPR_HELP = "Patient's CPR number: the 9 digits on the Bahraini ID card, digits only.";
 
-/** The nine booking, customer and hand-over tools (docs/agent-tools.md), as ElevenLabs webhook tool configs. One shared set serves every client; `agent_id` tells them apart. */
+/** The booking, customer, catalogue and hand-over tools (docs/agent-tools.md), as ElevenLabs webhook tool configs. One shared set serves every client; `agent_id` tells them apart. */
 export function toolDefinitions(appUrl: string, secret: string): Record<string, Record<string, unknown>> {
   const tool = (name: string, description: string, properties: Record<string, Prop>, required: string[]) => ({
     type: "webhook", name, description,
@@ -221,14 +242,27 @@ export function toolDefinitions(appUrl: string, secret: string): Record<string, 
       doctor_id: str("Only when the patient wants another doctor: the doctor_id of the chosen slot."), patient_phone: str("Only if find_patient_booking needed the phone number too."),
       language: str("en or ar, the language the patient is speaking or writing. Their WhatsApp confirmation is sent in it."),
     }, ["booking_id", "patient_cpr", "new_starts_at"]),
-    lookup_customer: tool("lookup_customer", "Look up a returning customer by phone number. Without their CPR number you only get their first name.", {
-      patient_phone: str("The customer's phone number."), patient_cpr: str("Only when the customer gave it: their CPR number, 9 digits. A match unlocks their notes and recent conversations."),
-    }, ["patient_phone"]),
-    save_customer: tool("save_customer", "Save or update a customer's details (name, language, email, a short note) by phone number, so they are known next time.", {
+    lookup_customer: tool("lookup_customer", "Look up a returning customer the way this clinic's instructions say: by phone number, or by CPR number.", {
+      patient_phone: str("The customer's phone number. Pass it when the instructions say customers are found by phone number."),
+      patient_cpr: str("The customer's CPR number, 9 digits. Pass it when the instructions say customers are found by CPR number; otherwise only when the customer gave it, to unlock their notes and recent conversations."),
+    }, []),
+    save_customer: tool("save_customer", "Save or update a customer's details (name, language, email, a short note), so they are known next time.", {
       patient_phone: str("The customer's phone number."), patient_name: str("The customer's name."), patient_cpr: str("Their CPR number if they gave it, 9 digits. Never guess it."),
       email: str("Their email address, if they gave one."), note: str("A short practical note to remember (a preference). No medical details."),
       language: str("en or ar, the language the customer speaks or writes."), conversation_id: conversationId,
-    }, ["patient_phone"]),
+    }, []),
+    find_item: tool("find_item", "Look up something the clinic offers (a product, treatment or package) in its catalogue, with its details, price and a photo address.", {
+      query: str("What the customer asked about, in a few words, in their own language."), language: str("en or ar, the language to answer in."),
+    }, ["query"]),
+    // not a webhook: the customer's browser runs it (public/widget.js draws the photo), so it needs no address or secret
+    show_image: {
+      type: "client", name: "show_image", expects_response: false,
+      description: "Show a photo to the customer in the website chat. Use the image_url that find_item returned, exactly as it is, and a short caption in the customer's language.",
+      parameters: {
+        type: "object", required: ["image_url"],
+        properties: { image_url: str("The image_url from find_item, unchanged."), caption: str("A short caption, such as the item's name, in the customer's language.") },
+      },
+    },
     take_message: tool("take_message", "Take a message for the clinic staff to answer later.", {
       patient_name: str("Caller's name."), patient_phone: str("Caller's phone number."), message: str("What the caller wants."), language: str("en or ar."), conversation_id: conversationId,
     }, ["patient_name", "patient_phone", "message"]),

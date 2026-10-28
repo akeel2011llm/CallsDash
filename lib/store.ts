@@ -11,7 +11,7 @@ import { USD_TO_BHD } from "./pricing";
 import type {
   AgentToolCall,
   NewConversation,
-  AgentSettings, Booking, BookingMessage, BookingStatus, Channel, Conversation, ChatSession, Customer, Doctor, Locale, Permissions, Profile, StaffRequest, Tenant, TenantSecrets,
+  AgentSettings, Booking, BookingMessage, BookingStatus, Channel, Conversation, ChatSession, Customer, Doctor, Item, Locale, Permissions, Profile, StaffRequest, Tenant, TenantSecrets,
 } from "./types";
 
 /**
@@ -125,10 +125,10 @@ export const getStaffRequests = (tenantId: string) =>
 export const getCustomers = (tenantId: string) =>
   (db().customers ??= []).filter((c) => c.tenantId === tenantId).sort((a, b) => (b.lastContactAt ?? b.createdAt).localeCompare(a.lastContactAt ?? a.createdAt));
 export const getCustomer = (tenantId: string, customerId: string) => (db().customers ??= []).find((c) => c.tenantId === tenantId && c.id === customerId);
-/** Finds a customer by the last 8 digits of the phone number or by a linked ElevenLabs conversation id. */
-export const findCustomer = (tenantId: string, by: { phoneKey?: string; conversationId?: string }) =>
+/** Finds a customer by the last 8 digits of the phone number, the CPR number, or a linked ElevenLabs conversation id. */
+export const findCustomer = (tenantId: string, by: { phoneKey?: string; conversationId?: string; cpr?: string }) =>
   (db().customers ??= []).find((c) => c.tenantId === tenantId
-    && ((by.phoneKey && c.phone.replace(/\D/g, "").slice(-8) === by.phoneKey) || (by.conversationId && c.conversationIds.includes(by.conversationId))));
+    && ((by.phoneKey && c.phone.replace(/\D/g, "").slice(-8) === by.phoneKey) || (by.cpr && c.cpr === by.cpr) || (by.conversationId && c.conversationIds.includes(by.conversationId))));
 /** Adds the customer (no existing id) or replaces the stored one; the new id is returned inside the record. */
 export function putCustomer(tenantId: string, c: Omit<Customer, "id" | "tenantId"> & { id?: string }, actor: string): Customer {
   const list = (db().customers ??= []);
@@ -145,6 +145,37 @@ export function deleteCustomer(tenantId: string, customerId: string, actor: stri
   const before = list.length;
   d.customers = list.filter((x) => !(x.tenantId === tenantId && x.id === customerId));
   if (d.customers.length < before) audit(actor, "Customer deleted", tenantId);
+}
+
+/** The catalogue of a client, by name. */
+export const getItems = (tenantId: string) =>
+  (db().items ??= []).filter((i) => i.tenantId === tenantId).sort((a, b) => a.name.localeCompare(b.name));
+export const getItem = (tenantId: string, itemId: string) => (db().items ??= []).find((i) => i.tenantId === tenantId && i.id === itemId);
+/** The stored photo of an item as a data: URL, if it has one. */
+export function getItemImage(tenantId: string, itemId: string): string | undefined {
+  return getItem(tenantId, itemId) ? (db().itemImages ??= {})[itemId] : undefined;
+}
+/** Adds the item (no id) or replaces it. `image` is a data: URL to store, null to remove the photo, undefined to keep it. */
+export function putItem(tenantId: string, i: Omit<Item, "id" | "tenantId" | "hasImage" | "updatedAt"> & { id?: string }, image: string | null | undefined, actor: string): Item {
+  const d = db();
+  const list = (d.items ??= []);
+  const images = (d.itemImages ??= {});
+  const at = list.findIndex((x) => x.tenantId === tenantId && x.id === i.id);
+  const itemId = at >= 0 ? list[at].id : id("it");
+  if (image) images[itemId] = image; else if (image === null) delete images[itemId];
+  const saved: Item = { ...structuredClone(i), id: itemId, tenantId, hasImage: Boolean(images[itemId]), updatedAt: now().toISOString() };
+  if (at >= 0) list[at] = saved; else list.push(saved);
+  audit(actor, `${at >= 0 ? "Catalogue item updated" : "Catalogue item added"}: ${saved.name}`, tenantId);
+  return saved;
+}
+export function deleteItem(tenantId: string, itemId: string, actor: string) {
+  const d = db();
+  const list = (d.items ??= []);
+  const gone = list.find((x) => x.tenantId === tenantId && x.id === itemId);
+  if (!gone) return;
+  d.items = list.filter((x) => x !== gone);
+  delete (d.itemImages ??= {})[itemId];
+  audit(actor, `Catalogue item deleted: ${gone.name}`, tenantId);
 }
 
 export function addStaffRequest(tenantId: string, r: Pick<StaffRequest, "kind" | "name" | "phone" | "text" | "urgent" | "language"> & { conversationId?: string }) {
@@ -463,6 +494,8 @@ export function deleteTenant(tenantId: string, actor: string) {
   const lists = d as unknown as Record<string, { tenantId?: string }[]>;
   for (const k of ["agentVersions", "doctors", "bookings", "conversations", "knowledge", "unanswered", "batches", "ledger", "alerts", "audit", "topUpRequests", "staffRequests", "customers", "profiles", "chatSessions"])
     lists[k] = lists[k].filter((x) => x.tenantId !== tenantId);
+  for (const i of (d.items ??= []).filter((x) => x.tenantId === tenantId)) delete (d.itemImages ??= {})[i.id];
+  d.items = d.items.filter((x) => x.tenantId !== tenantId);
   audit(actor, `Deleted client "${t.name}"`);
 }
 

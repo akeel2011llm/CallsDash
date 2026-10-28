@@ -30,7 +30,13 @@ export const firstName = (name: string) => name.trim().split(/\s+/)[0] ?? "";
 const emailOk = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
 
 /** What the assistant is told about a caller. A phone number alone is not proof of who is calling, so notes and history need the CPR on file. */
-export async function lookupCustomer(d: CustomerDeps, tenantId: string, input: { phone: string; cpr?: string }) {
+export type LookupMode = "phone" | "cpr";
+
+/** How this clinic's assistant finds a returning customer. Phone number unless the clinic chose the CPR number. */
+export const lookupModeOf = (s: { customerLookup?: LookupMode } | undefined): LookupMode => (s?.customerLookup === "cpr" ? "cpr" : "phone");
+
+export async function lookupCustomer(d: CustomerDeps, tenantId: string, input: { phone?: string; cpr?: string }, mode: LookupMode = "phone") {
+  if (mode === "cpr") return lookupByCpr(d, tenantId, input.cpr ?? "");
   const key = phoneKey(input.phone);
   if (!key) return { found: false, message: "That is not a full phone number. Ask the customer for it, or carry on without looking them up." };
   const c = await d.findCustomer(tenantId, { phoneKey: key });
@@ -53,6 +59,19 @@ export async function lookupCustomer(d: CustomerDeps, tenantId: string, input: {
   };
 }
 
+/** CPR mode: the CPR number is the key and the proof at once, so a match gives the customer's details. */
+async function lookupByCpr(d: CustomerDeps, tenantId: string, rawCpr: string) {
+  const cpr = normalizeCpr(rawCpr);
+  if (!cpr) return { found: false, message: "Ask the customer for their CPR number (9 digits, from the Bahraini ID card), read it back digit by digit, then call lookup_customer again with it as patient_cpr. Without a valid CPR number, carry on without looking them up." };
+  const c = await d.findCustomer(tenantId, { cpr });
+  if (!c) return { found: false, message: "No customer with this CPR number yet. Carry on, and when you have their name and phone number call save_customer." };
+  return {
+    found: true, verified: true, name: c.name, language: c.language, email: c.email, notes: c.notes || undefined,
+    last_contact: c.lastContactAt, recent_conversations: c.history.slice(0, 3).map((h) => ({ at: h.at, channel: h.channel, summary: h.summary })),
+    message: "Found by CPR number. You may use these details to help the customer. Never say the CPR number aloud.",
+  };
+}
+
 export interface AssistantSave {
   phone: string; name?: string; cpr?: string; language?: Locale; email?: string; note?: string; conversationId?: string; channel?: Channel;
 }
@@ -64,11 +83,13 @@ export interface AssistantSave {
  * notes, no conversations): otherwise someone quoting another person's number could add their own CPR and then read that person's
  * notes. Staff add a CPR to any other record on the Customers screen.
  */
-export async function saveCustomerFromAssistant(d: CustomerDeps, tenantId: string, input: AssistantSave): Promise<{ customer: Customer; created: boolean; cprSaved: boolean }> {
-  const phone = cleanPhone(input.phone);
-  if (!phone) throw new CustomerError("bad_phone");
+export async function saveCustomerFromAssistant(d: CustomerDeps, tenantId: string, input: AssistantSave, mode: LookupMode = "phone"): Promise<{ customer: Customer; created: boolean; cprSaved: boolean }> {
   const cpr = input.cpr ? normalizeCpr(input.cpr) : null;
-  const existing = await d.findCustomer(tenantId, { phoneKey: phoneKey(phone), conversationId: input.conversationId });
+  // CPR mode: the customer is the one with this CPR number, whatever phone they call from now
+  const byCpr = mode === "cpr" && cpr ? await d.findCustomer(tenantId, { cpr }) : undefined;
+  const phone = cleanPhone(input.phone) ?? (byCpr ? byCpr.phone : null);
+  if (!phone) throw new CustomerError("bad_phone");
+  const existing = byCpr ?? await d.findCustomer(tenantId, { phoneKey: phoneKey(phone), conversationId: input.conversationId });
   const now = new Date().toISOString();
   const email = input.email && emailOk(input.email.trim()) ? clip(input.email, 120) : undefined;
   const note = input.note ? clip(input.note, 400) : "";
@@ -86,14 +107,18 @@ export async function saveCustomerFromAssistant(d: CustomerDeps, tenantId: strin
   const mayChange = !existing.cpr || (cpr !== null && cpr === existing.cpr);
   if (!mayChange && (input.name || input.email || cpr)) throw new CustomerError("cpr_mismatch");
   const notes = note ? `${existing.notes ? `${existing.notes}\n` : ""}${stamp(note)}`.slice(-MAX_NOTES) : existing.notes;
-  const attach = cpr !== null && !existing.cpr && !existing.notes && existing.history.length === 0;
+  // CPR mode also fills in a record the post-call webhook made from a bare phone number (no name, no notes): it starts afresh with its
+  // earlier conversations dropped, since nothing shows they were this person's
+  const fresh = mode === "cpr" && !existing.name && !existing.notes;
+  const attach = cpr !== null && !existing.cpr && (fresh || (!existing.notes && existing.history.length === 0));
+  const base = attach && fresh ? { ...existing, history: [], conversationIds: [] } : existing;
   const customer = await d.putCustomer(tenantId, {
-    ...existing,
+    ...base,
     name: input.name ? clip(input.name, 120) : existing.name,
     cpr: existing.cpr ?? (attach ? cpr : undefined),
     language: input.language ?? existing.language,
     email: email ?? existing.email,
-    notes, updatedAt: now, lastContactAt: now, conversationIds: convs(existing.conversationIds),
+    notes, updatedAt: now, lastContactAt: now, conversationIds: convs(base.conversationIds),
   }, "assistant");
   return { customer, created: false, cprSaved: attach };
 }

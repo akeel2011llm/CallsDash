@@ -5,7 +5,7 @@ import { FLAT_RATES, USD_TO_BHD, agent as defaultAgent } from "../seed";
 import { conversationCostUsd } from "../costing";
 import type {
   AgentSettings, AgentToolCall, AgentVersion, Alert, AuditEntry, Booking, BookingMessage, BookingStatus, Conversation, CreditBatch, Doctor,
-  CatalogPackage, KnowledgeItem, LedgerEntry, ChatSession, Channel, Customer, Locale, Permissions, Profile, StaffRequest, Tenant, TenantSecrets, UnansweredQuestion,
+  CatalogPackage, KnowledgeItem, LedgerEntry, ChatSession, Channel, Customer, Item, Locale, Permissions, Profile, StaffRequest, Tenant, TenantSecrets, UnansweredQuestion,
 } from "../types";
 import type { Data } from "./demo";
 import { DuplicateError, SlotTakenError } from "../errors";
@@ -67,6 +67,11 @@ const customerOf = (r: Row): Customer => ({
   notes: r.notes ?? "", createdAt: iso(r.created_at), updatedAt: iso(r.updated_at), lastContactAt: r.last_contact_at ? iso(r.last_contact_at) : undefined,
   conversationIds: r.conversation_ids ?? [], history: r.history == null ? [] : jsonish(r.history),
 });
+const itemOf = (r: Row): Item => ({
+  id: r.id, tenantId: r.tenant_id, name: r.name, nameAr: r.name_ar ?? undefined, details: r.details, detailsAr: r.details_ar ?? undefined,
+  price: r.price ?? undefined, keywords: r.keywords, active: r.active, hasImage: Boolean(r.has_image), createdAt: iso(r.created_at), updatedAt: iso(r.updated_at),
+});
+const ITEM_COLUMNS = `id, tenant_id, name, name_ar, details, details_ar, price, keywords, active, (image is not null) as has_image, created_at, updated_at`;
 const convOf = (r: Row): Conversation => ({
   id: r.id, tenantId: r.tenant_id, channel: r.channel, mode: r.mode, language: r.language, startedAt: iso(r.started_at),
   durationSec: r.duration_sec, messages: r.messages, outcome: r.outcome, summary: r.summary, sentiment: r.sentiment,
@@ -187,6 +192,24 @@ export const SCHEMA_ADDITIONS = [
   `create unique index if not exists customers_phone on customers (tenant_id, phone_key)`,
   `create index if not exists customers_conversations on customers using gin (conversation_ids)`,
   `alter table customers enable row level security`,
+  `create index if not exists customers_cpr on customers (tenant_id, cpr) where cpr is not null`,
+  // what the clinic offers, shown by the assistant with a photo (the photo is a small data: URL kept apart from the list queries)
+  `create table if not exists items (
+     id uuid primary key default gen_random_uuid(),
+     tenant_id uuid not null references tenants on delete cascade,
+     name text not null,
+     name_ar text,
+     details text not null default '',
+     details_ar text,
+     price text,
+     keywords text not null default '',
+     active boolean not null default true,
+     image text,
+     created_at timestamptz not null default now(),
+     updated_at timestamptz not null default now())`,
+  `create index if not exists items_tenant on items (tenant_id, name)`,
+  `alter table items enable row level security`,
+  `create index if not exists customers_cpr on customers (tenant_id, cpr) where cpr is not null`,
   `create index if not exists conversations_flagged on conversations (tenant_id, started_at desc) where cardinality(flags) > 0`,
 ];
 
@@ -516,8 +539,8 @@ export function createPgData(db: Db): Data {
     findCustomer: async (tenantId, by) => {
       await ensureSchema();
       const rows = await q<Row>(
-        `select * from customers where tenant_id = $1 and (($2::text is not null and phone_key = $2) or ($3::text is not null and $3 = any(conversation_ids))) limit 1`,
-        [tenantId, by.phoneKey || null, by.conversationId || null]);
+        `select * from customers where tenant_id = $1 and (($2::text is not null and phone_key = $2) or ($3::text is not null and $3 = any(conversation_ids)) or ($4::text is not null and cpr = $4)) limit 1`,
+        [tenantId, by.phoneKey || null, by.conversationId || null, by.cpr || null]);
       return rows[0] ? customerOf(rows[0]) : undefined;
     },
     putCustomer: async (tenantId, c, actor) => tx(async (run) => {
@@ -544,6 +567,44 @@ export function createPgData(db: Db): Data {
       if (!/^[0-9a-f-]{36}$/i.test(customerId)) return;
       const r = await run(`delete from customers where tenant_id = $1 and id = $2 returning id`, [tenantId, customerId]);
       if (r[0]) await audit(run, actor, "Customer deleted", tenantId);
+    }),
+
+    getItems: async (tenantId) => {
+      await ensureSchema();
+      return (await q<Row>(`select ${ITEM_COLUMNS} from items where tenant_id = $1 order by lower(name) limit 2000`, [tenantId])).map(itemOf);
+    },
+    getItem: async (tenantId, itemId) => {
+      await ensureSchema();
+      if (!/^[0-9a-f-]{36}$/i.test(itemId)) return undefined;
+      const rows = await q<Row>(`select ${ITEM_COLUMNS} from items where tenant_id = $1 and id = $2`, [tenantId, itemId]);
+      return rows[0] ? itemOf(rows[0]) : undefined;
+    },
+    getItemImage: async (tenantId, itemId) => {
+      await ensureSchema();
+      if (!/^[0-9a-f-]{36}$/i.test(itemId)) return undefined;
+      const rows = await q<Row>(`select image from items where tenant_id = $1 and id = $2`, [tenantId, itemId]);
+      return rows[0]?.image ?? undefined;
+    },
+    putItem: async (tenantId, i, image, actor) => tx(async (run) => {
+      // $11: 0 keeps the stored photo, 1 replaces it with $12 (null removes it)
+      const values = [tenantId, i.name, i.nameAr ?? null, i.details, i.detailsAr ?? null, i.price ?? null, i.keywords, i.active, image === undefined ? 0 : 1, image ?? null];
+      let rows: Row[];
+      if (i.id) {
+        rows = await run<Row>(
+          `update items set name = $2, name_ar = $3, details = $4, details_ar = $5, price = $6, keywords = $7, active = $8, image = case when $9 = 1 then $10 else image end, updated_at = now()
+           where tenant_id = $1 and id = $11 returning ${ITEM_COLUMNS}`, [...values, i.id]);
+      } else {
+        rows = await run<Row>(
+          `insert into items (tenant_id, name, name_ar, details, details_ar, price, keywords, active, image) values ($1,$2,$3,$4,$5,$6,$7,$8,$9) returning ${ITEM_COLUMNS}`, [...values.slice(0, 8), image ?? null]);
+      }
+      if (!rows[0]) throw new Error("item not found");
+      await audit(run, actor, `${i.id ? "Catalogue item updated" : "Catalogue item added"}: ${i.name}`, tenantId);
+      return itemOf(rows[0]);
+    }),
+    deleteItem: async (tenantId, itemId, actor) => tx(async (run) => {
+      if (!/^[0-9a-f-]{36}$/i.test(itemId)) return;
+      const r = await run<Row>(`delete from items where tenant_id = $1 and id = $2 returning name`, [tenantId, itemId]);
+      if (r[0]) await audit(run, actor, `Catalogue item deleted: ${r[0].name}`, tenantId);
     }),
 
     setStaffRequestStatus: async (tenantId, requestId, status, actor) => tx(async (run) => {

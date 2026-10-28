@@ -2,19 +2,20 @@ import Link from "next/link";
 import { requireClient } from "@/lib/auth";
 import { dictionaries, getT } from "@/lib/i18n";
 import { fmtDateTime } from "@/lib/format";
-import { getCustomers } from "@/lib/data";
-import { saveCustomerAction } from "@/lib/customer-actions";
-import { phoneKey } from "@/lib/customers";
+import { getAgent, getCustomers } from "@/lib/data";
+import { saveCustomerAction, saveLookupModeAction } from "@/lib/customer-actions";
+import { lookupModeOf, phoneKey } from "@/lib/customers";
 import { Empty, Notice, PageHead } from "@/components/ui";
 import { SubmitButton } from "@/components/SubmitButton";
 import { CustomerFields } from "@/components/CustomerFields";
 
 const SHOWN = 200;
 
-export default async function CustomersPage({ searchParams }: { searchParams: Promise<{ q?: string; deleted?: string; err?: string }> }) {
-  const { tenant } = await requireClient();
+export default async function CustomersPage({ searchParams }: { searchParams: Promise<{ q?: string; deleted?: string; err?: string; mode?: string }> }) {
+  const { tenant, staffRole } = await requireClient();
   const sp = await searchParams;
-  const [{ t, locale }, all] = await Promise.all([getT(), getCustomers(tenant.id)]);
+  const [{ t, locale }, all, agent] = await Promise.all([getT(), getCustomers(tenant.id), getAgent(tenant.id)]);
+  const mode = lookupModeOf(agent);
   const q = (sp.q ?? "").trim().toLowerCase();
   const digits = phoneKey(q) ? q.replace(/\D/g, "") : "";
   const found = q ? all.filter((c) => `${c.name} ${c.email ?? ""}`.toLowerCase().includes(q) || (digits && c.phone.replace(/\D/g, "").includes(digits))) : all;
@@ -25,7 +26,25 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
       <PageHead title={t("customers.title")} actions={all.length > 0 ? <a className="btn small ghost" href="/app/customers/csv">{t("customers.export")}</a> : undefined} />
       <p className="muted">{t("customers.help")}</p>
       {sp.deleted && <Notice tone="ok">{t("customers.deleted")}</Notice>}
+      {sp.mode && <Notice tone="ok">{t("customers.lookup.saved")}</Notice>}
       {err in dictionaries.en && <Notice tone="warn">{t(err as "customers.err.bad_phone")}</Notice>}
+      <section className="card stack">
+        <h2>{t("customers.lookup.title")}</h2>
+        {staffRole === "manager" ? (
+          <form action={saveLookupModeAction} className="stack">
+            <label className="row" style={{ flexWrap: "nowrap", alignItems: "flex-start" }}>
+              <input type="radio" name="mode" value="phone" defaultChecked={mode === "phone"} />
+              <span><strong>{t("customers.lookup.phone")}</strong><br /><small className="muted">{t("customers.lookup.phone.help")}</small></span>
+            </label>
+            <label className="row" style={{ flexWrap: "nowrap", alignItems: "flex-start" }}>
+              <input type="radio" name="mode" value="cpr" defaultChecked={mode === "cpr"} />
+              <span><strong>{t("customers.lookup.cpr")}</strong><br /><small className="muted">{t("customers.lookup.cpr.help")}</small></span>
+            </label>
+            <div><SubmitButton className="btn" type="submit">{t("common.save")}</SubmitButton></div>
+          </form>
+        ) : <p>{mode === "cpr" ? t("customers.lookup.cpr") : t("customers.lookup.phone")}</p>}
+        <small className="muted">{t("customers.lookup.note")}</small>
+      </section>
       <section className="card stack">
         <form className="row" style={{ flexWrap: "nowrap" }} role="search">
           <input name="q" defaultValue={sp.q ?? ""} placeholder={t("customers.search")} aria-label={t("customers.search")} maxLength={80} style={{ flex: 1 }} />

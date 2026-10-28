@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createDemoData, type Data } from "@/lib/data/demo";
 import { createPgData, type Db, type Q } from "@/lib/data/pg";
-import { CustomerError, cleanPhone, lookupCustomer, phoneKey, recordVisit, saveCustomerByStaff, saveCustomerFromAssistant } from "@/lib/customers";
+import { CustomerError, cleanPhone, lookupCustomer, lookupModeOf, phoneKey, recordVisit, saveCustomerByStaff, saveCustomerFromAssistant } from "@/lib/customers";
 import { parsePostCall } from "@/lib/elevenlabs";
-import { toolDefinitions } from "@/lib/agent-config";
+import { buildPrompt, toolDefinitions } from "@/lib/agent-config";
 import { PLAN_PRESETS } from "@/lib/plans";
 import { makeDb } from "./helpers/pgdb";
 
@@ -56,6 +56,50 @@ describe.each(["demo", "postgres"] as const)("customers (%s)", (kind) => {
     expect(again?.notes).toContain("Prefers mornings");
     expect(await d.findCustomer(t, { conversationId: "conv_1" })).toMatchObject({ id: r.customer.id });
     expect((await d.getCustomers(t)).length).toBe(1);
+  });
+
+  it("CPR mode: finds the customer by CPR number whatever phone they use, and the CPR is the proof", async () => {
+    const d = await backend(kind);
+    const t = await clinic(d);
+    await saveCustomerFromAssistant(d, t, { phone: "36001122", name: "Hessa Al Mannai", cpr: "850412345", note: "Prefers mornings" }, "cpr");
+    expect(await lookupCustomer(d, t, { cpr: "850 412 345" }, "cpr")).toMatchObject({ found: true, verified: true, name: "Hessa Al Mannai" });
+    expect(await lookupCustomer(d, t, { cpr: "111111112" }, "cpr")).toMatchObject({ found: false });
+    expect(await lookupCustomer(d, t, { phone: "36001122" }, "cpr")).toMatchObject({ found: false }); // a phone number alone finds nobody
+    expect(await lookupCustomer(d, t, { cpr: "12" }, "cpr")).toMatchObject({ found: false });
+    // a new phone number, same CPR: the same customer, with the new note added and no second record
+    const r = await saveCustomerFromAssistant(d, t, { phone: "39887766", name: "Hessa Al Mannai", cpr: "850412345", note: "Now on a new phone" }, "cpr");
+    expect(r.created).toBe(false);
+    expect((await d.getCustomers(t)).length).toBe(1);
+    // the phone may be left out for a CPR the clinic already knows
+    const again = await saveCustomerFromAssistant(d, t, { phone: "", cpr: "850412345", note: "third" }, "cpr");
+    expect(again.customer.notes.split("\n")).toHaveLength(3);
+  });
+
+  it("CPR mode: a record made from a bare phone number gets the CPR, and its earlier conversations are dropped", async () => {
+    const d = await backend(kind);
+    const t = await clinic(d);
+    await recordVisit(d, t, { conversationId: "conv_old", phone: "36001122", channel: "phone", language: "en", summary: "somebody else's call", at: new Date().toISOString() });
+    const r = await saveCustomerFromAssistant(d, t, { phone: "36001122", name: "Omar", cpr: "850412345" }, "cpr");
+    expect(r.cprSaved).toBe(true);
+    expect(r.customer.history).toHaveLength(0);
+    // in phone mode the same record would not take the CPR, because it holds conversations
+    const d2 = await backend(kind);
+    const t2 = await clinic(d2, "Cust Phone");
+    await recordVisit(d2, t2, { conversationId: "conv_old", phone: "36001122", channel: "phone", language: "en", summary: "x", at: new Date().toISOString() });
+    expect((await saveCustomerFromAssistant(d2, t2, { phone: "36001122", name: "Omar", cpr: "850412345" })).cprSaved).toBe(false);
+  });
+
+  it("saves the clinic's lookup choice and writes it into the assistant's instructions", async () => {
+    const d = await backend(kind);
+    const t = await clinic(d);
+    const cur = await d.getAgent(t);
+    expect(lookupModeOf(cur)).toBe("phone");
+    await d.saveAgent(t, { ...cur, customerLookup: "cpr" }, "x", "test");
+    const now = await d.getAgent(t);
+    expect(lookupModeOf(now)).toBe("cpr");
+    expect(buildPrompt(now)).toContain("knows its customers by CPR number");
+    expect(buildPrompt({ ...now, customerLookup: "phone" })).not.toContain("knows its customers by CPR number");
+    expect(buildPrompt({ ...now, customerLookup: "phone" })).toContain("lookup_customer with it as patient_phone");
   });
 
   it("keeps clients apart", async () => {
@@ -197,11 +241,11 @@ describe.each(["demo", "postgres"] as const)("customers (%s)", (kind) => {
 });
 
 describe("customers and the assistant", () => {
-  it("offers lookup_customer and save_customer, with the phone number required", () => {
+  it("offers lookup_customer and save_customer, and accept either a phone number or a CPR number", () => {
     const defs = toolDefinitions("https://app.example", "s3cret");
     for (const name of ["lookup_customer", "save_customer"]) {
       const schema = (defs[name].api_schema as { request_body_schema: { required: string[] } }).request_body_schema;
-      expect(schema.required).toEqual(expect.arrayContaining(["agent_id", "patient_phone"]));
+      expect(schema.required).toEqual(["agent_id"]); // which of phone or CPR is needed depends on the clinic's choice, checked on the server
     }
   });
 
