@@ -18,6 +18,8 @@ import { refreshModelsAction, resetStudioSectionAction, saveFeesAction, saveStud
 import { VOICES, resolveVoiceId } from "@/lib/voices";
 import type { AgentSettings, Tenant } from "@/lib/types";
 import { ConfirmDelete } from "@/components/Confirm";
+import { Fold } from "@/components/Fold";
+import { FoldControls } from "@/components/FoldControls";
 import { SubmitButton } from "@/components/SubmitButton";
 import { TryAssistant } from "@/components/TryAssistant";
 import { Badge, Notice, PageHead, Stat } from "@/components/ui";
@@ -174,14 +176,12 @@ export default async function AssistantStudioPage({ params, searchParams }: { pa
     );
   };
 
-  /** One card per section, each with its own form: saving one never touches the others. */
+  /** One folded card per section, each with its own form: saving one never touches the others. The one just saved opens by itself. */
   const section = (key: SectionId, body: React.ReactNode, before?: React.ReactNode) => (
-    <section className="card stack" id={key} key={key}>
-      <div className="row" style={{ justifyContent: "space-between" }}>
-        <h2 style={{ margin: 0 }}>{T(`studio.sec.${key}`)}</h2>
-        <Badge tone={touched(key) ? "info" : "neutral"}>{T(touched(key) ? "studio.state.custom" : "studio.state.default")}</Badge>
-      </div>
-      <p className="muted" style={{ margin: 0 }}>{T(`studio.sec.${key}.help`)}</p>
+    <Fold
+      key={key} id={key} open={sp.section === key} title={T(`studio.sec.${key}`)} hint={T(`studio.sec.${key}.help`)}
+      badge={<Badge tone={touched(key) ? "info" : "neutral"}>{T(touched(key) ? "studio.state.custom" : "studio.state.default")}</Badge>}
+    >
       {outcome(key)}
       {before}
       <form action={saveStudioSectionAction} className="stack">
@@ -191,7 +191,7 @@ export default async function AssistantStudioPage({ params, searchParams }: { pa
         <div className="row"><SubmitButton className="btn" type="submit">{T("studio.save")}</SubmitButton><small className="muted">{T("studio.save.help")}</small></div>
       </form>
       <ConfirmDelete action={resetStudioSectionAction} summary={T("studio.reset.summary")} warning={T(key === "voice" ? "studio.reset.warning.voice" : "studio.reset.warning")} tick={T("studio.reset.tick")} button={T("studio.reset.button")} fields={{ tenantId: id, section: key }} />
-    </section>
+    </Fold>
   );
 
   /* ----- the model section's list notice ----- */
@@ -254,6 +254,8 @@ export default async function AssistantStudioPage({ params, searchParams }: { pa
         </div>
         <Link className="btn" href={`/admin/clients/${id}/assistant/profiles`}>{T("prof.card.button")}</Link>
       </section>
+
+      <FoldControls openAll={T("fold.openAll")} closeAll={T("fold.closeAll")} />
 
       <nav className="studio-nav" aria-label={T("studio.title")}>
         {SECTION_ORDER.map((s) => <a key={s} href={`#${s}`}>{T(`studio.sec.${s}`)}</a>)}
@@ -385,17 +387,13 @@ export default async function AssistantStudioPage({ params, searchParams }: { pa
           </div>
         ))}
 
-        <section className="card stack" id="live">
-          <h2 style={{ margin: 0 }}>{T("studio.live.title")}</h2>
-          <p className="muted" style={{ margin: 0 }}>{T("studio.live.help")}</p>
+        <Fold id="live" title={T("studio.live.title")} hint={T("studio.live.help")}>
           <Suspense fallback={<p className="muted" role="status">{T("studio.live.loading")}</p>}>
             <LivePanel settings={agent} tenant={tenant} T={T} />
           </Suspense>
-        </section>
+        </Fold>
 
-        <section className="card stack" id="pricing">
-          <h2 style={{ margin: 0 }}>{T("studio.fees.title")}</h2>
-          <p className="muted" style={{ margin: 0 }}>{T("studio.fees.help")}</p>
+        <Fold id="pricing" open={Boolean(sp.feesSaved || sp.feesBad)} title={T("studio.fees.title")} hint={T("studio.fees.help")}>
           {sp.feesSaved && <Notice tone="ok">{T("studio.fees.saved")}</Notice>}
           {sp.feesBad && <Notice tone="warn">{T("studio.fees.bad")}</Notice>}
           <form action={saveFeesAction} className="stack">
@@ -411,7 +409,7 @@ export default async function AssistantStudioPage({ params, searchParams }: { pa
             <dt>{T("studio.fees.rate")}</dt><dd dir="ltr">{rate ? `${fmtBhd(rate)} ${T("studio.fees.perCredit")}` : T("studio.model.noPlan")}</dd>
             <dt>{T("studio.fees.unit")}</dt><dd>{T("studio.fees.unitText")}</dd>
           </dl>
-        </section>
+        </Fold>
 
         <TryAssistant tenant={tenant} admin returnTo={returnTo} sp={{ saved: sp.saved, error: sp.error }} />
       </div>

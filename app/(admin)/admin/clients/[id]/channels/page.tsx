@@ -6,6 +6,8 @@ import { appUrl } from "@/lib/app-url";
 import { fmtDateTime } from "@/lib/format";
 import { testFailKey, testFailToShow } from "@/lib/whatsapp";
 import { saveInstagramAction, savePhoneAction, syncAgentAction, useAgentAction } from "@/lib/channel-actions";
+import { Fold } from "@/components/Fold";
+import { FoldControls } from "@/components/FoldControls";
 import { WhatsappCard } from "@/components/WhatsappCard";
 import { Badge, Notice, PageHead } from "@/components/ui";
 import { SubmitButton } from "@/components/SubmitButton";
@@ -48,11 +50,9 @@ export default async function Channels({ params, searchParams }: { params: Promi
       {saved && <Notice tone="ok">{saved === "1" ? t("channels.saved") : t(`channels.saved.${saved}` as Key)}</Notice>}
       {error && <Notice tone="warn">{t(`channels.err.${error}` as Key)}</Notice>}
 
-      <section className="card stack">
-        <div className="row" style={{ justifyContent: "space-between" }}>
-          <h2 style={{ margin: 0 }}>{t("channels.agent.title")}</h2>
-          <Badge tone={agent.elevenLabsAgentId ? "ok" : "warn"}>{agent.elevenLabsAgentId ? t(connected ? "channels.agent.connected" : "channels.agent.ready") : t("channels.agent.none")}</Badge>
-        </div>
+      <FoldControls openAll={t("fold.openAll")} closeAll={t("fold.closeAll")} />
+
+      <Fold title={t("channels.agent.title")} badge={<Badge tone={agent.elevenLabsAgentId ? "ok" : "warn"}>{agent.elevenLabsAgentId ? t(connected ? "channels.agent.connected" : "channels.agent.ready") : t("channels.agent.none")}</Badge>}>
         <p className="muted">{t(connected ? "channels.agent.connected.help" : "channels.agent.help")}</p>
         {el?.error && <Notice tone="warn"><strong>{t("channels.agent.error")}:</strong> <span dir="ltr">{el.error}</span></Notice>}
         {el?.warnings?.length ? (
@@ -103,25 +103,17 @@ export default async function Channels({ params, searchParams }: { params: Promi
             </>
           ) : null}
         </div>
-      </section>
+      </Fold>
 
-      <section className="card stack">
-        <div className="row" style={{ justifyContent: "space-between" }}>
-          <h2 style={{ margin: 0 }}>{t("channels.website.title")}</h2>
-          <Badge tone={TONE[tenant.channels.website]}>{t(`channels.status.${tenant.channels.website}` as Key)}</Badge>
-        </div>
+      <Fold title={t("channels.website.title")} badge={<Badge tone={TONE[tenant.channels.website]}>{t(`channels.status.${tenant.channels.website}` as Key)}</Badge>}>
         <p className="muted">{t("channels.website.help")}</p>
         <div><strong>{t("channels.website.snippet")}</strong><pre>{snippet}</pre></div>
         <div><strong>{t("channels.website.domains")}:</strong> <span dir="ltr">{tenant.allowedDomains.join(", ") || "–"}</span></div>
-      </section>
+      </Fold>
 
       <WhatsappCard tenant={tenant} testFail={testFail} wa={wa} photo={{ hasToken: Boolean(secrets.whatsappToken), fail: photoFail, items: items.filter((i) => i.active && i.hasImage).map((i) => ({ id: i.id, name: i.name })) }} />
 
-      <section className="card stack">
-        <div className="row" style={{ justifyContent: "space-between" }}>
-          <h2 style={{ margin: 0 }}>{t("channels.ig.title")}</h2>
-          <Badge tone={TONE[tenant.channels.instagram]}>{t(`channels.status.${tenant.channels.instagram}` as Key)}</Badge>
-        </div>
+      <Fold title={t("channels.ig.title")} badge={<Badge tone={TONE[tenant.channels.instagram]}>{t(`channels.status.${tenant.channels.instagram}` as Key)}</Badge>}>
         <p className="muted">{t("channels.ig.help")}</p>
         <div className="stack" style={{ gap: ".35rem" }}>
           <strong>{t("channels.ig.urls")}</strong>
@@ -147,13 +139,9 @@ export default async function Channels({ params, searchParams }: { params: Promi
           </div>
           <div><SubmitButton className="btn" type="submit">{t("channels.save")}</SubmitButton></div>
         </form>
-      </section>
+      </Fold>
 
-      <section className="card stack">
-        <div className="row" style={{ justifyContent: "space-between" }}>
-          <h2 style={{ margin: 0 }}>{t("channels.phone.title")}</h2>
-          <Badge tone={TONE[tenant.channels.phone]}>{t(`channels.status.${tenant.channels.phone}` as Key)}</Badge>
-        </div>
+      <Fold title={t("channels.phone.title")} badge={<Badge tone={TONE[tenant.channels.phone]}>{t(`channels.status.${tenant.channels.phone}` as Key)}</Badge>}>
         <p className="muted">{t("channels.phone.help")}</p>
         <form action={savePhoneAction} className="stack">
           {hidden}
@@ -169,10 +157,9 @@ export default async function Channels({ params, searchParams }: { params: Promi
           </div>
           <div><SubmitButton className="btn" type="submit">{t("channels.save")}</SubmitButton></div>
         </form>
-      </section>
+      </Fold>
 
-      <section className="card stack">
-        <h2>{t("channels.env.title")}</h2>
+      <Fold title={t("channels.env.title")}>
         <p className="muted">{t("channels.env.help")}</p>
         <ul className="checklist">
           {ENV.map((name) => {
@@ -199,7 +186,7 @@ export default async function Channels({ params, searchParams }: { params: Promi
           <small className="muted">{t("secret.help")}</small>
           <SecretGenerator labels={{ make: t("secret.make"), copy: t("secret.copy"), copied: t("secret.copied"), hint: t("secret.hint") }} />
         </div>
-      </section>
+      </Fold>
     </>
   );
 }

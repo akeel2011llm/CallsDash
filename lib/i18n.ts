@@ -1730,6 +1730,8 @@ const en = {
   "prof.b.patient.why1": "Patient turn-taking and a 10 second wait stop it talking over callers who pause.",
   "prof.b.patient.why2": "Speed 0.9 and higher stability are easier to follow on a poor line.",
   "prof.b.patient.why3": "45 seconds of silence before hanging up gives callers time to find their details.",
+  "fold.openAll": "Open all sections",
+  "fold.closeAll": "Close all sections",
 } as const;
 
 export type Key = keyof typeof en;
@@ -3462,6 +3464,8 @@ const ar: Record<Key, string> = {
   "prof.b.patient.why1": "تبادل الكلام الصبور وانتظار 10 ثوانٍ يمنعانه من مقاطعة من يتوقفون.",
   "prof.b.patient.why2": "سرعة 0.9 وثبات أعلى أسهل في المتابعة على خط ضعيف.",
   "prof.b.patient.why3": "45 ثانية صمت قبل الإنهاء تمنح المتصل وقتًا ليجد بياناته.",
+  "fold.openAll": "فتح كل الأقسام",
+  "fold.closeAll": "إغلاق كل الأقسام",
 };
 
 export const dictionaries = { en, ar } as const;
