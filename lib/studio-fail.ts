@@ -5,6 +5,8 @@
 import { SECTIONS, type SectionId } from "./agent-studio";
 
 export const failKey = (tenantId: string) => `studio.fail.${tenantId}`;
+/** The same, for a refusal while applying a profile (its own key, so the two screens never show each other's). */
+export const profileFailKey = (tenantId: string) => `studio.profile.fail.${tenantId}`;
 
 export interface SavedFail { section: SectionId; detail: string; at: string }
 
