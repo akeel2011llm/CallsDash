@@ -6,6 +6,7 @@ import { DuplicateError, SlotTakenError } from "./errors";
 import { findDuplicate, nameKey } from "./tenant-keys";
 import { DEFAULT_OPENING_HOURS } from "./availability";
 import { seed, type DB, FLAT_RATES } from "./seed";
+import { pictureBytes } from "./photo-size";
 import { conversationCostUsd } from "./costing";
 import { USD_TO_BHD } from "./pricing";
 import type {
@@ -424,8 +425,36 @@ export function removeDoctor(tenantId: string, doctorId: string, actor: string) 
   const i = db().doctors.findIndex((x) => x.tenantId === tenantId && x.id === doctorId);
   if (i < 0) throw new Error("doctor not found");
   const [doc] = db().doctors.splice(i, 1);
+  delete (db().doctorImages ??= {})[doc.id];
   getTenant(tenantId)!.calendarConnected = db().doctors.some((x) => x.tenantId === tenantId && x.googleCalendarId);
   audit(actor, `Doctor removed: ${doc.name}`, tenantId);
+}
+
+/** The stored photo of a doctor as a data: URL, if there is one. */
+export function getDoctorImage(tenantId: string, doctorId: string): string | undefined {
+  return db().doctors.some((x) => x.tenantId === tenantId && x.id === doctorId) ? (db().doctorImages ??= {})[doctorId] : undefined;
+}
+/** Sets (a data: URL) or removes (null) a doctor's photo. */
+export function setDoctorImage(tenantId: string, doctorId: string, image: string | null, actor: string): void {
+  const doc = db().doctors.find((x) => x.tenantId === tenantId && x.id === doctorId);
+  if (!doc) throw new Error("doctor not found");
+  const images = (db().doctorImages ??= {});
+  if (image) { images[doctorId] = image; doc.photoAt = now().toISOString(); } else { delete images[doctorId]; delete doc.photoAt; }
+  audit(actor, `Doctor photo ${image ? "set" : "removed"}: ${doc.name}`, tenantId);
+}
+
+/** Every stored photo of a client with the size of the picture itself in bytes, for the Data screen. */
+export function getPhotoUsage(tenantId: string): { kind: "item" | "doctor"; id: string; name: string; bytes: number }[] {
+  const d = db();
+  const out: { kind: "item" | "doctor"; id: string; name: string; bytes: number }[] = [];
+  for (const i of getItems(tenantId)) { const img = (d.itemImages ??= {})[i.id]; if (img) out.push({ kind: "item", id: i.id, name: i.name, bytes: pictureBytes(img) }); }
+  for (const x of d.doctors.filter((y) => y.tenantId === tenantId)) { const img = (d.doctorImages ??= {})[x.id]; if (img) out.push({ kind: "doctor", id: x.id, name: x.name, bytes: pictureBytes(img) }); }
+  return out;
+}
+
+/** The whole database's size in bytes; only Postgres can tell, the demo store has none. */
+export function databaseSize(): number | undefined {
+  return undefined;
 }
 
 export function setPermissions(tenantId: string, p: Permissions, actor: string) {
@@ -491,6 +520,7 @@ export function deleteTenant(tenantId: string, actor: string) {
   d.tenants = d.tenants.filter((x) => x.id !== tenantId);
   delete d.agents[tenantId];
   delete d.secrets[tenantId];
+  for (const x of d.doctors.filter((y) => y.tenantId === tenantId)) delete (d.doctorImages ??= {})[x.id];
   const lists = d as unknown as Record<string, { tenantId?: string }[]>;
   for (const k of ["agentVersions", "doctors", "bookings", "conversations", "knowledge", "unanswered", "batches", "ledger", "alerts", "audit", "topUpRequests", "staffRequests", "customers", "profiles", "chatSessions"])
     lists[k] = lists[k].filter((x) => x.tenantId !== tenantId);

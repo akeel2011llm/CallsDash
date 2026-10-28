@@ -46,7 +46,13 @@ export function DoctorsManager({ tenant, doctors, bookings, logins, returnTo, sp
         return (
           <article key={d.id} id={`doctor-${d.id}`} className="card stack" style={{ borderInlineStart: `4px solid ${d.color}`, opacity: active ? 1 : 0.75 }}>
             <div className="row" style={{ justifyContent: "space-between" }}>
-              <span><strong>{d.name}</strong>{d.specialty ? <span className="muted"> · {d.specialty}</span> : null}</span>
+              <span className="row" style={{ flexWrap: "nowrap", gap: ".5rem" }}>
+                {d.photoAt
+                  // eslint-disable-next-line @next/next/no-img-element
+                  ? <img src={`/api/data/photo/doctor/${d.id}?v=${Date.parse(d.photoAt) || 0}&t=${tenant.id}`} alt="" width={36} height={36} loading="lazy" style={{ objectFit: "cover", borderRadius: "50%" }} />
+                  : null}
+                <span><strong>{d.name}</strong>{d.specialty ? <span className="muted"> · {d.specialty}</span> : null}</span>
+              </span>
               <span className="row">
                 <Badge tone={active ? "ok" : "neutral"}>{active ? t("doctors.active") : t("doctors.inactive")}</Badge>
                 <Badge tone={d.googleCalendarId ? "ok" : "warn"}>{d.googleCalendarId ? t("doctors.calLinked") : t("doctors.calMissing")}</Badge>

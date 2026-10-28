@@ -344,6 +344,7 @@ export async function adminPermissionsAction(f: FormData) {
     editVoice: f.get("editVoice") === "on",
     editBehaviour: f.get("editBehaviour") === "on",
     editKnowledge: f.get("editKnowledge") === "on",
+    dataManager: f.get("dataManager") === "on",
   };
   await store.setPermissions(id, p, actor);
   revalidatePath("/admin", "layout");

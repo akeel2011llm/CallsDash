@@ -1,5 +1,7 @@
 # Handling the database: information and images
 
+**Use the Data screen.** The admin opens it from a client's page (Data button). A clinic gets a Data item in its menu once the admin ticks "Data screen" under Permissions on the client page. It shows storage used, every photo with its size, and the catalogue, customers and knowledge with search, edit, hide, delete (with a confirmation tick) and add. It also imports CSV files and exports everything. Photos (catalogue and doctors) are shrunk to about 300 KB in the browser when chosen, so a large phone photo is fine. Nothing in this guide needs the Supabase screens for daily work.
+
 CallsDash keeps its information in the Supabase project (Postgres). Only the app writes to it; people use the dashboard screens.
 
 ## Where things live
@@ -7,6 +9,7 @@ CallsDash keeps its information in the Supabase project (Postgres). Only the app
 | What | Where | Notes |
 | --- | --- | --- |
 | Clients, plans, wallet, bookings, conversations, customers, messages, settings | Supabase tables | Edit them in the dashboard screens, not in Supabase |
+| Doctor photos | Supabase table `doctor_photos` (shrunk in the browser to about 300 KB, at most 700 KB accepted) | Add them in Data, Photos; shown next to the doctor on the Doctors screen |
 | Catalogue photos | Supabase table `items`, column `image` (the photo itself, shrunk to under 700 KB in the browser) | Shown through `/api/items/<clinic>/<item>/image` and the item page `/i/<clinic>/<item>` |
 | Call recordings (audio) | ElevenLabs, not Supabase | Kept for the clinic's retention period (90 days by default) |
 | Logos and covers | Part of the client's branding | Change them on the client's Branding screen |
@@ -29,6 +32,7 @@ CallsDash keeps its information in the Supabase project (Postgres). Only the app
 
 ## Backups and exports
 
+- Data screen, Import and export: catalogue, customers, knowledge and doctors as spreadsheets, or everything in one file (with or without photos). Imports take a CSV with the column names in the first row (download the empty template there); a row that matches an existing name, phone number or question updates it.
 - Customers: Customers screen, CSV button, downloads the list.
 - Everything else: Supabase keeps backups only on paid plans (daily, for a few days). On the free plan there is no automatic backup, so before the first real clinic goes live move the project to a paid plan, or ask for an export routine to be built.
 - A full copy can be made from the Supabase project under Database, then Backups (paid plans). The exact button names change, check them on screen.

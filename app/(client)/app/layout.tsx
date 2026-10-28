@@ -30,6 +30,7 @@ export default async function ClientLayout({ children }: { children: React.React
         { href: "/app/calendar", label: t("nav.calendar"), icon: "calendar" },
         { href: "/app/knowledge", label: t("nav.knowledge"), icon: "book", group: t("nav.g.receptionist") },
         { href: "/app/catalogue", label: t("nav.catalogue"), icon: "tag" },
+        ...(staffRole === "manager" && tenant.permissions.dataManager ? [{ href: "/app/data", label: t("nav.data"), icon: "database" }] : []),
         { href: "/app/agent", label: t("nav.agent"), icon: "sliders" },
         { href: "/app/voice", label: t("nav.voice"), icon: "mic" },
         { href: "/app/website", label: t("nav.website"), icon: "globe" },
