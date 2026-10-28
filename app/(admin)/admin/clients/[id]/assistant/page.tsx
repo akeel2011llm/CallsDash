@@ -247,6 +247,14 @@ export default async function AssistantStudioPage({ params, searchParams }: { pa
         />
       </div>
 
+      <section className="card row" style={{ justifyContent: "space-between" }}>
+        <div>
+          <strong>{T("prof.card.title")}</strong>
+          <p className="muted" style={{ margin: 0 }}>{T("prof.card.help")}</p>
+        </div>
+        <Link className="btn" href={`/admin/clients/${id}/assistant/profiles`}>{T("prof.card.button")}</Link>
+      </section>
+
       <nav className="studio-nav" aria-label={T("studio.title")}>
         {SECTION_ORDER.map((s) => <a key={s} href={`#${s}`}>{T(`studio.sec.${s}`)}</a>)}
         <a href="#live">{T("studio.live.title")}</a>

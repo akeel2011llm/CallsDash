@@ -67,9 +67,15 @@ export async function applyStudioChange(d: ApplyDeps, tenantId: string, actor: s
     if (errors.length) return { kind: "invalid", errors };
     candidate = applySection(current, change.section, parsed);
   }
-  const summary = describeStudioChange(current, candidate);
-  const store = () => d.data.saveAgent(tenantId, candidate, actor, summary);
+  return commitCandidate(d, tenantId, actor, current, candidate, describeStudioChange(current, candidate));
+}
 
+/**
+ * Sends a candidate settings set to the client's agent and stores it once ElevenLabs accepted it (or only stores it, when the agent
+ * cannot be reached yet). The sync is a full one, so it also puts CallsDash's values over anything edited by hand in ElevenLabs.
+ */
+export async function commitCandidate(d: ApplyDeps, tenantId: string, actor: string, current: AgentSettings, candidate: AgentSettings, summary: string): Promise<StudioOutcome> {
+  const store = () => d.data.saveAgent(tenantId, candidate, actor, summary);
   if (!current.elevenLabsAgentId) { await store(); return { kind: "saved", reason: "no_agent" }; }
   if (typeof d.sync === "string") { await store(); return { kind: "saved", reason: d.sync }; }
   try {
@@ -84,4 +90,14 @@ export async function applyStudioChange(d: ApplyDeps, tenantId: string, actor: s
     }
     return { kind: "refused", detail: plainDetail(e instanceof Error ? e.message : "refused").slice(0, 400) };
   }
+}
+
+/** The checks that need ElevenLabs' lists, for a whole settings set (a profile changes every section at once). */
+export function checkCandidate(candidate: AgentSettings, current: AgentSettings, d: Pick<ApplyDeps, "models" | "listed">): FieldError[] {
+  const st = studioOf(candidate);
+  const parsed: ParsedSection = { studio: { ...st, backupModels: [...st.backupModels] }, top: {}, errors: [] };
+  const errors: FieldError[] = [];
+  if (d.listed && st.llm && !d.models.some((m) => m.id === st.llm)) errors.push({ field: "llm", key: "studio.err.model" });
+  errors.push(...checkChoices("model", parsed, current, d), ...checkChoices("voice", parsed, current, d));
+  return errors;
 }

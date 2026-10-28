@@ -101,6 +101,30 @@ export interface LiveAgent {
   prompt?: string;
   firstMessage?: string;
   arabicFirstMessage?: string;
+  /* Everything below is read only for "Read from ElevenLabs" (lib/studio-import.ts). */
+  parallelTools?: boolean;
+  /** `preference` of backup_llm_config (default, disabled, override) and the models listed in `order`. */
+  backupPreference?: string;
+  backupOrder?: string[];
+  cascadeSeconds?: number;
+  textNormalisation?: string;
+  expressive?: boolean;
+  spellingPatience?: string;
+  speculativeTurn?: boolean;
+  softTimeoutSeconds?: number;
+  softTimeoutMessage?: string;
+  arabicSoftTimeoutMessage?: string;
+  maxDurationMessage?: string;
+  protectGreeting?: boolean;
+  keywords?: string[];
+  concurrencyLimit?: number;
+  bursting?: boolean;
+  /** "" when ElevenLabs holds none (summaries follow the conversation's language). */
+  summaryLanguage?: string;
+  /** The ids of the evaluation criteria ElevenLabs judges; undefined when the answer has no such list. */
+  criteriaIds?: string[];
+  /** platform_settings.widget as ElevenLabs holds it (snake_case, untouched). */
+  widget?: Record<string, unknown>;
 }
 
 export interface CatalogApi {
@@ -204,6 +228,7 @@ export function mapLiveAgent(raw: unknown): LiveAgent {
   const ps = obj(a.platform_settings);
   const guard = obj(ps.guardrails);
   const tools = obj(prompt.built_in_tools);
+  const soft = obj(turn.soft_timeout_config);
   return {
     name: str(a.name), llm: str(prompt.llm), temperature: num(prompt.temperature), maxTokens: num(prompt.max_tokens), reasoningEffort: str(prompt.reasoning_effort),
     language: str(agent.language), voiceId: str(tts.voice_id), ttsModel: str(tts.model_id), arabicVoiceId: str(ar.voice_id), arabicTtsModel: str(ar.model_id),
@@ -215,6 +240,19 @@ export function mapLiveAgent(raw: unknown): LiveAgent {
     guardrailsFocus: bool(obj(guard.focus).is_enabled), guardrailsPromptInjection: bool(obj(guard.prompt_injection).is_enabled),
     disableBanner: bool(obj(ps.widget).disable_banner),
     prompt: str(prompt.prompt), firstMessage: str(agent.first_message), arabicFirstMessage: str(obj(arPreset.agent).first_message),
+    parallelTools: bool(prompt.enable_parallel_tool_calls), backupPreference: str(obj(prompt.backup_llm_config).preference),
+    backupOrder: Array.isArray(obj(prompt.backup_llm_config).order) ? arr(obj(prompt.backup_llm_config).order).filter((x): x is string => typeof x === "string") : undefined,
+    cascadeSeconds: num(prompt.cascade_timeout_seconds),
+    textNormalisation: str(tts.text_normalisation_type), expressive: bool(tts.expressive_mode),
+    spellingPatience: str(turn.spelling_patience), speculativeTurn: bool(turn.speculative_turn),
+    softTimeoutSeconds: num(soft.timeout_seconds), softTimeoutMessage: str(soft.message), arabicSoftTimeoutMessage: str(obj(obj(obj(arPreset.turn).soft_timeout_config)).message),
+    maxDurationMessage: typeof agent.max_conversation_duration_message === "string" ? agent.max_conversation_duration_message : undefined,
+    protectGreeting: bool(agent.disable_first_message_interruptions),
+    keywords: Array.isArray(asr.keywords) ? arr(asr.keywords).filter((x): x is string => typeof x === "string") : undefined,
+    concurrencyLimit: num(obj(ps.call_limits).agent_concurrency_limit), bursting: bool(obj(ps.call_limits).bursting_enabled),
+    summaryLanguage: "summary_language" in ps ? str(ps.summary_language) ?? "" : undefined,
+    criteriaIds: Array.isArray(obj(ps.evaluation).criteria) ? arr(obj(ps.evaluation).criteria).map((c) => str(obj(c).id)).filter((x): x is string => !!x) : undefined,
+    widget: Object.keys(obj(ps.widget)).length ? obj(ps.widget) : undefined,
   };
 }
 
