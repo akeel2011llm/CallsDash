@@ -275,6 +275,8 @@ export interface WhatsappSettings {
 
 /** Tokens and shared secrets for a client's channels. Stored apart from the tenant row, never shown again after saving. */
 export interface TenantSecrets {
+  /** WhatsApp Cloud API access token (Meta), used only to send catalogue photos in a WhatsApp chat. */
+  whatsappToken?: string;
   /** Instagram messaging access token (Meta). */
   instagramToken?: string;
   /** ElevenLabs custom channel: the secret we send with each inbound message. */

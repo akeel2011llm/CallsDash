@@ -13,6 +13,7 @@ import { switchAgent, SwitchError } from "./agent-switch";
 import { TEMPLATES, mainLanguage, sendBookingConfirmation, testFailKey, wordingOf, type Wording } from "./whatsapp";
 import { bookingRef } from "./booking-ref";
 import { badHeaderSetting } from "./header-safe";
+import { sendItemPhoto } from "./whatsapp-photo";
 import type { Channel, Integrations, Locale } from "./types";
 
 const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
@@ -114,6 +115,34 @@ export async function testWhatsappAction(f: FormData) {
   });
   if (r.status === "failed") await store.setSetting(testFailKey(id), { detail: r.error, at: new Date().toISOString() });
   redirect(page(id, r.status === "sent" ? "saved=wa_test" : r.status === "skipped" ? `wa=${r.reason}` : "wa=failed"));
+}
+
+/** Saves, replaces or removes the access token that lets the assistant send catalogue photos in a WhatsApp chat. A blank box keeps the saved one. */
+export async function saveWhatsappPhotoAction(f: FormData) {
+  const { actor } = await requireAdmin();
+  const id = str(f, "tenantId");
+  await only(id);
+  const token = str(f, "token").slice(0, 600);
+  if (f.get("clear_token") === "on") await store.setSecrets(id, { whatsappToken: "" });
+  else if (token) {
+    if (/\s/.test(token) || token.length < 20) redirect(page(id, "wa=photo_bad_token"));
+    await store.setSecrets(id, { whatsappToken: token });
+  }
+  await store.audit(actor, "WhatsApp photo token saved", id);
+  done(id);
+  redirect(page(id, "saved=wa_photo_token"));
+}
+
+/** Sends one catalogue photo to a number the admin types, the way the assistant would, to check the token. */
+export async function testWhatsappPhotoAction(f: FormData) {
+  await requireAdmin();
+  const id = str(f, "tenantId");
+  const t = await only(id);
+  const itemId = str(f, "itemId");
+  if (!itemId) redirect(page(id, "wa=photo_no_item"));
+  const r = await sendItemPhoto(store, id, { itemId, to: str(f, "to"), language: mainLanguage(t.integrations.whatsapp) }, await appUrl());
+  if (r.status === "failed") await store.setSetting(`wa.photo.fail.${id}`, { detail: r.error, at: new Date().toISOString() });
+  redirect(page(id, r.status === "sent" ? "saved=wa_photo_test" : r.status === "skipped" ? `wa=photo_${r.reason}` : "wa=photo_failed"));
 }
 
 const metaHost = /(^|\.)elevenlabs\.io$/;

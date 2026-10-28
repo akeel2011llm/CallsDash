@@ -23,4 +23,4 @@ export async function proxy(req: NextRequest) {
   return res;
 }
 
-export const config = { matcher: ["/((?!_next/static|_next/image|widget.js|api/webhooks|api/widget|icon.svg|api/brand|sw.js|offline.html|icons).*)"] };
+export const config = { matcher: ["/((?!_next/static|_next/image|widget.js|api/webhooks|api/widget|icon.svg|api/brand|api/items|i/|sw.js|offline.html|icons).*)"] };

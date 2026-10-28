@@ -32,7 +32,7 @@ function redirectKeys(): string[] {
   const src = read("lib/channel-actions.ts");
   return [
     ...[...src.matchAll(/error=(\w+)/g)].map((m) => `channels.err.${m[1]}`).filter((k) => FAMILIES.test(k)),
-    ...[...src.matchAll(/saved=(wa_test)/g)].map((m) => `channels.saved.${m[1]}`),
+    ...[...src.matchAll(/saved=(wa_test|wa_photo_token|wa_photo_test)/g)].map((m) => `channels.saved.${m[1]}`),
   ];
 }
 
@@ -44,6 +44,10 @@ function dynamicKeys(): string[] {
   for (const r of ["bad_phone", "not_configured", "no_agent"]) k.push(`bookings.wa.skipped.${r}`);
   for (const r of SKIPPED) k.push(`channels.wa.skipped.${r}`);
   for (const h of Object.keys(HINT_EN)) k.push(`bookings.wa.hint.${h}`);
+  // the photo settings: a reason, a hint and the numbered steps are put together in components/WhatsappCard.tsx
+  for (const r of ["bad_token", "no_token", "no_phone_id", "no_recipient", "no_item", "no_photo", "format", "channel_off", "failed"]) k.push(`channels.wa.photo.${r}`);
+  for (const h of ["token", "window", "permission"]) k.push(`channels.wa.photo.hint.${h}`);
+  for (let n = 1; n <= 7; n++) k.push(`channels.wa.photo.s${n}`);
   return k;
 }
 

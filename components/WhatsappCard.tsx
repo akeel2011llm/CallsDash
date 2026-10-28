@@ -1,5 +1,6 @@
 import { getT, type Key } from "@/lib/i18n";
-import { saveWhatsappAction, testWhatsappAction } from "@/lib/channel-actions";
+import { saveWhatsappAction, saveWhatsappPhotoAction, testWhatsappAction, testWhatsappPhotoAction } from "@/lib/channel-actions";
+import { photoFailureHint } from "@/lib/whatsapp-photo";
 import {
   TEMPLATES, addressLine, clinicPhone, confirmationValues, failureHint, mainLanguage, renderTemplate, templateLanguages, wordingOf,
 } from "@/lib/whatsapp";
@@ -21,7 +22,9 @@ const SAMPLE_START = "2026-10-24T13:00:00.000Z";
  * exact wording to create at Meta (with copy buttons), a preview, and a test. Everything the admin has to do is written here
  * in order, so the page can be followed without any other guide.
  */
-export async function WhatsappCard({ tenant, testFail, wa }: { tenant: Tenant; testFail: string | null; wa?: string }) {
+export interface PhotoState { hasToken: boolean; fail: string | null; items: { id: string; name: string }[] }
+
+export async function WhatsappCard({ tenant, testFail, wa, photo }: { tenant: Tenant; testFail: string | null; wa?: string; photo?: PhotoState }) {
   const { t } = await getT();
   const w = tenant.integrations.whatsapp ?? {};
   const wording = wordingOf(w);
@@ -66,7 +69,7 @@ export async function WhatsappCard({ tenant, testFail, wa }: { tenant: Tenant; t
         <Badge tone={TONE[tenant.channels.whatsapp]}>{t(`channels.status.${tenant.channels.whatsapp}` as Key)}</Badge>
       </div>
       <p className="muted">{t("channels.wa.help")}</p>
-      {wa && <Notice tone="warn">{t(wa === "failed" ? "channels.wa.failed" : (`channels.wa.skipped.${wa}` as Key))}</Notice>}
+      {wa && !wa.startsWith("photo_") && <Notice tone="warn">{t(wa === "failed" ? "channels.wa.failed" : (`channels.wa.skipped.${wa}` as Key))}</Notice>}
       {wa === "failed" && testFail && (
         <Notice tone="warn">
           {hint && <p style={{ margin: 0 }}>{t(`bookings.wa.hint.${hint}` as Key)}</p>}
@@ -200,6 +203,50 @@ export async function WhatsappCard({ tenant, testFail, wa }: { tenant: Tenant; t
         <SubmitButton className="btn ghost" type="submit">{t("channels.wa.test")}</SubmitButton>
       </form>
       <small className="muted">{t("channels.wa.testHelp")}</small>
+
+      {photo && (
+        <div className="stack" style={{ gap: ".75rem" }}>
+          <div className="row" style={{ justifyContent: "space-between" }}>
+            <strong>{t("channels.wa.photo.title")}</strong>
+            <Badge tone={photo.hasToken ? "ok" : "neutral"}>{t(photo.hasToken ? "channels.wa.photo.on" : "channels.wa.photo.off")}</Badge>
+          </div>
+          <p className="muted" style={{ margin: 0 }}>{t("channels.wa.photo.help")}</p>
+          {wa?.startsWith("photo_") && <Notice tone="warn">{t(`channels.wa.photo.${wa.slice(6)}` as Key)}</Notice>}
+          {wa === "photo_failed" && photo.fail && (
+            <Notice tone="warn">
+              {photoFailureHint(photo.fail) && <p style={{ margin: 0 }}>{t(`channels.wa.photo.hint.${photoFailureHint(photo.fail)}` as Key)}</p>}
+              <small dir="ltr">{photo.fail}</small>
+            </Notice>
+          )}
+          <Guide id="waPhotos">
+            <ol className="stack">
+              {(["1", "2", "3", "4", "5", "6", "7"] as const).map((n) => <li key={n}>{t(`channels.wa.photo.s${n}` as Key)}</li>)}
+            </ol>
+            <small className="muted">{t("channels.wa.photo.note")}</small>
+          </Guide>
+          <form action={saveWhatsappPhotoAction} className="stack">
+            {hidden}
+            <label>{t("channels.wa.photo.token")}
+              <input name="token" type="password" autoComplete="new-password" dir="ltr" placeholder={photo.hasToken ? "••••••••" : ""} />
+            </label>
+            {photo.hasToken && <span className="row"><small className="muted">{t("channels.ig.keep")}</small><label className="inline"><input type="checkbox" name="clear_token" />{t("channels.ig.clear")}</label></span>}
+            <div><SubmitButton className="btn" type="submit">{t("channels.save")}</SubmitButton></div>
+          </form>
+          {photo.hasToken && (
+            photo.items.length === 0 ? <small className="muted">{t("channels.wa.photo.noItems")}</small> : (
+              <form action={testWhatsappPhotoAction} className="row" style={{ alignItems: "end" }}>
+                {hidden}
+                <label style={{ flex: 1, minWidth: 220 }}>{t("channels.wa.testTo")}<input name="to" required dir="ltr" inputMode="tel" placeholder="+973 ..." /></label>
+                <label>{t("channels.wa.photo.item")}
+                  <select name="itemId">{photo.items.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}</select>
+                </label>
+                <SubmitButton className="btn ghost" type="submit">{t("channels.wa.photo.test")}</SubmitButton>
+              </form>
+            )
+          )}
+          <small className="muted">{t("channels.wa.photo.testHelp")}</small>
+        </div>
+      )}
     </section>
   );
 }
