@@ -8,6 +8,7 @@ import { progress } from "@/lib/checklist";
 import { viewAsClient } from "@/lib/actions";
 import { Badge, PageHead, Stat } from "@/components/ui";
 import { SubmitButton } from "@/components/SubmitButton";
+import { BuildBadge } from "@/components/BuildBadge";
 
 export default async function AdminHome() {
   const [{ t, locale }, tenants, alerts, requests, owed] = await Promise.all([getT(), listTenants(), getAlerts(), getTopUpRequests(), creditsOwed()]);
@@ -16,6 +17,7 @@ export default async function AdminHome() {
   const setups = new Map(await Promise.all(tenants.map(async (c) => [c.id, progress(await checklistFor(c))] as const)));
   return (
     <>
+      <BuildBadge />
       <PageHead title={t("admin.title")} actions={<Link className="btn" href="/admin/clients/new">{t("admin.newClient")}</Link>} />
       <div className="grid">
         <Stat label={t("admin.clientsLive")} value={`${tenants.filter((x) => x.status === "live").length} / ${tenants.length}`} />

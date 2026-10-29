@@ -10,7 +10,7 @@ const nextConfig: NextConfig = {
       {
         source: "/widget.js",
         headers: [
-          { key: "Cache-Control", value: "public, max-age=300" },
+          { key: "Cache-Control", value: "public, max-age=0, must-revalidate" },
           { key: "Access-Control-Allow-Origin", value: "*" },
         ],
       },
