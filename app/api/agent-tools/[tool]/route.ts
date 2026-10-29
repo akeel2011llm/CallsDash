@@ -13,6 +13,15 @@ import { findItems, itemPageUrl } from "@/lib/items";
 import { sendItemPhoto } from "@/lib/whatsapp-photo";
 import { CustomerError, lookupCustomer, lookupModeOf, saveCustomerFromAssistant } from "@/lib/customers";
 
+const PHOTO_SKIP: Record<string, string> = {
+  no_token: "no WhatsApp access token is saved (Channels, WhatsApp, Photos in WhatsApp chats).",
+  no_phone_id: "the phone number ID is missing on the Channels page.",
+  no_recipient: "ElevenLabs did not pass the customer's WhatsApp number to CallsDash (caller_phone was empty).",
+  no_photo: "the item has no photo.",
+  format: "the photo is not JPEG or PNG; upload it again.",
+  channel_off: "the client was not found.",
+};
+
 export const dynamic = "force-dynamic";
 
 /**
@@ -154,7 +163,12 @@ async function run(tool: string, body: Record<string, unknown>, data: Awaited<Re
         const language = lang(body.language);
         const r = await sendItemPhoto(data, tenant.id, { itemId: str(body.item_id), to: str(body.caller_phone), language }, origin);
         if (r.status === "sent") return ok({ sent: true, message: "The photo is being sent on WhatsApp. Do not add a link." });
-        // the reason (a refused token, a closed 24-hour window) is for the admin's log; the customer still gets the item through a link
+        // the reason (a refused token, a closed 24-hour window) goes to the admin's alerts; the customer still gets the item through a link
+        if (!(r.status === "skipped" && r.reason === "no_item")) {
+          const why = r.status === "failed" ? `Meta refused it: ${r.error.slice(0, 200)}` : PHOTO_SKIP[r.status === "skipped" ? r.reason : "no_token"] ?? "unknown reason";
+          const text = `A WhatsApp photo was not sent, so the customer got a link instead. Reason: ${why}`;
+          if (!(await data.getAlerts(tenant.id)).some((a) => !a.resolved && a.message === text)) await data.addAlert(tenant.id, "warning", text).catch(() => undefined);
+        }
         const link = r.status === "skipped" && r.reason === "no_item" ? undefined : itemPageUrl(origin, t.slug, str(body.item_id), language);
         return ok({
           sent: false,
