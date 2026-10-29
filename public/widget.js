@@ -59,6 +59,15 @@
     card.style[side] = "40px";
     close.addEventListener("click", function () { card.remove(); });
     document.body.appendChild(card);
+    // The browser's top layer sits above every other layer on the page, whatever z-index the chat window uses; where it is missing
+    // (old browsers) the z-index above still applies.
+    try {
+      card.setAttribute("popover", "manual");
+      Object.assign(card.style, { inset: "auto", margin: "0", padding: "0", display: "block" });
+      card.style.bottom = chatBottom();
+      card.style[side] = "40px";
+      card.showPopover();
+    } catch (e) { /* no popover support: plain fixed card */ }
     return "Shown.";
   }
 

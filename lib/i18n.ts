@@ -1832,6 +1832,9 @@ const en = {
   "data.err.duplicate_phone": "Another customer already has this phone number.",
   "data.err.cpr_mismatch": "The CPR number does not match the one on file.",
   "data.err.other": "The row could not be used.",
+  "build.alpha": "Alpha",
+  "build.update": "Latest update in this version: PR #{n}",
+  "build.unknown": "Update number not available here",
 } as const;
 
 export type Key = keyof typeof en;
@@ -3666,6 +3669,9 @@ const ar: Record<Key, string> = {
   "data.err.duplicate_phone": "هناك عميل آخر بالرقم نفسه.",
   "data.err.cpr_mismatch": "الرقم الشخصي لا يطابق المسجّل.",
   "data.err.other": "تعذّر استخدام الصف.",
+  "build.alpha": "ألفا",
+  "build.update": "آخر تحديث في هذه النسخة: PR #{n}",
+  "build.unknown": "رقم التحديث غير متوفر هنا",
 };
 
 export const dictionaries = { en, ar } as const;

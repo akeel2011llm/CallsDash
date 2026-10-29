@@ -14,11 +14,12 @@ import { ReceptionArt } from "@/components/art";
 import { publicBranding } from "@/lib/brand-image";
 import { patternOf } from "@/lib/theme";
 import { TryAssistant } from "@/components/TryAssistant";
+import { BuildBadge } from "@/components/BuildBadge";
 
 const CHANNELS = ["website", "whatsapp", "instagram", "phone"] as const;
 
 export default async function Home() {
-  const { tenant, staffRole } = await requireClient();
+  const { tenant, staffRole, viewingAsAdmin } = await requireClient();
   const [{ t, locale }, w, convs, bookings, checklist] = await Promise.all([getT(), getWallet(tenant.id), getConversations(tenant.id), getBookings(tenant.id), checklistFor(tenant)]);
   const todo = staffRole === "manager" ? checklist.filter((i) => i.forClient && !i.done) : [];
   const todoHref: Record<string, string> = { knowledge: "/app/knowledge", hours: "/app/calendar", calendar: "/app/calendar", test: "/app/website" };
@@ -35,6 +36,7 @@ export default async function Home() {
   const delta = prevWeek.total > 0 ? Math.round(((week.total - prevWeek.total) / prevWeek.total) * 100) : null;
   return (
     <>
+      {viewingAsAdmin && <BuildBadge />}
       <section className="hero" data-pattern={patternOf(brand) === "none" ? undefined : patternOf(brand)} data-cover={brand.coverUrl ? "" : undefined} style={brand.coverUrl ? ({ "--cover": `url("${brand.coverUrl}")` } as React.CSSProperties) : undefined}>
         {!brand.coverUrl && <ReceptionArt className="art" />}
         <div>
