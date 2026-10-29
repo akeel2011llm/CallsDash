@@ -173,7 +173,7 @@ describe("catalogue and the assistant", () => {
     const { agent } = await import("@/lib/seed");
     const p = buildPrompt(agent("", "Clinic"));
     expect(p).toContain("call find_item");
-    expect(p).toMatch(/Channel: website\), call show_image/);
+    expect(p).toMatch(/Typed chat: false\), never write a markdown image; call show_image/);
     expect(p).toContain("Only the website chat can use show_image");
   });
 
@@ -189,6 +189,10 @@ describe("catalogue and the assistant", () => {
     expect(withPhoto).toContain("- Dr Hana (doctor_id: d2)\n");
     expect(withPhoto).toContain("the first time in a conversation that a doctor marked [has a photo]");
     expect(withPhoto).toContain("put the page_url link from find_item in your reply instead");
+    // typed website chat: the photo goes inside the reply, which ElevenLabs' widget draws; spoken: show_image
+    expect(withPhoto).toContain("Typed chat: {{system__is_text_only}}");
+    expect(withPhoto).toContain("![short caption](image_url)");
+    expect(withPhoto).toContain("never write a markdown image; call show_image");
     const tool = toolDefinitions("https://x.example", "s").find_item as { api_schema: { request_body_schema: { required?: string[] } } };
     expect(tool.api_schema.request_body_schema.required ?? []).not.toContain("query");
   });

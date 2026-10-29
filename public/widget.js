@@ -85,6 +85,19 @@
     } catch (e) { /* closed or changed: keep the fixed place */ }
   }
 
+  // In a typed chat the assistant puts a photo inside its reply as a markdown image, which the ElevenLabs chat draws itself.
+  // This keeps those photos small (same rule as lib/chat-photos.ts CHAT_PHOTO_CSS). Its shadow root is open.
+  function smallChatPhotos(host) {
+    try {
+      var root = host.shadowRoot;
+      if (!root || root.__callsdashPhotos) return;
+      var sheet = new CSSStyleSheet();
+      sheet.replaceSync('[data-streamdown="image-wrapper"]{max-width:min(220px,100%)}[data-streamdown="image-wrapper"]>div{width:100%}img[data-streamdown="image"]{display:block;width:100%;max-height:220px;object-fit:cover}');
+      root.adoptedStyleSheets = Array.prototype.slice.call(root.adoptedStyleSheets).concat([sheet]);
+      root.__callsdashPhotos = true;
+    } catch (e) { /* an older browser: photos keep the chat's own size */ }
+  }
+
   function init(cfg) {
     // the dashboard previews the widget (data-preview); if that screen was left before the settings arrived, show nothing
     if (script.hasAttribute("data-preview") && !script.isConnected) { window.__callsdashWidget = false; return; }
@@ -125,6 +138,7 @@
       embed.addEventListener("elevenlabs-convai:call", function (event) {
         var config = event.detail && event.detail.config;
         if (!config) return;
+        smallChatPhotos(embed);
         config.clientTools = Object.assign({}, config.clientTools, {
           show_image: function (p) { return showPhoto(p && p.image_url, p && p.caption, rtl, side); },
         });

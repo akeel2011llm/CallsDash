@@ -30,8 +30,10 @@ const ARABIC_STYLE = {
  * 7: find_item also finds doctors (with their photo, when one was added) and lists what the clinic offers when asked with no name.
  * 8: show_image answers the assistant (so a chat that cannot draw it gets the link instead), and a doctor with a photo is shown
  *    the first time they are named in a website chat.
+ * 9: in a typed website chat the photo goes inside the reply as a markdown image (ElevenLabs' widget draws it in the chat);
+ *    show_image stays for spoken website conversations.
  */
-export const AGENT_VERSION = 8;
+export const AGENT_VERSION = 9;
 
 /** How the assistant finds and saves returning customers, which depends on what the clinic chose on its Customers screen. */
 export function customerRules(mode: "phone" | "cpr"): string[] {
@@ -61,8 +63,9 @@ const CATALOGUE_RULES = [
   "When a customer asks about a product, treatment or package the clinic offers, call find_item with what they asked, then answer only from the details it returns. If it finds nothing, do not guess; say it is not listed and offer to take a message.",
   "When a customer asks what the clinic offers, or asks for photos or pictures without naming one thing (for example any product photos), call find_item with an empty query to get a short list, then describe those items and show their photos the way the rules below say. Never say you have no photos before you have called find_item.",
   "When a customer asks for a photo or picture of a doctor, call find_item with the doctor's name. An entry with kind doctor and an image_url is shown like any other photo. If it has no image_url, say there is no photo of that doctor on file and offer to help with an appointment.",
-  "If find_item returns an image_url and the customer is chatting on the website (Channel: website), call show_image with that image_url and a short caption after you describe the item. Only the website chat can use show_image. It answers Shown. when the picture is on the customer's screen. If it answers anything else, or fails, the chat cannot draw pictures: put the page_url link from find_item in your reply instead, and do not say a photo is shown.",
-  "In the website chat, the first time in a conversation that a doctor marked [has a photo] in the Doctors list is named (by the customer or by you, for example when offering times), call find_item with the doctor's name and then show_image with its image_url and the doctor's name as caption, once per doctor per conversation and never again for the same doctor.",
+  "If find_item returns an image_url and the customer is on the website (Channel: website) and typing (Typed chat: true), show the photo inside your reply: after describing the item, put it on a line of its own exactly as ![short caption](image_url), using the image_url exactly as find_item returned it. The chat draws it as a picture inside the conversation. Do not also call show_image, and do not add the page_url link.",
+  "If find_item returns an image_url and the customer is on the website but talking (Typed chat: false), never write a markdown image; call show_image with that image_url and a short caption after you describe the item. Only the website chat can use show_image. It answers Shown. when the picture is on the customer's screen. If it answers anything else, or fails, the chat cannot draw pictures: put the page_url link from find_item in your reply instead, and do not say a photo is shown. Never write a markdown image on any channel other than the website.",
+  "In the website chat, the first time in a conversation that a doctor marked [has a photo] in the Doctors list is named (by the customer or by you, for example when offering times), call find_item with the doctor's name and show the doctor's photo the way the two rules above say (inside your reply when typing, show_image when talking), with the doctor's name as caption, once per doctor per conversation and never again for the same doctor.",
   "If find_item returns an image_url and the customer is on WhatsApp (Channel: whatsapp), describe the item, then call send_item_photo with its item_id. If it returns sent:true, say the photo is being sent; do not add a link. If it returns sent:false, put the link it gives in your reply instead.",
   "On Instagram, if find_item returns a page_url, put it in your reply after describing the item (the app shows a picture preview for it). On a phone call, describe the item in words and never read out a link.",
 ];
@@ -93,7 +96,7 @@ export function buildPrompt(settings: AgentSettings, doctors: DoctorLine[] = [])
     `# Emergencies\n${p.emergencies}`,
     `# Handing over\n${p.handoff}`,
     `# Style\n${REPLY_LENGTH[settings.replyLength]} ${FORMALITY[settings.formality]} Answer only from the knowledge base and the facts below; if you do not know, say so and offer to take a message.`,
-    `# Facts for this conversation\nToday is {{today}}. The clinic is open now: {{open_now}}. Opening hours today: {{hours_today}}. If closed, it next opens {{next_opening}}. Channel: {{channel}}. The caller's phone number, if known: {{caller_phone}} (ask them to confirm it before booking).`,
+    `# Facts for this conversation\nToday is {{today}}. The clinic is open now: {{open_now}}. Opening hours today: {{hours_today}}. If closed, it next opens {{next_opening}}. Channel: {{channel}}. Typed chat: {{system__is_text_only}}. The caller's phone number, if known: {{caller_phone}} (ask them to confirm it before booking).`,
     doctorSection(doctors),
     `# Tools\n${[...BOOKING_RULES, ...customerRules(settings.customerLookup === "cpr" ? "cpr" : "phone"), ...CATALOGUE_RULES, ...CLOSING_RULES].map((r) => `- ${r}`).join("\n")}`,
   ].filter(Boolean).join("\n\n");
