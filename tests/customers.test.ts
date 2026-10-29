@@ -192,16 +192,16 @@ describe.each(["demo", "postgres"] as const)("customers (%s)", (kind) => {
     const t = await clinic(d);
     const first = await saveCustomerFromAssistant(d, t, { phone: "36001122", name: "Omar", conversationId: "conv_web" });
     // a website chat has no number: found through the conversation id the assistant linked
-    const viaId = await recordVisit(d, t, { conversationId: "conv_web", channel: "website", language: "en", summary: "Asked about prices", at: "2026-10-28T09:00:00.000Z" });
+    const viaId = await recordVisit(d, t, { conversationId: "conv_web", channel: "website", language: "en", summary: "Asked about prices", at: "2099-01-01T09:00:00.000Z" });
     expect(viaId?.id).toBe(first.customer.id);
     expect(viaId?.history).toHaveLength(1);
     // the same webhook twice changes nothing
-    await recordVisit(d, t, { conversationId: "conv_web", channel: "website", language: "en", summary: "Asked about prices", at: "2026-10-28T09:00:00.000Z" });
+    await recordVisit(d, t, { conversationId: "conv_web", channel: "website", language: "en", summary: "Asked about prices", at: "2099-01-01T09:00:00.000Z" });
     expect((await d.getCustomer(t, first.customer.id))?.history).toHaveLength(1);
     // by number
-    const viaPhone = await recordVisit(d, t, { conversationId: "conv_2", phone: "+973 3600 1122", channel: "phone", language: "ar", summary: "Moved a booking", at: "2026-10-29T09:00:00.000Z" });
+    const viaPhone = await recordVisit(d, t, { conversationId: "conv_2", phone: "+973 3600 1122", channel: "phone", language: "ar", summary: "Moved a booking", at: "2099-01-02T09:00:00.000Z" });
     expect(viaPhone?.history.map((h) => h.summary)).toEqual(["Moved a booking", "Asked about prices"]);
-    expect(viaPhone?.lastContactAt).toBe("2026-10-29T09:00:00.000Z");
+    expect(viaPhone?.lastContactAt).toBe("2099-01-02T09:00:00.000Z");
   });
 
   it("makes a customer of a caller's number with no record, and ignores a conversation it cannot tie to anyone", async () => {
