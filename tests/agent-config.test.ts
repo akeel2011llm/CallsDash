@@ -122,7 +122,7 @@ describe("agent config", () => {
       expect(schema.required).not.toContain("patient_phone");
     }
     // the photo tool runs in the customer's browser, so it has no address and no secret
-    expect(d.show_image).toMatchObject({ type: "client", expects_response: false });
+    expect(d.show_image).toMatchObject({ type: "client", expects_response: true });
     expect(JSON.stringify(d.show_image)).not.toContain("sec");
     expect(Object.keys((d.reschedule_appointment as { api_schema: { request_body_schema: { properties: object } } }).api_schema.request_body_schema.properties)).toContain("doctor_id");
   });

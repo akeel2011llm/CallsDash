@@ -58,6 +58,7 @@ export async function dataPhotoAction(f: FormData) {
     await d.putItem(s.tenant.id, { ...rest, id }, image, s.actor);
   } else if (kind === "doctor") {
     try { await d.setDoctorImage(s.tenant.id, id, image, s.actor); } catch { done(s, "err=unknown", "photos"); }
+    await autoSync(s.tenant.id, s.actor); // the assistant's instructions say which doctors have a photo
   } else done(s, "err=unknown", "photos");
   done(s, `photo=${remove ? "removed" : "saved"}`, "photos");
 }

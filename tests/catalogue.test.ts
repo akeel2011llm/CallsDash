@@ -184,6 +184,11 @@ describe("catalogue and the assistant", () => {
     expect(p).toContain("with an empty query");
     expect(p).toContain("Never say you have no photos before you have called find_item");
     expect(p).toContain("photo or picture of a doctor");
+    const withPhoto = buildPrompt(agent("", "Clinic"), [{ id: "d1", name: "Dr Aqeel", specialty: "Dentist", active: true, photoAt: "2026-10-29T00:00:00Z" }, { id: "d2", name: "Dr Hana", specialty: "", active: true }]);
+    expect(withPhoto).toContain("Dr Aqeel, Dentist (doctor_id: d1) [has a photo]");
+    expect(withPhoto).toContain("- Dr Hana (doctor_id: d2)\n");
+    expect(withPhoto).toContain("the first time in a conversation that a doctor marked [has a photo]");
+    expect(withPhoto).toContain("put the page_url link from find_item in your reply instead");
     const tool = toolDefinitions("https://x.example", "s").find_item as { api_schema: { request_body_schema: { required?: string[] } } };
     expect(tool.api_schema.request_body_schema.required ?? []).not.toContain("query");
   });
