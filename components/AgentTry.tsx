@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { TextConversation } from "@elevenlabs/client";
 import { agentVariables } from "@/lib/agent-context";
+import { CHAT_PHOTO_CSS, splitPhotos, type ChatPart } from "@/lib/chat-photos";
 import type { Tenant } from "@/lib/types";
 
 const WIDGET_SCRIPT = "https://unpkg.com/@elevenlabs/convai-widget-embed";
@@ -14,7 +15,7 @@ export type TryLabels = Record<
 >;
 
 type Lang = "en" | "ar";
-type Line = { id: number; who: "user" | "agent" | "note"; text: string; image?: string };
+type Line = { id: number; who: "user" | "agent" | "note"; text: string; image?: string; parts?: ChatPart[] };
 
 /** Only pictures this app serves for a catalogue item are drawn, whatever the assistant asks for. */
 const catalogueImage = (raw: unknown): string | null => {
@@ -23,6 +24,18 @@ const catalogueImage = (raw: unknown): string | null => {
     return u.origin === window.location.origin && /^\/api\/items\/[^/]+\/[^/]+\/image$/.test(u.pathname) ? u.href : null;
   } catch { return null; }
 };
+
+/** Photos the assistant puts inside a typed reply are drawn by ElevenLabs' widget; this keeps them small (its shadow root is open). */
+function smallChatPhotos(w: Element) {
+  try {
+    const root = w.shadowRoot;
+    if (!root || (root as ShadowRoot & { callsdashPhotos?: boolean }).callsdashPhotos) return;
+    const sheet = new CSSStyleSheet();
+    sheet.replaceSync(CHAT_PHOTO_CSS);
+    root.adoptedStyleSheets = [...root.adoptedStyleSheets, sheet];
+    (root as ShadowRoot & { callsdashPhotos?: boolean }).callsdashPhotos = true;
+  } catch { /* an older browser: photos keep the widget's own size */ }
+}
 
 /**
  * The clinic's real ElevenLabs agent on a dashboard screen, two ways: the website widget exactly as visitors get it
@@ -92,6 +105,7 @@ function FloatingWidget({ agentId, language, openingHours }: { agentId: string; 
     w.addEventListener("elevenlabs-convai:call", (event) => {
       const config = (event as CustomEvent).detail?.config;
       if (!config) return;
+      smallChatPhotos(w);
       config.clientTools = {
         ...config.clientTools,
         show_image: (p: { image_url?: string; caption?: string }) => {
@@ -147,7 +161,9 @@ function TextChat({ agentId, language, openingHours, labels, suggestions }: {
   useEffect(() => { log.current?.scrollTo({ top: log.current.scrollHeight }); }, [lines, waiting]);
 
   const add = (who: Line["who"], text: string, image?: string) => {
-    const line: Line = { id: ++seq.current, who, text, ...(image ? { image } : {}) };
+    // a typed reply may carry a photo as a markdown image, as in the website chat
+    const parts = who === "agent" && !image ? splitPhotos(text, catalogueImage) : [];
+    const line: Line = { id: ++seq.current, who, text, ...(image ? { image } : {}), ...(parts.some((x) => "image" in x) ? { parts } : {}) };
     if (who !== "note") history.current = [...history.current, line];
     setLines((x) => [...x, line]);
   };
@@ -239,7 +255,11 @@ function TextChat({ agentId, language, openingHours, labels, suggestions }: {
             <div key={l.id} className={`bubble ${l.who === "user" ? "patient" : "agent"}`}>
               <small>{l.who === "user" ? labels.you : labels.assistant}</small>
               {l.image && <img src={l.image} alt={l.text} className="try-photo-inline" />}
-              {l.text && <span dir="auto" style={{ display: "block" }}>{l.text}</span>}
+              {l.parts
+                ? l.parts.map((x, i) => "image" in x
+                  ? <img key={i} src={x.image} alt={x.alt} className="try-photo-inline" />
+                  : <span key={i} dir="auto" style={{ display: "block" }}>{x.text}</span>)
+                : l.text && <span dir="auto" style={{ display: "block" }}>{l.text}</span>}
             </div>
           ))}
         {(status === "connecting" || waiting) && (

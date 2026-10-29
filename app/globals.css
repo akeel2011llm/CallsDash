@@ -487,7 +487,7 @@ pre { background: var(--surface-2); border: 1px solid var(--line); border-radius
 .widget-dock .try-photo[hidden] { display: none; }
 .widget-dock .try-photo img { display: block; inline-size: 100%; max-block-size: 200px; object-fit: cover; }
 .widget-dock .try-photo button { position: absolute; inset-block-start: 4px; inset-inline-end: 4px; inline-size: 28px; block-size: 28px; border: 0; border-radius: 999px; background: rgba(255,255,255,.9); color: #14202b; font-size: 18px; line-height: 1; cursor: pointer; }
-.try-photo-inline { display: block; inline-size: 100%; max-inline-size: 260px; max-block-size: 260px; object-fit: cover; border-radius: var(--radius, 10px); margin-block-end: .35rem; }
+.try-photo-inline { display: block; inline-size: 100%; max-inline-size: 220px; max-block-size: 220px; object-fit: cover; border-radius: var(--radius, 10px); margin-block-end: .35rem; }
 @media (max-width: 860px) { .widget-dock { inset-block-end: calc(68px + env(safe-area-inset-bottom)); } }
 
 /* ---------- Assistant studio (app/(admin)/admin/clients/[id]/assistant, components/studio) ---------- */
