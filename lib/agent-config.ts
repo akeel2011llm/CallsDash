@@ -27,8 +27,9 @@ const ARABIC_STYLE = {
  * 5: the clinic chooses whether customers are found by phone number or CPR number; find_item looks up the catalogue and show_image
  *    shows a photo in website chat.
  * 6: send_item_photo sends a catalogue photo in a WhatsApp chat; Instagram and other chats get a link with a picture preview.
+ * 7: find_item also finds doctors (with their photo, when one was added) and lists what the clinic offers when asked with no name.
  */
-export const AGENT_VERSION = 6;
+export const AGENT_VERSION = 7;
 
 /** How the assistant finds and saves returning customers, which depends on what the clinic chose on its Customers screen. */
 export function customerRules(mode: "phone" | "cpr"): string[] {
@@ -56,6 +57,8 @@ const BOOKING_RULES = [
 /** Catalogue rules: what to look up, what to say, and when a photo may be shown (only the website chat can draw one). */
 const CATALOGUE_RULES = [
   "When a customer asks about a product, treatment or package the clinic offers, call find_item with what they asked, then answer only from the details it returns. If it finds nothing, do not guess; say it is not listed and offer to take a message.",
+  "When a customer asks what the clinic offers, or asks for photos or pictures without naming one thing (for example any product photos), call find_item with an empty query to get a short list, then describe those items and show their photos the way the rules below say. Never say you have no photos before you have called find_item.",
+  "When a customer asks for a photo or picture of a doctor, call find_item with the doctor's name. An entry with kind doctor and an image_url is shown like any other photo. If it has no image_url, say there is no photo of that doctor on file and offer to help with an appointment.",
   "If find_item returns an image_url and the customer is chatting on the website (Channel: website), call show_image with that image_url and a short caption after you describe the item. Only the website chat can use show_image.",
   "If find_item returns an image_url and the customer is on WhatsApp (Channel: whatsapp), describe the item, then call send_item_photo with its item_id. If it returns sent:true, say the photo is being sent; do not add a link. If it returns sent:false, put the link it gives in your reply instead.",
   "On Instagram, if find_item returns a page_url, put it in your reply after describing the item (the app shows a picture preview for it). On a phone call, describe the item in words and never read out a link.",
@@ -254,11 +257,11 @@ export function toolDefinitions(appUrl: string, secret: string): Record<string, 
       email: str("Their email address, if they gave one."), note: str("A short practical note to remember (a preference). No medical details."),
       language: str("en or ar, the language the customer speaks or writes."), conversation_id: conversationId,
     }, []),
-    find_item: tool("find_item", "Look up something the clinic offers (a product, treatment or package) in its catalogue, with its details, price and a photo address.", {
-      query: str("What the customer asked about, in a few words, in their own language."), language: str("en or ar, the language to answer in."),
-    }, ["query"]),
-    send_item_photo: tool("send_item_photo", "Send the photo of a catalogue item to the customer in their WhatsApp chat. Use it only on WhatsApp.", {
-      item_id: str("The item_id from find_item."), language: str("en or ar, the language of the caption."),
+    find_item: tool("find_item", "Look up something the clinic offers (a product, treatment or package) or a doctor, with details, price and a photo address. With no query it lists what the clinic offers.", {
+      query: str("What the customer asked about, or a doctor's name, in a few words, in their own language. Leave empty to list what the clinic offers."), language: str("en or ar, the language to answer in."),
+    }, []),
+    send_item_photo: tool("send_item_photo", "Send the photo of a catalogue item or a doctor to the customer in their WhatsApp chat. Use it only on WhatsApp.", {
+      item_id: str("The item_id from find_item (for a doctor, the doctor's item_id)."), language: str("en or ar, the language of the caption."),
       // filled from the chat's own variable, never chosen by the assistant, so a photo can only go to the person in the chat
       caller_phone: { type: "string", dynamic_variable: "caller_phone" },
     }, ["item_id"]),

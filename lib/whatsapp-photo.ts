@@ -5,7 +5,7 @@ import type { Data } from "./data/demo";
 import type { Locale } from "./types";
 
 type FetchLike = (url: string, init?: RequestInit) => Promise<Response>;
-export type PhotoDeps = Pick<Data, "getTenant" | "getItem" | "getItemImage" | "getSecrets">;
+export type PhotoDeps = Pick<Data, "getTenant" | "getItem" | "getItemImage" | "getSecrets" | "getDoctors" | "getDoctorImage">;
 
 export type PhotoResult =
   | { status: "sent" }
@@ -14,7 +14,7 @@ export type PhotoResult =
 
 const GRAPH = "https://graph.facebook.com/v21.0";
 
-/** What goes under the photo: the item's name in the customer's language and its price, if it has one. */
+/** What goes under the photo: the item's (or doctor's) name in the customer's language and its price, if it has one. */
 export function photoCaption(i: { name: string; nameAr?: string; price?: string }, language: Locale): string {
   const name = (language === "ar" && i.nameAr) || i.name;
   return (i.price ? `${name} - ${i.price}` : name).slice(0, 1000);
@@ -35,10 +35,23 @@ export async function sendItemPhoto(d: PhotoDeps, tenantId: string, input: { ite
   if (!w?.phoneNumberId) return { status: "skipped", reason: "no_phone_id" };
   const to = whatsappUserId(input.to);
   if (!to) return { status: "skipped", reason: "no_recipient" };
-  const item = await d.getItem(tenantId, input.itemId);
-  if (!item || !item.active) return { status: "skipped", reason: "no_item" };
-  if (!item.hasImage) return { status: "skipped", reason: "no_photo" };
-  const img = decodeDataUrl(await d.getItemImage(tenantId, item.id));
+  // the id is a catalogue item's, or a doctor's (ids never clash)
+  let item: { id: string; name: string; nameAr?: string; price?: string; updatedAt: string } | undefined;
+  let stored: string | undefined;
+  const found = await d.getItem(tenantId, input.itemId);
+  if (found) {
+    if (!found.active) return { status: "skipped", reason: "no_item" };
+    if (!found.hasImage) return { status: "skipped", reason: "no_photo" };
+    item = found;
+    stored = await d.getItemImage(tenantId, found.id);
+  } else {
+    const doctor = (await d.getDoctors(tenantId)).find((x) => x.id === input.itemId);
+    if (!doctor || doctor.active === false) return { status: "skipped", reason: "no_item" };
+    if (!doctor.photoAt) return { status: "skipped", reason: "no_photo" };
+    item = { id: doctor.id, name: doctor.name, updatedAt: doctor.photoAt };
+    stored = await d.getDoctorImage(tenantId, doctor.id);
+  }
+  const img = decodeDataUrl(stored);
   if (!img) return { status: "skipped", reason: "no_photo" };
   if (img.type !== "image/jpeg" && img.type !== "image/png") return { status: "skipped", reason: "format" };
   try {
