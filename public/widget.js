@@ -33,7 +33,7 @@
     return n;
   }
 
-  // The assistant's show_image tool (a client tool, run here in the visitor's browser) draws a catalogue photo above the chat.
+  // The assistant's show_image tool (a client tool, run here in the visitor's browser) draws a catalogue photo over the chat, just above its message box.
   // Only pictures served by this CallsDash address are drawn, whatever the assistant asks for.
   function photoUrl(raw) {
     try {
@@ -49,15 +49,30 @@
     var close = el("button", { type: "button", "aria-label": rtl ? "إغلاق" : "Close", text: "\u00d7", style: {
       position: "absolute", top: "4px", border: "0", background: "rgba(255,255,255,.9)", borderRadius: "999px", width: "28px", height: "28px", fontSize: "18px", lineHeight: "1", cursor: "pointer", color: "#14202b" } });
     close.style[rtl ? "left" : "right"] = "4px";
-    var kids = [el("img", { src: href, alt: caption || "", style: { display: "block", width: "100%", maxHeight: "260px", objectFit: "cover" } }), close];
+    var kids = [el("img", { src: href, alt: caption || "", style: { display: "block", width: "100%", maxHeight: "200px", objectFit: "cover" } }), close];
     if (caption) kids.push(el("div", { text: String(caption).slice(0, 200), style: { padding: "8px 12px", fontSize: "14px", lineHeight: "1.4" } }));
+    // The ElevenLabs chat window sits at the highest layer, so the photo must be above it (added to the page after it, same layer)
+    // and sit over the chat itself, just above its message box, never behind it.
     var card = el("div", { "data-callsdash-widget": "photo", role: "dialog", dir: rtl ? "rtl" : "ltr", style: {
-      position: "fixed", bottom: "100px", width: "260px", maxWidth: "calc(100vw - 40px)", background: "#fff", color: "#14202b", borderRadius: "14px", overflow: "hidden",
-      boxShadow: "0 8px 30px rgba(0,0,0,.28)", zIndex: 2147483001, fontFamily: "system-ui, 'Noto Sans Arabic', sans-serif" } }, kids);
-    card.style[side] = "20px";
+      position: "fixed", bottom: chatBottom(), width: "240px", maxWidth: "calc(100vw - 80px)", background: "#fff", color: "#14202b", borderRadius: "14px", overflow: "hidden",
+      border: "1px solid rgba(0,0,0,.08)", boxShadow: "0 8px 30px rgba(0,0,0,.35)", zIndex: 2147483647, fontFamily: "system-ui, 'Noto Sans Arabic', sans-serif" } }, kids);
+    card.style[side] = "40px";
     close.addEventListener("click", function () { card.remove(); });
     document.body.appendChild(card);
     return "Shown.";
+  }
+
+  // Where the chat's message box starts, measured when the chat lets us look inside it; otherwise a fixed guess that matches its layout.
+  function chatBottom() {
+    try {
+      var host = document.querySelector('[data-callsdash-widget="embed"]');
+      var box = host && host.shadowRoot && host.shadowRoot.querySelector("textarea, input[type=text]");
+      if (box) {
+        var top = box.getBoundingClientRect().top;
+        if (top > 120 && top < window.innerHeight) return Math.round(window.innerHeight - top + 24) + "px";
+      }
+    } catch (e) { /* closed or changed: use the fixed guess */ }
+    return "250px";
   }
 
   function init(cfg) {
