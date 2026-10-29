@@ -100,6 +100,16 @@ function FloatingWidget({ agentId, language, openingHours }: { agentId: string; 
           img.src = href;
           img.alt = p?.caption ?? "";
           card.hidden = false;
+          // over the chat, just above its message box (the widget lets us measure it; otherwise the stylesheet's place stands)
+          Object.assign(card.style, { insetBlockEnd: "", left: "", right: "" });
+          try {
+            const box = w.shadowRoot?.querySelector("textarea, input[type=text]")?.getBoundingClientRect();
+            const d = dock.getBoundingClientRect();
+            if (box && box.top > 120 && box.top < d.bottom) {
+              const left = Math.max(8, Math.min(box.left + (box.width - card.offsetWidth) / 2, d.width - card.offsetWidth - 8));
+              Object.assign(card.style, { insetBlockEnd: `${Math.round(d.bottom - box.top + 24)}px`, left: `${Math.round(left - d.left)}px`, right: "auto" });
+            }
+          } catch { /* closed or changed: keep the stylesheet's place */ }
           return "Shown.";
         },
       };

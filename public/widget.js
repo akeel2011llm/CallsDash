@@ -51,37 +51,38 @@
     close.style[rtl ? "left" : "right"] = "4px";
     var kids = [el("img", { src: href, alt: caption || "", style: { display: "block", width: "100%", maxHeight: "200px", objectFit: "cover" } }), close];
     if (caption) kids.push(el("div", { text: String(caption).slice(0, 200), style: { padding: "8px 12px", fontSize: "14px", lineHeight: "1.4" } }));
-    // The ElevenLabs chat window sits at the highest layer, so the photo must be above it (added to the page after it, same layer)
-    // and sit over the chat itself, just above its message box, never behind it.
+    // The photo must sit over the ElevenLabs chat window (z-index 1000 in convai-widget-embed 0.22, which may change), never behind it.
     var card = el("div", { "data-callsdash-widget": "photo", role: "dialog", dir: rtl ? "rtl" : "ltr", style: {
-      position: "fixed", bottom: chatBottom(), width: "240px", maxWidth: "calc(100vw - 80px)", background: "#fff", color: "#14202b", borderRadius: "14px", overflow: "hidden",
+      position: "fixed", width: "240px", maxWidth: "calc(100vw - 80px)", background: "#fff", color: "#14202b", borderRadius: "14px", overflow: "hidden",
       border: "1px solid rgba(0,0,0,.08)", boxShadow: "0 8px 30px rgba(0,0,0,.35)", zIndex: 2147483647, fontFamily: "system-ui, 'Noto Sans Arabic', sans-serif" } }, kids);
-    card.style[side] = "40px";
     close.addEventListener("click", function () { card.remove(); });
     document.body.appendChild(card);
+    place(card, side);
     // The browser's top layer sits above every other layer on the page, whatever z-index the chat window uses; where it is missing
     // (old browsers) the z-index above still applies.
     try {
       card.setAttribute("popover", "manual");
       Object.assign(card.style, { inset: "auto", margin: "0", padding: "0", display: "block" });
-      card.style.bottom = chatBottom();
-      card.style[side] = "40px";
+      place(card, side);
       card.showPopover();
     } catch (e) { /* no popover support: plain fixed card */ }
     return "Shown.";
   }
 
-  // Where the chat's message box starts, measured when the chat lets us look inside it; otherwise a fixed guess that matches its layout.
-  function chatBottom() {
+  // Over the chat, just above its message box and centred on it, measured when the chat lets us look inside it;
+  // otherwise a fixed place that matches its usual layout.
+  function place(card, side) {
+    card.style.bottom = "250px"; card.style.left = "auto"; card.style.right = "auto"; card.style[side] = "40px";
     try {
       var host = document.querySelector('[data-callsdash-widget="embed"]');
       var box = host && host.shadowRoot && host.shadowRoot.querySelector("textarea, input[type=text]");
-      if (box) {
-        var top = box.getBoundingClientRect().top;
-        if (top > 120 && top < window.innerHeight) return Math.round(window.innerHeight - top + 24) + "px";
-      }
-    } catch (e) { /* closed or changed: use the fixed guess */ }
-    return "250px";
+      if (!box) return;
+      var r = box.getBoundingClientRect(), w = card.offsetWidth || 240;
+      if (r.top <= 120 || r.top >= window.innerHeight) return;
+      card.style.bottom = Math.round(window.innerHeight - r.top + 24) + "px";
+      card.style.right = "auto";
+      card.style.left = Math.round(Math.max(8, Math.min(r.left + (r.width - w) / 2, window.innerWidth - w - 8))) + "px";
+    } catch (e) { /* closed or changed: keep the fixed place */ }
   }
 
   function init(cfg) {
