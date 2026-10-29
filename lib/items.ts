@@ -1,5 +1,5 @@
 import type { Data } from "./data/demo";
-import type { Item, Locale } from "./types";
+import type { Doctor, Item, Locale } from "./types";
 
 export type ItemDeps = Pick<Data, "getItems" | "getItem" | "getItemImage" | "putItem" | "deleteItem">;
 
@@ -47,33 +47,68 @@ export function scoreItem(i: Pick<Item, "name" | "nameAr" | "details" | "details
   return hit === 0 ? 0 : score + (hit / q.length);
 }
 
-export interface FoundItem { item_id: string; name: string; details: string; price?: string; image_url?: string; page_url: string }
+export interface FoundItem { item_id: string; kind?: "doctor"; name: string; details: string; price?: string; image_url?: string; page_url: string }
 
 const MAX_FOUND = 3;
+/** With no query, the assistant is shown a short list of what the clinic offers, items with a photo first. */
+const MAX_LISTED = 5;
+/** Titles in front of a doctor's name that would otherwise match every doctor. */
+const TITLE_WORDS = new Set(["dr", "doctor", "doc", "دكتور", "دكتورة", "د"]);
+const withoutTitles = (q: string) => words(q).filter((w) => !TITLE_WORDS.has(w)).join(" ");
+
+type DoctorForFind = Pick<Doctor, "id" | "name" | "specialty" | "active" | "photoAt">;
+
+/** A doctor the customer asked about by name or specialty. Only active doctors; the photo address is there only when a photo was added. */
+function doctorEntry(doc: DoctorForFind, tenant: { slug: string }, origin: string, ar: boolean): FoundItem {
+  return {
+    item_id: doc.id, kind: "doctor", name: doc.name, details: doc.specialty,
+    ...(doc.photoAt ? { image_url: itemImageUrl(origin, tenant.slug, { id: doc.id, updatedAt: doc.photoAt }) } : {}),
+    page_url: itemPageUrl(origin, tenant.slug, doc.id, ar ? "ar" : "en"),
+  };
+}
 
 /**
- * What the assistant is told when a customer asks about something the clinic offers. Only active items are searched; the best
- * few come back with their details in the customer's language and, when there is a photo, a public address for it.
- * `origin` is this app's public address (no trailing slash), because the photo address is opened by the customer's browser.
+ * What the assistant is told when a customer asks about something the clinic offers or about a doctor. Only active items and
+ * doctors are searched; the best few come back with their details in the customer's language and, when there is a photo, a public
+ * address for it. An empty query lists what the clinic offers. `origin` is this app's public address (no trailing slash), because
+ * the photo address is opened by the customer's browser.
  */
-export async function findItems(d: ItemDeps, tenant: { id: string; slug: string }, input: { query: string; language?: Locale }, origin: string) {
+export async function findItems(d: ItemDeps & Pick<Data, "getDoctors">, tenant: { id: string; slug: string }, input: { query: string; language?: Locale }, origin: string) {
   const query = clip(input.query, 200);
   const ar = input.language === "ar";
   const all = (await d.getItems(tenant.id)).filter((i) => i.active);
-  if (!all.length) return { found: false, items: [] as FoundItem[], message: "The clinic has no catalogue items. Answer from the knowledge base, or offer to take a message." };
+  const entry = (i: Item): FoundItem => ({
+    item_id: i.id,
+    name: (ar && i.nameAr) || i.name,
+    details: ((ar && i.detailsAr) || i.details).slice(0, 800),
+    ...(i.price ? { price: i.price } : {}),
+    ...(i.hasImage ? { image_url: itemImageUrl(origin, tenant.slug, i) } : {}),
+    page_url: itemPageUrl(origin, tenant.slug, i.id, ar ? "ar" : "en"),
+  });
+  const USE = "Use only these details. Show the photo the way your instructions say for this channel; page_url is a link to a page with the photo and details, for channels that cannot show a picture.";
+  if (!query) {
+    if (!all.length) return { found: false, items: [] as FoundItem[], message: "The clinic has no catalogue items. Answer from the knowledge base, or offer to take a message." };
+    const listed = [...all].sort((a, b) => Number(b.hasImage) - Number(a.hasImage)).slice(0, MAX_LISTED);
+    return { found: true, items: listed.map(entry), message: `${USE} This is part of what the clinic offers: if the customer wants one of them, show its photo.` };
+  }
   const best = all.map((i) => ({ i, s: scoreItem(i, query) })).filter((x) => x.s > 0).sort((a, b) => b.s - a.s).slice(0, MAX_FOUND);
-  if (!best.length) return { found: false, items: [] as FoundItem[], message: "Nothing in the catalogue matches. Do not guess; say you do not have it listed and offer to take a message." };
+  const named = withoutTitles(query);
+  const docs = named
+    ? (await d.getDoctors(tenant.id)).filter((x) => x.active !== false)
+      .map((x) => ({ x, s: scoreItem({ name: x.name, details: x.specialty, keywords: "" }, named) })).filter((m) => m.s > 0).sort((a, b) => b.s - a.s).slice(0, MAX_FOUND)
+    : [];
+  if (!best.length && !docs.length) {
+    return {
+      found: false, items: [] as FoundItem[],
+      message: all.length
+        ? "Nothing in the catalogue matches and no doctor has that name. Do not guess; say you do not have it listed and offer to take a message."
+        : "The clinic has no catalogue items. Answer from the knowledge base, or offer to take a message.",
+    };
+  }
   return {
     found: true,
-    items: best.map(({ i }): FoundItem => ({
-      item_id: i.id,
-      name: (ar && i.nameAr) || i.name,
-      details: ((ar && i.detailsAr) || i.details).slice(0, 800),
-      ...(i.price ? { price: i.price } : {}),
-      ...(i.hasImage ? { image_url: itemImageUrl(origin, tenant.slug, i) } : {}),
-      page_url: itemPageUrl(origin, tenant.slug, i.id, ar ? "ar" : "en"),
-    })),
-    message: "Use only these details. Show the photo the way your instructions say for this channel; page_url is a link to a page with the photo and details, for channels that cannot show a picture.",
+    items: [...best.map(({ i }) => entry(i)), ...docs.map(({ x }) => doctorEntry(x, tenant, origin, ar))],
+    message: `${USE} An entry marked kind:doctor is a doctor: describe them from the details, and if it has no image_url say there is no photo of them on file.`,
   };
 }
 

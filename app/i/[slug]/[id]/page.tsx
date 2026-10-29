@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { appUrl } from "@/lib/app-url";
-import { getItem, listTenants } from "@/lib/data";
+import { getDoctors, getItem, listTenants } from "@/lib/data";
 import { itemImageUrl } from "@/lib/items";
 import { themeVars } from "@/lib/theme";
 import type { Locale } from "@/lib/types";
@@ -10,16 +10,20 @@ export const dynamic = "force-dynamic";
 
 async function load(slug: string, id: string, lang?: string) {
   const tenant = (await listTenants()).find((x) => x.slug === slug);
-  const item = tenant ? await getItem(tenant.id, id) : undefined;
-  if (!tenant || !item?.active) return null;
+  if (!tenant) return null;
   const locale: Locale = lang === "ar" ? "ar" : "en";
   const ar = locale === "ar";
-  return {
-    tenant, item, locale,
-    clinic: (ar ? tenant.branding.displayNameAr : tenant.branding.displayName) || tenant.name,
-    name: (ar && item.nameAr) || item.name,
-    details: (ar && item.detailsAr) || item.details,
-  };
+  const clinic = (ar ? tenant.branding.displayNameAr : tenant.branding.displayName) || tenant.name;
+  const found = await getItem(tenant.id, id);
+  if (found) {
+    if (!found.active) return null;
+    return { tenant, item: found, locale, clinic, name: (ar && found.nameAr) || found.name, details: (ar && found.detailsAr) || found.details };
+  }
+  // a doctor's page: the photo, the name and the specialty, shown the same way
+  const doctor = (await getDoctors(tenant.id)).find((x) => x.id === id);
+  if (!doctor || doctor.active === false) return null;
+  const item = { id: doctor.id, name: doctor.name, details: doctor.specialty, price: undefined, hasImage: Boolean(doctor.photoAt), updatedAt: doctor.photoAt ?? "" };
+  return { tenant, item, locale, clinic, name: doctor.name, details: doctor.specialty };
 }
 
 /** The tags a chat app reads to show a picture, the name and a line of text under the link. */

@@ -119,6 +119,43 @@ describe.each(["demo", "postgres"] as const)("catalogue (%s)", (kind) => {
     expect(plain.items[0].image_url).toBeUndefined();
   });
 
+  it("find_item with no query lists what the clinic offers, photos first, never hidden items", async () => {
+    const d = await backend(kind);
+    const t = await clinic(d, "Cat List");
+    expect(await findItems(d, t, { query: "" }, ORIGIN)).toMatchObject({ found: false, items: [] });
+    await saveItemByStaff(d, t.id, { name: "Plain checkup", details: "No photo", active: true }, undefined, "x");
+    const kit = await saveItemByStaff(d, t.id, { name: "Whitening kit", details: "Photo one", active: true }, PNG, "x");
+    await saveItemByStaff(d, t.id, { name: "Hidden", details: "x", active: false }, PNG, "x");
+    const all = await findItems(d, t, { query: "   " }, ORIGIN);
+    expect(all.found).toBe(true);
+    expect(all.items.map((i) => i.name)).toEqual(["Whitening kit", "Plain checkup"]);
+    expect(all.items[0].item_id).toBe(kit.id);
+    for (let n = 0; n < 8; n++) await saveItemByStaff(d, t.id, { name: `Extra ${n}`, active: true }, PNG, "x");
+    expect((await findItems(d, t, { query: "" }, ORIGIN)).items).toHaveLength(5);
+  });
+
+  it("find_item finds a doctor by name, with the photo only when one was added, and ignores the title", async () => {
+    const d = await backend(kind);
+    const t = await clinic(d, "Cat Doctors");
+    const aqeel = await d.addDoctor(t.id, { name: "Dr Aqeel", specialty: "Dentist" }, "x");
+    const hana = await d.addDoctor(t.id, { name: "Dr Hana", specialty: "Dermatology" }, "x");
+    await d.setDoctorImage(t.id, aqeel.id, PNG, "x");
+    const withPhoto = await findItems(d, t, { query: "Dr Aqeel photo" }, ORIGIN);
+    expect(withPhoto.found).toBe(true);
+    expect(withPhoto.items).toHaveLength(1);
+    const live = (await d.getDoctors(t.id)).find((x) => x.id === aqeel.id)!;
+    expect(withPhoto.items[0]).toMatchObject({ item_id: aqeel.id, kind: "doctor", name: "Dr Aqeel", details: "Dentist" });
+    expect(withPhoto.items[0].image_url).toBe(`${ORIGIN}/api/items/${t.slug}/${aqeel.id}/image?v=${Date.parse(live.photoAt!)}`);
+    const noPhoto = await findItems(d, t, { query: "doctor Hana" }, ORIGIN);
+    expect(noPhoto.items).toHaveLength(1);
+    expect(noPhoto.items[0]).toMatchObject({ item_id: hana.id, kind: "doctor" });
+    expect(noPhoto.items[0].image_url).toBeUndefined();
+    expect((await findItems(d, t, { query: "dentist" }, ORIGIN)).items[0].item_id).toBe(aqeel.id);
+    expect(await findItems(d, t, { query: "Dr" }, ORIGIN)).toMatchObject({ found: false });
+    await d.updateDoctor(t.id, aqeel.id, { active: false }, "x");
+    expect(await findItems(d, t, { query: "Dr Aqeel" }, ORIGIN)).toMatchObject({ found: false });
+  });
+
   it("is erased with the client", async () => {
     const d = await backend(kind);
     const t = await clinic(d, "Cat Gone");
@@ -138,6 +175,17 @@ describe("catalogue and the assistant", () => {
     expect(p).toContain("call find_item");
     expect(p).toMatch(/Channel: website\), call show_image/);
     expect(p).toContain("Only the website chat can use show_image");
+  });
+
+  it("tells the assistant to call find_item before saying it has no photos, and for a doctor's photo", async () => {
+    const { buildPrompt, toolDefinitions } = await import("@/lib/agent-config");
+    const { agent } = await import("@/lib/seed");
+    const p = buildPrompt(agent("", "Clinic"));
+    expect(p).toContain("with an empty query");
+    expect(p).toContain("Never say you have no photos before you have called find_item");
+    expect(p).toContain("photo or picture of a doctor");
+    const tool = toolDefinitions("https://x.example", "s").find_item as { api_schema: { request_body_schema: { required?: string[] } } };
+    expect(tool.api_schema.request_body_schema.required ?? []).not.toContain("query");
   });
 
   it("the widget draws only pictures served by CallsDash for a catalogue item", async () => {
@@ -182,6 +230,23 @@ describe.each(["demo", "postgres"] as const)("WhatsApp photos (%s)", (kind) => {
     expect(body).toMatchObject({ messaging_product: "whatsapp", to: "97336001122", type: "image" });
     expect(body.image.link).toBe(`${ORIGIN}/api/items/${t.slug}/${item.id}/image?v=${Date.parse(item.updatedAt)}`);
     expect(body.image.caption).toBe("Whitening kit - BHD 25");
+  });
+
+  it("sends a doctor's photo the same way, and skips a doctor with no photo or one who is not active", async () => {
+    const d = await backend(kind);
+    const { t } = await setup(d);
+    const doc = await d.addDoctor(t.id, { name: "Dr Aqeel", specialty: "Dentist" }, "x");
+    const fetchNever = () => { throw new Error("must not call Meta"); };
+    expect(await sendItemPhoto(d, t.id, { itemId: doc.id, to: "36001122" }, ORIGIN, fetchNever)).toEqual({ status: "skipped", reason: "no_photo" });
+    await d.setDoctorImage(t.id, doc.id, PNG, "x");
+    const calls: { init: RequestInit }[] = [];
+    expect(await sendItemPhoto(d, t.id, { itemId: doc.id, to: "36001122" }, ORIGIN, (_u, init) => { calls.push({ init: init! }); return ok(); })).toEqual({ status: "sent" });
+    const body = JSON.parse(String(calls[0].init.body));
+    const live = (await d.getDoctors(t.id))[0];
+    expect(body.image.link).toBe(`${ORIGIN}/api/items/${t.slug}/${doc.id}/image?v=${Date.parse(live.photoAt!)}`);
+    expect(body.image.caption).toBe("Dr Aqeel");
+    await d.updateDoctor(t.id, doc.id, { active: false }, "x");
+    expect(await sendItemPhoto(d, t.id, { itemId: doc.id, to: "36001122" }, ORIGIN, fetchNever)).toEqual({ status: "skipped", reason: "no_item" });
   });
 
   it("captions in Arabic when the customer writes Arabic", () => {
