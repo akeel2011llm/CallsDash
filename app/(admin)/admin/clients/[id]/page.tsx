@@ -12,6 +12,7 @@ import {
 import { adminAdjustCreditsAction, adminClientProfileAction, adminDeclineTopUpAction } from "@/lib/manage-actions";
 import { DoctorsManager } from "@/components/DoctorsManager";
 import { TryAssistant } from "@/components/TryAssistant";
+import { AssistantCheck } from "@/components/AssistantCheck";
 import { Badge, Notice, PageHead, Stat } from "@/components/ui";
 import { SubmitButton } from "@/components/SubmitButton";
 import { CopyChecklist } from "@/components/CopyChecklist";
@@ -89,6 +90,7 @@ export default async function ClientAdmin({ params, searchParams }: { params: Pr
       </div>
 
       <TryAssistant tenant={tenant} admin returnTo={returnTo} sp={{ saved, error }} />
+      <AssistantCheck tenant={tenant} />
 
       <FoldControls openAll={t("fold.openAll")} closeAll={t("fold.closeAll")} />
 
