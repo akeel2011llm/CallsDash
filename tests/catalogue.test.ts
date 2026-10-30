@@ -318,3 +318,14 @@ describe("photo failure hints", () => {
     expect(p).toContain("never read out a link");
   });
 });
+
+describe("doctor About text", () => {
+  it("is part of what the assistant says about a doctor, in the customer's language", async () => {
+    const { doctorDetails } = await import("@/lib/items");
+    const d = { id: "d1", name: "Dr. A", specialty: "Dentist", active: true, about: "20 years of experience.", aboutAr: "خبرة ٢٠ سنة." };
+    expect(doctorDetails(d, false)).toBe("Dentist. 20 years of experience.");
+    expect(doctorDetails(d, true)).toBe("Dentist. خبرة ٢٠ سنة.");
+    expect(doctorDetails({ ...d, aboutAr: undefined }, true)).toBe("Dentist. 20 years of experience.");
+    expect(doctorDetails({ ...d, about: undefined, aboutAr: undefined }, false)).toBe("Dentist");
+  });
+});

@@ -685,7 +685,7 @@ const en = {
   "dup.title": "Duplicate client",
   "dup.help": "Makes a new client with the same look, opening hours, closed days, rules, permissions and assistant instructions and options. Patients, bookings, conversations, credits, sign-ins and every outside connection (ElevenLabs agent, Google calendars, WhatsApp, Instagram, phone) are never copied.",
   "dup.domainHelp": "A website can belong to only one client. Leave it empty if the new clinic has no website yet and add it later.",
-  "dup.copyDoctors": "Copy the {n} doctor(s): names, specialties and weekly hours. Their Google calendars and leave are not copied.",
+  "dup.copyDoctors": "Copy the {n} doctor(s): names, specialties, About text and weekly hours. Their Google calendars and leave are not copied.",
   "dup.copyKnowledge": "Copy the {n} knowledge item(s). The old clinic's name is replaced by the new name; check the facts yourself.",
   "dup.create": "Create the copy",
   "dup.done": "The copy is ready: {doctors} doctor(s) and {knowledge} knowledge item(s) copied, and the old name replaced {renamed} time(s). Nothing was sent to ElevenLabs.",
@@ -1863,6 +1863,9 @@ const en = {
   "check.calls.none": "The assistant has not called any CallsDash tool for this client yet.",
   "check.call.ok": "Worked",
   "check.call.failed": "Failed",
+  "admin.doctor.about": "About the doctor, English (what the assistant tells customers)",
+  "admin.doctor.aboutAr": "About the doctor, Arabic (optional)",
+  "admin.doctor.about.help": "Experience, languages spoken, what the doctor treats. When a customer asks about this doctor the assistant says this with the photo. Press Update the assistant after saving only if the Assistant check says so; the details are looked up live.",
 } as const;
 
 export type Key = keyof typeof en;
@@ -3728,6 +3731,9 @@ const ar: Record<Key, string> = {
   "check.calls.none": "لم يستدعِ المساعد أي أداة من أدوات CallsDash لهذا العميل بعد.",
   "check.call.ok": "نجح",
   "check.call.failed": "فشل",
+  "admin.doctor.about": "نبذة عن الطبيب بالإنجليزية (ما يقوله المساعد للعملاء)",
+  "admin.doctor.aboutAr": "نبذة عن الطبيب بالعربية (اختياري)",
+  "admin.doctor.about.help": "الخبرة واللغات وما يعالجه الطبيب. عندما يسأل العميل عن هذا الطبيب يذكر المساعد هذا النص مع الصورة. النص يُقرأ مباشرة عند السؤال.",
 };
 
 export const dictionaries = { en, ar } as const;

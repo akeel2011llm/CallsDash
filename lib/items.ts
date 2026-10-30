@@ -56,12 +56,15 @@ const MAX_LISTED = 5;
 const TITLE_WORDS = new Set(["dr", "doctor", "doc", "دكتور", "دكتورة", "د"]);
 const withoutTitles = (q: string) => words(q).filter((w) => !TITLE_WORDS.has(w)).join(" ");
 
-type DoctorForFind = Pick<Doctor, "id" | "name" | "specialty" | "active" | "photoAt">;
+type DoctorForFind = Pick<Doctor, "id" | "name" | "specialty" | "active" | "photoAt"> & Partial<Pick<Doctor, "about" | "aboutAr">>;
+
+/** What the assistant says about a doctor: the specialty, then the "About" text in the customer's language (the other language when only that one is filled). */
+export const doctorDetails = (d: DoctorForFind, ar: boolean) => [d.specialty, (ar ? d.aboutAr || d.about : d.about || d.aboutAr)].filter(Boolean).join(". ").slice(0, 800);
 
 /** A doctor the customer asked about by name or specialty. Only active doctors; the photo address is there only when a photo was added. */
 function doctorEntry(doc: DoctorForFind, tenant: { slug: string }, origin: string, ar: boolean): FoundItem {
   return {
-    item_id: doc.id, kind: "doctor", name: doc.name, details: doc.specialty,
+    item_id: doc.id, kind: "doctor", name: doc.name, details: doctorDetails(doc, ar),
     ...(doc.photoAt ? { image_url: itemImageUrl(origin, tenant.slug, { id: doc.id, updatedAt: doc.photoAt }) } : {}),
     page_url: itemPageUrl(origin, tenant.slug, doc.id, ar ? "ar" : "en"),
   };
@@ -95,7 +98,7 @@ export async function findItems(d: ItemDeps & Pick<Data, "getDoctors">, tenant: 
   const named = withoutTitles(query);
   const docs = named
     ? (await d.getDoctors(tenant.id)).filter((x) => x.active !== false)
-      .map((x) => ({ x, s: scoreItem({ name: x.name, details: x.specialty, keywords: "" }, named) })).filter((m) => m.s > 0).sort((a, b) => b.s - a.s).slice(0, MAX_FOUND)
+      .map((x) => ({ x, s: scoreItem({ name: x.name, details: doctorDetails(x, ar), keywords: "" }, named) })).filter((m) => m.s > 0).sort((a, b) => b.s - a.s).slice(0, MAX_FOUND)
     : [];
   if (!best.length && !docs.length) {
     return {

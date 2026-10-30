@@ -62,7 +62,7 @@ export async function addDoctorAction(f: FormData) {
   const name = str(f, "name").replace(/\s+/g, " ").slice(0, 120);
   if (!name) go(f, fallback, "doc=name_missing", "#doctors");
   if ((await store.getDoctors(tenantId)).some((d) => d.name.toLowerCase() === name.toLowerCase())) go(f, fallback, "doc=name_taken", "#doctors");
-  await store.addDoctor(tenantId, { name, specialty: str(f, "specialty").slice(0, 120) }, actor);
+  await store.addDoctor(tenantId, { name, specialty: str(f, "specialty").slice(0, 120), about: str(f, "about").slice(0, 800), aboutAr: str(f, "aboutAr").slice(0, 800) }, actor);
   await autoSync(tenantId, actor);
   refreshAll();
   go(f, fallback, "doc=added", "#doctors");
@@ -77,7 +77,7 @@ export async function saveDoctorAction(f: FormData) {
   if ((await store.getDoctors(tenantId)).some((d) => d.id !== doc.id && d.name.toLowerCase() === name.toLowerCase())) go(f, fallback, "doc=name_taken", `#doctor-${doc.id}`);
   const color = str(f, "color");
   await store.updateDoctor(tenantId, doc.id, {
-    name, specialty: str(f, "specialty").slice(0, 120), color: hex.test(color) ? color : doc.color, active: f.get("active") === "on",
+    name, specialty: str(f, "specialty").slice(0, 120), about: str(f, "about").slice(0, 800), aboutAr: str(f, "aboutAr").slice(0, 800), color: hex.test(color) ? color : doc.color, active: f.get("active") === "on",
   }, actor);
   if (f.has("calendarId")) {
     const calendarId = str(f, "calendarId").slice(0, 300);
