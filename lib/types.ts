@@ -346,6 +346,9 @@ export interface Doctor {
   tenantId: string;
   name: string;
   specialty: string;
+  /** What the assistant tells customers about the doctor (experience, languages, what they treat), in English and Arabic. */
+  about?: string;
+  aboutAr?: string;
   color: string;
   googleCalendarId?: string;
   /** False while the doctor takes no new bookings (left, long leave). Existing bookings stay. Missing = true. */

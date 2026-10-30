@@ -72,6 +72,9 @@ export function DoctorsManager({ tenant, doctors, bookings, logins, returnTo, sp
                   <label style={{ flex: 2, minWidth: 160 }}>{t("admin.doctor.specialty")}<input name="specialty" maxLength={120} defaultValue={d.specialty} /></label>
                   <label style={{ flex: 0 }}>{t("doctors.color")}<input type="color" name="color" defaultValue={d.color} /></label>
                 </div>
+                <label>{t("admin.doctor.about")}<textarea name="about" rows={3} maxLength={800} defaultValue={d.about ?? ""} /></label>
+                <label>{t("admin.doctor.aboutAr")}<textarea name="aboutAr" rows={3} maxLength={800} dir="rtl" defaultValue={d.aboutAr ?? ""} /></label>
+                <small className="muted">{t("admin.doctor.about.help")}</small>
                 <label>{t("doctors.calendarId")}
                   <input name="calendarId" defaultValue={d.googleCalendarId ?? ""} placeholder="clinic@group.calendar.google.com" dir="ltr" />
                 </label>
@@ -133,6 +136,7 @@ export function DoctorsManager({ tenant, doctors, bookings, logins, returnTo, sp
         {hidden}
         <label style={{ flex: 2, minWidth: 180 }}>{t("admin.doctor.name")}<input name="name" required maxLength={120} /></label>
         <label style={{ flex: 2, minWidth: 160 }}>{t("admin.doctor.specialty")}<input name="specialty" maxLength={120} /></label>
+        <label style={{ flex: "1 1 100%" }}>{t("admin.doctor.about")}<textarea name="about" rows={2} maxLength={800} /></label>
         <SubmitButton className="btn small" type="submit">{t("admin.doctor.add")}</SubmitButton>
       </form>
     </section>

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { appUrl } from "@/lib/app-url";
 import { getDoctors, getItem, listTenants } from "@/lib/data";
-import { itemImageUrl } from "@/lib/items";
+import { doctorDetails, itemImageUrl } from "@/lib/items";
 import { themeVars } from "@/lib/theme";
 import type { Locale } from "@/lib/types";
 
@@ -22,8 +22,8 @@ async function load(slug: string, id: string, lang?: string) {
   // a doctor's page: the photo, the name and the specialty, shown the same way
   const doctor = (await getDoctors(tenant.id)).find((x) => x.id === id);
   if (!doctor || doctor.active === false) return null;
-  const item = { id: doctor.id, name: doctor.name, details: doctor.specialty, price: undefined, hasImage: Boolean(doctor.photoAt), updatedAt: doctor.photoAt ?? "" };
-  return { tenant, item, locale, clinic, name: doctor.name, details: doctor.specialty };
+  const item = { id: doctor.id, name: doctor.name, details: doctorDetails(doctor, ar), price: undefined, hasImage: Boolean(doctor.photoAt), updatedAt: doctor.photoAt ?? "" };
+  return { tenant, item, locale, clinic, name: doctor.name, details: doctorDetails(doctor, ar) };
 }
 
 /** The tags a chat app reads to show a picture, the name and a line of text under the link. */
