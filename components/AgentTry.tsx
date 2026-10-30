@@ -7,6 +7,7 @@ import { CHAT_PHOTO_CSS, splitPhotos, type ChatPart } from "@/lib/chat-photos";
 import type { Tenant } from "@/lib/types";
 
 const WIDGET_SCRIPT = "https://unpkg.com/@elevenlabs/convai-widget-embed";
+const PHONE_REPLY = "Not shown on this screen. Put the photo inside your reply as ![short caption](image_url) on its own line, using the same image_url.";
 
 export type TryLabels = Record<
   "language" | "widgetTitle" | "widgetHelp" | "chatTitle" | "chatHelp" | "start" | "suggestions" | "placeholder" | "send" | "newChat"
@@ -111,6 +112,8 @@ function FloatingWidget({ agentId, language, openingHours }: { agentId: string; 
         show_image: (p: { image_url?: string; caption?: string }) => {
           const href = catalogueImage(p?.image_url);
           if (!href) return "That picture cannot be shown.";
+          // on a phone the chat fills the screen: the assistant writes the photo into its reply instead (as public/widget.js does)
+          if (window.matchMedia("(max-width: 700px)").matches) return PHONE_REPLY;
           img.src = href;
           img.alt = p?.caption ?? "";
           card.hidden = false;
