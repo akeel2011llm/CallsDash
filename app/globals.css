@@ -593,3 +593,8 @@ details.fold[open] > summary { border-block-end: 1px solid var(--line); }
 
 .build-badge { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 6px 12px; margin-bottom: 12px; border: 1px dashed var(--line); border-radius: 10px; font-size: 13px; background: var(--surface, transparent); }
 .build-badge strong { text-transform: uppercase; letter-spacing: .04em; font-size: 12px; }
+
+/* Assistant check (components/AssistantCheck.tsx): one line per check, the state first */
+.check-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.check-list li { display: flex; gap: 10px; align-items: baseline; }
+.check-list .badge { flex: none; min-inline-size: 3.5em; text-align: center; }
