@@ -4,6 +4,7 @@ import { getT } from "@/lib/i18n";
 import { fmtDateTime, fmtNum } from "@/lib/format";
 import { getBookings, getConversations, getWallet } from "@/lib/data";
 import { checklistFor } from "@/lib/setup-facts";
+import { rulesOf } from "@/lib/business-types";
 import type { Key } from "@/lib/i18n";
 import { dailyCounts, lastDays, summarize } from "@/lib/stats";
 import { flagRank, needsAttention } from "@/lib/flags";
@@ -21,7 +22,8 @@ const CHANNELS = ["website", "whatsapp", "instagram", "phone"] as const;
 export default async function Home() {
   const { tenant, staffRole, viewingAsAdmin } = await requireClient();
   const [{ t, locale }, w, convs, bookings, checklist] = await Promise.all([getT(tenant), getWallet(tenant.id), getConversations(tenant.id), getBookings(tenant.id), checklistFor(tenant)]);
-  const todo = staffRole === "manager" ? checklist.filter((i) => i.forClient && !i.done) : [];
+  // staff calendars are left out for a business that does not book time with people (lib/business-types.ts)
+  const todo = staffRole === "manager" ? checklist.filter((i) => i.forClient && !i.done && (i.id !== "calendar" || rulesOf(tenant).needsStaff)) : [];
   const todoHref: Record<string, string> = { knowledge: "/app/knowledge", hours: "/app/calendar", calendar: "/app/calendar", test: "/app/website" };
   const now = Date.now();
   const week = summarize(lastDays(convs, 7, now));

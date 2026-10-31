@@ -65,6 +65,18 @@ It also checks that every menu link points at a real page, and that every Englis
   saved with `saveFeesAction` without a client) and the server keys check (`components/ServerKeys.tsx`).
 - The fees are shown read-only in each client's Assistant > pricing with a link; Channels links to the server keys.
 
+## Setup wizard (milestone 5)
+
+- The Setup tab is a wizard with five phases (`?step=business|plan|people|assistant|channels`) and the Stepper on top. Without
+  `?step=` it opens at the first unfinished phase, so existing clients resume where they stopped.
+- `lib/wizard.ts` groups the same ten checklist items into phases (stored progress is kept) and applies the business-type rules
+  (`rulesOf`): staff calendars are "not needed" when the type does not book staff time; shops, salons and restaurants need a
+  catalogue item, the others knowledge or catalogue. Branding and opening hours are recommended, not required.
+- Each phase holds the forms it needs (business type, contact details, website scan, package and credits, sign-ins, sync the
+  receptionist, Try the assistant, Assistant check), and every form returns to the same phase. Links lead to the full tabs.
+- **Go live** (`goLiveAction`) checks every required step again on the server and stores `onboarding.liveAt` (audit logged);
+  `undoLiveAction` removes the mark. The client list shows "Live" or phases done (x / 5); the Overview shows "Continue setup".
+
 ---
 
 # CallsDash reorganization proposal (Phase 1 audit + Phase 2 blueprint)

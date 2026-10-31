@@ -8,6 +8,8 @@ import * as store from "./data";
 import { DuplicateError } from "./errors";
 import { setupChecklist } from "./checklist";
 import { scanSite, ScanError } from "./site-scan";
+import { wizardFor } from "./setup-facts";
+import { missingForLive } from "./wizard";
 import type { Branding } from "./types";
 
 const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
@@ -46,11 +48,11 @@ export async function scanWebsiteAction(f: FormData) {
     const scan = await scanSite(url);
     await store.setOnboarding(id, { ...t.onboarding, scan }, actor, `Scanned website ${scan.url}`);
   } catch (e) {
-    if (e instanceof ScanError) redirect(setupUrl(id, `scan=${e.code}`));
+    if (e instanceof ScanError) redirect(setupUrl(id, `step=business&scan=${e.code}#website`));
     throw e;
   }
   refresh(id);
-  redirect(setupUrl(id, "saved=scan"));
+  redirect(setupUrl(id, "step=business&saved=scan#website"));
 }
 
 const chunks = (text: string, size = 900): string[] => {
@@ -86,7 +88,7 @@ export async function applyScanAction(f: FormData) {
   if (Object.keys(patch).length) await store.updateTenant(id, { branding: patch }, actor);
   refresh(id);
   revalidatePath("/app/knowledge");
-  redirect(setupUrl(id, "saved=applied"));
+  redirect(setupUrl(id, "step=business&saved=applied#website"));
 }
 
 /** Ticks or unticks a checklist item that cannot be worked out from data (only those; ticking anything else does nothing). */
@@ -102,5 +104,38 @@ export async function toggleChecklistAction(f: FormData) {
     await store.setOnboarding(id, { ...t.onboarding, done: [...done] }, actor, `Setup item "${item}" ${done.has(item) ? "confirmed" : "reopened"}`);
   }
   refresh(id);
-  redirect(setupUrl(id));
+  const back = safePath(f.get("returnTo"), setupUrl(id));
+  redirect(back);
+}
+
+/**
+ * The wizard's last button. Checks every required step again on the server (the page may be old) and records the day the
+ * client went live; if a step is still open it goes back to that step and names it.
+ */
+export async function goLiveAction(f: FormData) {
+  const { actor } = await requireAdmin();
+  const id = str(f, "tenantId");
+  const t = await store.getTenant(id);
+  if (!t) redirect("/admin");
+  const missing = missingForLive((await wizardFor(t)).phases);
+  if (missing.length) redirect(setupUrl(id, `step=${missing[0].phase}&missing=${missing.map((m) => m.item).join(",")}`));
+  if (!t.onboarding.liveAt) await store.setOnboarding(id, { ...t.onboarding, liveAt: new Date().toISOString() }, actor, "Went live (setup finished)");
+  refresh(id);
+  revalidatePath("/admin");
+  redirect(setupUrl(id, "step=channels&saved=live"));
+}
+
+/** Takes the "live" mark off again (for example to redo the setup). Changes nothing else: channels keep working. */
+export async function undoLiveAction(f: FormData) {
+  const { actor } = await requireAdmin();
+  const id = str(f, "tenantId");
+  const t = await store.getTenant(id);
+  if (!t) redirect("/admin");
+  if (t.onboarding.liveAt) {
+    const { liveAt: _, ...rest } = t.onboarding;
+    await store.setOnboarding(id, rest, actor, "Setup reopened (live mark removed)");
+  }
+  refresh(id);
+  revalidatePath("/admin");
+  redirect(setupUrl(id, "step=channels&saved=reopened"));
 }

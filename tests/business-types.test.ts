@@ -58,6 +58,9 @@ describe("relabel", () => {
     expect(relabel("Doctors and Google Calendars", "en", salonEn)).toBe("Stylists and Google Calendars");
     expect(relabel("The doctor's calendar for the clinic's patients", "en", salonEn)).toBe("The stylist's calendar for the salon's customers");
     expect(relabel("Choose a doctor", "en", shopEn)).toBe("Choose a staff member");
+    // plural possessive: "staff" takes no apostrophe
+    expect(relabel("Doctors' calendars", "en", salonEn)).toBe("Stylists' calendars");
+    expect(relabel("Doctors' calendars and the doctors' hours", "en", shopEn)).toBe("Staff calendars and the staff hours");
   });
 
   it("keeps placeholders and longer words untouched", () => {

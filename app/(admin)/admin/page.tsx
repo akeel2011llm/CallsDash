@@ -3,8 +3,7 @@ import { getT } from "@/lib/i18n";
 import { fmtNum } from "@/lib/format";
 import { planNames } from "@/lib/plans";
 import { creditsOwed, getAlerts, getTopUpRequests, getWallet, listTenants } from "@/lib/data";
-import { checklistFor } from "@/lib/setup-facts";
-import { progress } from "@/lib/checklist";
+import { wizardFor } from "@/lib/setup-facts";
 import { viewAsClient } from "@/lib/actions";
 import { Badge, PageHead, Stat } from "@/components/ui";
 import { SubmitButton } from "@/components/SubmitButton";
@@ -14,7 +13,8 @@ export default async function AdminHome() {
   const [{ t, locale }, tenants, alerts, requests, owed] = await Promise.all([getT(), listTenants(), getAlerts(), getTopUpRequests(), creditsOwed()]);
   const openAlerts = alerts.filter((a) => !a.resolved);
   const wallets = new Map(await Promise.all(tenants.map(async (c) => [c.id, await getWallet(c.id)] as const)));
-  const setups = new Map(await Promise.all(tenants.map(async (c) => [c.id, progress(await checklistFor(c))] as const)));
+  // setup progress in wizard phases (5); a client the admin marked live shows "Live" instead
+  const setups = new Map(await Promise.all(tenants.map(async (c) => { const ph = (await wizardFor(c)).phases; return [c.id, { done: ph.filter((p) => p.done).length, total: ph.length }] as const; })));
   return (
     <>
       <BuildBadge />
@@ -48,7 +48,7 @@ export default async function AdminHome() {
                   <td>
                     {(() => { const sp = setups.get(c.id)!; return (
                       <Link href={`/admin/clients/${c.id}/setup`} title={t("admin.setupOpen")}>
-                        <Badge tone={sp.done === sp.total ? "ok" : "warn"}>{sp.done} / {sp.total}</Badge>
+                        {c.onboarding.liveAt ? <Badge tone="ok">{t("wiz.live")}</Badge> : <Badge tone={sp.done === sp.total ? "ok" : "warn"}>{sp.done} / {sp.total}</Badge>}
                       </Link>
                     ); })()}
                   </td>

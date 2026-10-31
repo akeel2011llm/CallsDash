@@ -12,13 +12,15 @@ import { TryAssistant } from "@/components/TryAssistant";
 import { AssistantCheck } from "@/components/AssistantCheck";
 import { CopyChecklist } from "@/components/CopyChecklist";
 import { Guide } from "@/components/Guide";
+import { wizardFor } from "@/lib/setup-facts";
 
 export default async function ClientOverview({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ saved?: string; error?: string; copied?: string }> }) {
   const { id } = await params;
   const { saved, error, copied } = await searchParams;
   const tenant = await getTenant(id);
   if (!tenant) notFound();
-  const [{ t, locale }, w, agent, requests] = await Promise.all([getT(tenant), getWallet(id), getAgent(id), getTopUpRequests()]);
+  const [{ t, locale }, w, agent, requests, wiz] = await Promise.all([getT(tenant), getWallet(id), getAgent(id), getTopUpRequests(), wizardFor(tenant)]);
+  const phasesDone = wiz.phases.filter((p) => p.done).length;
   const asked = requests.filter((r) => r.tenantId === id);
   const returnTo = `/admin/clients/${id}`;
   return (
@@ -52,6 +54,12 @@ export default async function ClientOverview({ params, searchParams }: { params:
               </span>
             </span>
           ))}
+        </Notice>
+      )}
+      {!tenant.onboarding.liveAt && (
+        <Notice tone={phasesDone === wiz.phases.length ? "ok" : "warn"}>
+          {t("wiz.overview").replace("{n}", String(phasesDone)).replace("{total}", String(wiz.phases.length))}{" "}
+          <Link href={`/admin/clients/${id}/setup`}>{phasesDone === wiz.phases.length ? t("wiz.goLive") : t("wiz.continue")}</Link>
         </Notice>
       )}
       <div className="grid">
