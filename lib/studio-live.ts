@@ -4,6 +4,7 @@
  */
 import { acceptsTemperature, defaultLlm } from "./agent-catalog";
 import { buildPrompt, greeting } from "./agent-config";
+import { agentTags } from "./agent-extras";
 import { studioOf, type SectionId } from "./agent-studio";
 import type { LiveAgent } from "./elevenlabs-catalog";
 import { normalizeText } from "./text-diff";
@@ -34,7 +35,7 @@ const orNull = <T,>(v: T | undefined): T | null => (v === undefined ? null : v);
 
 export function liveRows(i: {
   settings: AgentSettings;
-  tenant: Pick<Tenant, "retentionDays">;
+  tenant: Pick<Tenant, "retentionDays"> & Partial<Pick<Tenant, "business">>;
   live: LiveAgent;
   /** The model used when the client has not chosen one. */
   fallbackLlm?: string;
@@ -59,6 +60,7 @@ export function liveRows(i: {
   add("temperature", "model", usesTemperature ? s.temperature : null, orNull(live.temperature), true, { none: "notUsed", ...(!usesTemperature && live.temperature != null ? { state: "unused" as const } : {}) });
   add("maxTokens", "model", st.maxTokens || null, tokens, saved("model"), { none: "noLimit" });
   add("reasoningEffort", "model", st.reasoningEffort || null, live.reasoningEffort || null, saved("model"), { none: "default" });
+  add("serviceTier", "model", st.serviceTier, live.serviceTier ?? "standard", saved("model"));
   add("voiceEn", "voice", resolveVoiceId(s.voiceEn, "en", i.voiceOverrides), orNull(live.voiceId), true);
   add("voiceAr", "voice", resolveVoiceId(s.voiceAr, "ar", i.voiceOverrides), orNull(live.arabicVoiceId), true);
   add("ttsModelEn", "voice", st.ttsModelEn, orNull(live.ttsModel), true);
@@ -70,12 +72,15 @@ export function liveRows(i: {
   add("turnTimeout", "conversation", st.turnTimeout, orNull(live.turnTimeout), saved("conversation"), { unit: "s" });
   add("silenceEndSeconds", "conversation", st.silenceEndSeconds || null, silence, true, { unit: "s", none: "noLimit" });
   add("maxDurationSeconds", "conversation", st.maxDurationSeconds, orNull(live.maxDurationSeconds), true, { unit: "s" });
+  add("backgroundSound", "conversation", st.backgroundSound || null, live.backgroundSound || null, saved("conversation"), { none: "default" });
   add("asrProvider", "hearing", st.asrProvider, orNull(live.asrProvider), saved("hearing"), { none: "default" });
   add("dailyLimit", "safety", st.dailyLimit, orNull(live.dailyLimit), true);
   add("recordVoice", "safety", st.recordVoice, orNull(live.recordVoice), true);
   add("retentionDays", "safety", Math.max(1, Math.round(i.tenant.retentionDays || 90)), orNull(live.retentionDays), true);
   add("guardFocus", "safety", st.guardFocus, orNull(live.guardrailsFocus), true);
   add("guardInjection", "safety", st.guardInjection, orNull(live.guardrailsPromptInjection), true);
+  add("queueEnabled", "safety", st.queueEnabled, orNull(live.queueEnabled), saved("safety"));
+  add("tags", "analysis", agentTags(i.tenant, st.tags).join(", "), live.tags ? live.tags.join(", ") : null, true);
   // ElevenLabs leaves the field out while it is at its default (the line is shown), so a missing value reads as "shown"
   add("hideBanner", "widget", st.widget.hideBanner, live.disableBanner ?? false, true);
   return rows;

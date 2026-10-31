@@ -125,7 +125,32 @@ export interface LiveAgent {
   criteriaIds?: string[];
   /** platform_settings.widget as ElevenLabs holds it (snake_case, untouched). */
   widget?: Record<string, unknown>;
+  /* Added with step 4 (more ElevenLabs settings in the studio). */
+  serviceTier?: string;
+  audioTags?: { tag: string; description: string }[];
+  effectFilter?: string;
+  effectEnvironment?: string;
+  effectNoise?: string;
+  effectDistance?: number;
+  /** "" when no background sound is set. */
+  backgroundSound?: string;
+  backgroundVolume?: number;
+  initialWaitSeconds?: number;
+  ignoreTerms?: string[];
+  ignoreDefaults?: boolean;
+  turnModel?: string;
+  chatFiles?: boolean;
+  chatFilesMax?: number;
+  queueEnabled?: boolean;
+  queueWaitSeconds?: number;
+  /** The clip callers hear while they wait in the queue; undefined when it is ElevenLabs' default tone. */
+  holdAudio?: { name: string; url?: string; seconds?: number };
+  tags?: string[];
 }
+
+/** One entry of ElevenLabs' audio-effects catalogue. */
+export interface EffectOption { id: string; name: string; description?: string }
+export interface EffectsCatalog { filters: EffectOption[]; environments: EffectOption[]; noises: EffectOption[] }
 
 export interface CatalogApi {
   searchVoices(q: VoiceQuery): Promise<VoicePage>;
@@ -137,6 +162,8 @@ export interface CatalogApi {
   listLlms(): Promise<LlmInfo[]>;
   llmPrices(input: PriceInput): Promise<LlmPrice[]>;
   getAgent(agentId: string): Promise<LiveAgent>;
+  /** The voice filters, rooms and background noises ElevenLabs offers for a voice. */
+  audioEffects(): Promise<EffectsCatalog>;
 }
 
 /* ---------- reading ElevenLabs' answers ---------- */
@@ -229,6 +256,13 @@ export function mapLiveAgent(raw: unknown): LiveAgent {
   const guard = obj(ps.guardrails);
   const tools = obj(prompt.built_in_tools);
   const soft = obj(turn.soft_timeout_config);
+  const conv = obj(cc.conversation);
+  const fx = obj(tts.audio_effects);
+  const bg = obj(conv.background_sound);
+  const files = obj(conv.file_input);
+  const queue = obj(ps.queueing_config);
+  const hold = obj(queue.hold_audio);
+  const strings = (v: unknown) => (Array.isArray(v) ? arr(v).filter((x): x is string => typeof x === "string") : undefined);
   return {
     name: str(a.name), llm: str(prompt.llm), temperature: num(prompt.temperature), maxTokens: num(prompt.max_tokens), reasoningEffort: str(prompt.reasoning_effort),
     language: str(agent.language), voiceId: str(tts.voice_id), ttsModel: str(tts.model_id), arabicVoiceId: str(ar.voice_id), arabicTtsModel: str(ar.model_id),
@@ -253,7 +287,32 @@ export function mapLiveAgent(raw: unknown): LiveAgent {
     summaryLanguage: "summary_language" in ps ? str(ps.summary_language) ?? "" : undefined,
     criteriaIds: Array.isArray(obj(ps.evaluation).criteria) ? arr(obj(ps.evaluation).criteria).map((c) => str(obj(c).id)).filter((x): x is string => !!x) : undefined,
     widget: Object.keys(obj(ps.widget)).length ? obj(ps.widget) : undefined,
+    serviceTier: "service_tier" in prompt ? str(prompt.service_tier) ?? "standard" : undefined,
+    audioTags: Array.isArray(tts.suggested_audio_tags)
+      ? arr(tts.suggested_audio_tags).map(obj).flatMap((t) => (str(t.tag) ? [{ tag: str(t.tag)!, description: str(t.description) ?? "" }] : []))
+      : undefined,
+    ...("audio_effects" in tts ? { effectFilter: str(fx.filter_preset_id) ?? "", effectEnvironment: str(fx.environment_id) ?? "", effectNoise: str(fx.background_noise_id) ?? "", effectDistance: num(fx.distance) ?? 0 } : {}),
+    ...("background_sound" in conv ? { backgroundSound: str(bg.source_id) ?? "", backgroundVolume: num(bg.volume) } : {}),
+    initialWaitSeconds: "initial_wait_time" in turn ? num(turn.initial_wait_time) ?? 0 : undefined,
+    ignoreTerms: strings(turn.interruption_ignore_terms),
+    ignoreDefaults: bool(turn.merge_with_default_ignore_terms),
+    turnModel: "turn_model" in turn ? str(turn.turn_model) ?? "" : undefined,
+    chatFiles: bool(files.enabled),
+    chatFilesMax: num(files.max_files_per_conversation),
+    queueEnabled: bool(queue.enabled),
+    queueWaitSeconds: num(queue.wait_timeout_seconds),
+    holdAudio: str(hold.original_filename) || str(hold.audio_url) ? { name: str(hold.original_filename) ?? "hold audio", url: safeUrl(hold.audio_url), seconds: num(hold.duration_secs) } : undefined,
+    tags: strings(a.tags),
   };
+}
+
+export function mapEffects(raw: unknown): EffectsCatalog {
+  const r = obj(raw);
+  const list = (v: unknown, idKey: string) => arr(v).map(obj).flatMap((x) => {
+    const id = str(x[idKey]);
+    return id ? [{ id, name: str(x.name) ?? id, description: str(x.description) }] : [];
+  });
+  return { filters: list(r.filter_presets, "filter_preset_id"), environments: list(r.environments, "environment_id"), noises: list(r.background_noises, "background_noise_id") };
 }
 
 /* ---------- the client ---------- */
@@ -312,6 +371,9 @@ export function createCatalogApi(apiKey: string, fetchImpl: FetchLike = fetch): 
     },
     async getAgent(agentId) {
       return mapLiveAgent(await get(`/v1/convai/agents/${encodeURIComponent(agentId)}`));
+    },
+    async audioEffects() {
+      return mapEffects(await get("/v1/audio-effects/catalog"));
     },
   };
 }

@@ -26,6 +26,10 @@ export const CHOICES = {
   widgetExpandable: ["never", "mobile", "desktop", "always"],
   widgetFeedback: ["none", "during", "end"],
   widgetColors: ["brand", "custom"],
+  serviceTier: ["standard", "fast"],
+  /** ElevenLabs' background sound presets ("" = silence). */
+  backgroundSound: ["", "office1", "office2", "restaurant", "city", "typing", "elevator1", "elevator2", "elevator3", "elevator4"],
+  turnModel: ["", "turn_v2", "turn_v3"],
 } as const;
 
 /** Numeric limits, from ElevenLabs' documentation. `[min, max]`; a value of `off` means the option is switched off. */
@@ -50,7 +54,22 @@ export const LIMITS = {
   greeting: 600,
   shortText: 120,
   widgetRadius: [0, 40],
+  audioTags: 20,
+  audioTagLength: 30,
+  audioTagNote: 120,
+  effectDistance: [0, 1],
+  backgroundVolume: [0.05, 1],
+  initialWaitSeconds: [1, 30], // 0 means the same as the reply wait
+  ignoreTerms: 40,
+  ignoreTermLength: 40,
+  chatFilesMax: [1, 20],
+  queueWaitSeconds: [10, 600],
+  tags: 10,
+  tagLength: 40,
 } as const;
+
+/** A voice style the expressive (v3) voices are told they may use, such as "warm" or "reassuring", and when. */
+export interface AudioTag { tag: string; description: string }
 
 export interface OfferedVoice {
   id: string;
@@ -97,6 +116,8 @@ export interface AgentStudio {
   backupMode: (typeof CHOICES.backupMode)[number];
   backupModels: string[];
   cascadeSeconds: number;
+  /** "fast" pays more per token for quicker answers, on the models that offer it. */
+  serviceTier: (typeof CHOICES.serviceTier)[number];
 
   /* voice */
   ttsModelEn: string;
@@ -110,6 +131,14 @@ export interface AgentStudio {
   offeredVoices: OfferedVoice[];
   /** Names and previews of the voices in use, so screens can show them without asking ElevenLabs each time. */
   voiceNotes: Record<string, VoiceNote>;
+  /** Styles suggested to the expressive v3 voices ("V3 styles"). Empty = the voice chooses on its own. */
+  audioTags: AudioTag[];
+  /** Audio effects on the assistant's voice, by ElevenLabs' catalogue id. "" = none. */
+  effectFilter: string;
+  effectEnvironment: string;
+  effectNoise: string;
+  /** 0 = close to the microphone (unchanged), 1 = far away. */
+  effectDistance: number;
 
   /* conversation */
   turnEagerness: (typeof CHOICES.turnEagerness)[number];
@@ -130,6 +159,20 @@ export interface AgentStudio {
   /** Blank = the automatic greeting built from the clinic's name. `{name}` is replaced by the clinic's display name. */
   greetingEn: string;
   greetingAr: string;
+  /** A sound looped quietly under the conversation ("" = none), and how loud. */
+  backgroundSound: (typeof CHOICES.backgroundSound)[number];
+  backgroundVolume: number;
+  /** Seconds to wait for the caller to speak first when there is no greeting. 0 = the same as the reply wait. */
+  initialWaitSeconds: number;
+  /** Short words ("okay", "تمام") that must not stop the assistant mid-sentence. */
+  ignoreTerms: string[];
+  /** Also use ElevenLabs' own list of such words for English and Arabic. */
+  ignoreDefaults: boolean;
+  /** "" = ElevenLabs' current turn detection model. */
+  turnModel: (typeof CHOICES.turnModel)[number];
+  /** Let website chat visitors attach photos, PDFs or text files (billed per file by ElevenLabs). */
+  chatFiles: boolean;
+  chatFilesMax: number;
 
   /* hearing */
   asrProvider: (typeof CHOICES.asrProvider)[number];
@@ -144,11 +187,16 @@ export interface AgentStudio {
   /** 0 = no limit (ElevenLabs' plan limit applies). */
   concurrencyLimit: number;
   bursting: boolean;
+  /** When every line is busy, callers wait in a queue (hearing hold audio) instead of being turned away. */
+  queueEnabled: boolean;
+  queueWaitSeconds: number;
 
   /* analysis */
   summaryLanguage: (typeof CHOICES.summaryLanguage)[number];
   /** Evaluation criteria (ids from lib/agent-extras.ts) ElevenLabs should not judge. */
   criteriaOff: string[];
+  /** Labels on the agent in ElevenLabs, to find and filter it there. "CallsDash" and the business type are always added. */
+  tags: string[];
 
   /* widget */
   widget: WidgetStudio;
@@ -165,15 +213,16 @@ export const WIDGET_DEFAULTS: WidgetStudio = {
 /** What a client has when the studio was never saved. The values that already existed before the studio match what the agent had. */
 export const STUDIO_DEFAULTS: AgentStudio = {
   touched: [],
-  llm: "", maxTokens: 0, reasoningEffort: "", parallelTools: true, backupMode: "default", backupModels: [], cascadeSeconds: 4,
+  llm: "", maxTokens: 0, reasoningEffort: "", parallelTools: true, backupMode: "default", backupModels: [], cascadeSeconds: 4, serviceTier: "standard",
   ttsModelEn: "eleven_flash_v2", ttsModelAr: "eleven_flash_v2_5", stability: 0.5, similarity: 0.8, speed: 1, textNormalisation: "system_prompt", expressive: false,
-  offeredVoices: [], voiceNotes: {},
+  offeredVoices: [], voiceNotes: {}, audioTags: [], effectFilter: "", effectEnvironment: "", effectNoise: "", effectDistance: 0,
   turnEagerness: "normal", turnTimeout: 7, silenceEndSeconds: 30, spellingPatience: "auto", speculativeTurn: false,
   maxDurationSeconds: 900, maxDurationMessage: "", protectGreeting: true, softTimeoutSeconds: 0,
   softTimeoutMessageEn: "One moment please.", softTimeoutMessageAr: "لحظة من فضلك.", greetingEn: "", greetingAr: "",
+  backgroundSound: "", backgroundVolume: 0.2, initialWaitSeconds: 0, ignoreTerms: [], ignoreDefaults: false, turnModel: "", chatFiles: false, chatFilesMax: 5,
   asrProvider: "scribe_realtime", extraKeywords: [],
-  guardFocus: true, guardInjection: true, recordVoice: true, dailyLimit: 500, concurrencyLimit: 0, bursting: true,
-  summaryLanguage: "", criteriaOff: [],
+  guardFocus: true, guardInjection: true, recordVoice: true, dailyLimit: 500, concurrencyLimit: 0, bursting: true, queueEnabled: true, queueWaitSeconds: 60,
+  summaryLanguage: "", criteriaOff: [], tags: [],
   widget: WIDGET_DEFAULTS,
 };
 
@@ -193,6 +242,16 @@ const number = (v: unknown, range: readonly [number, number], fallback: number, 
 };
 const hex = (v: unknown, fallback: string) => (typeof v === "string" && /^#[0-9a-f]{6}$/i.test(v) ? v.toLowerCase() : fallback);
 const list = (v: unknown, each: (x: unknown) => string, max: number) => [...new Set((Array.isArray(v) ? v : []).map(each).filter(Boolean))].slice(0, max);
+
+/** An id from ElevenLabs' audio-effects catalogue (phone, small_room, cafe). */
+export const validEffectId = (v: string) => /^[a-z0-9][a-z0-9_.-]{0,59}$/i.test(v);
+const effectId = (v: unknown) => (typeof v === "string" && validEffectId(v) ? v : "");
+
+function cleanTag(v: unknown): AudioTag | null {
+  if (!isObj(v)) return null;
+  const tag = text(v.tag, LIMITS.audioTagLength);
+  return tag ? { tag, description: text(v.description, LIMITS.audioTagNote) } : null;
+}
 
 /** Voice ids are letters and digits; our own labels (voice_en_f) also contain underscores. */
 export const validVoiceId = (v: string) => /^[A-Za-z0-9_-]{6,64}$/.test(v);
@@ -246,6 +305,7 @@ export function resolveStudio(raw: unknown): AgentStudio {
   const soft = number(s.softTimeoutSeconds, [0, LIMITS.softTimeoutSeconds[1]], d.softTimeoutSeconds, 0.5);
   const concurrency = number(s.concurrencyLimit, [0, LIMITS.concurrencyLimit[1]], d.concurrencyLimit);
   const maxTokens = number(s.maxTokens, [0, LIMITS.maxTokens[1]], d.maxTokens);
+  const initialWait = number(s.initialWaitSeconds, [0, LIMITS.initialWaitSeconds[1]], d.initialWaitSeconds, 0.5);
   return {
     touched: [...new Set((Array.isArray(s.touched) ? s.touched : []).filter((x): x is SectionId => SECTIONS.includes(x as SectionId)))],
     llm: typeof s.llm === "string" && validModelId(s.llm) ? s.llm : d.llm,
@@ -255,6 +315,7 @@ export function resolveStudio(raw: unknown): AgentStudio {
     backupMode: pick(s.backupMode, CHOICES.backupMode, d.backupMode),
     backupModels: list(s.backupModels, (x) => (typeof x === "string" && validModelId(x) ? x : ""), 5),
     cascadeSeconds: number(s.cascadeSeconds, LIMITS.cascadeSeconds, d.cascadeSeconds, 0.5),
+    serviceTier: pick(s.serviceTier, CHOICES.serviceTier, d.serviceTier),
     ttsModelEn: typeof s.ttsModelEn === "string" && validModelId(s.ttsModelEn) ? s.ttsModelEn : d.ttsModelEn,
     ttsModelAr: typeof s.ttsModelAr === "string" && validModelId(s.ttsModelAr) ? s.ttsModelAr : d.ttsModelAr,
     stability: number(s.stability, LIMITS.stability, d.stability, 0.05),
@@ -264,6 +325,9 @@ export function resolveStudio(raw: unknown): AgentStudio {
     expressive: flag(s.expressive, d.expressive),
     offeredVoices: dedupeVoices((Array.isArray(s.offeredVoices) ? s.offeredVoices : []).map(cleanVoice).filter((v): v is OfferedVoice => !!v)).slice(0, LIMITS.offeredVoices),
     voiceNotes: notes,
+    audioTags: dedupeTags((Array.isArray(s.audioTags) ? s.audioTags : []).map(cleanTag).filter((x): x is AudioTag => !!x)).slice(0, LIMITS.audioTags),
+    effectFilter: effectId(s.effectFilter), effectEnvironment: effectId(s.effectEnvironment), effectNoise: effectId(s.effectNoise),
+    effectDistance: number(s.effectDistance, LIMITS.effectDistance, d.effectDistance, 0.05),
     turnEagerness: pick(s.turnEagerness, CHOICES.turnEagerness, d.turnEagerness),
     turnTimeout: number(s.turnTimeout, LIMITS.turnTimeout, d.turnTimeout, 0.5),
     silenceEndSeconds: silence === 0 ? 0 : clamp(silence, LIMITS.silenceEndSeconds),
@@ -276,16 +340,32 @@ export function resolveStudio(raw: unknown): AgentStudio {
     softTimeoutMessageEn: text(s.softTimeoutMessageEn, LIMITS.shortText, d.softTimeoutMessageEn) || d.softTimeoutMessageEn,
     softTimeoutMessageAr: text(s.softTimeoutMessageAr, LIMITS.shortText, d.softTimeoutMessageAr) || d.softTimeoutMessageAr,
     greetingEn: long(s.greetingEn, LIMITS.greeting), greetingAr: long(s.greetingAr, LIMITS.greeting),
+    backgroundSound: pick(s.backgroundSound, CHOICES.backgroundSound, d.backgroundSound),
+    backgroundVolume: number(s.backgroundVolume, LIMITS.backgroundVolume, d.backgroundVolume, 0.05),
+    initialWaitSeconds: initialWait === 0 ? 0 : clamp(initialWait, LIMITS.initialWaitSeconds),
+    ignoreTerms: list(s.ignoreTerms, (x) => (typeof x === "string" ? text(x, LIMITS.ignoreTermLength) : ""), LIMITS.ignoreTerms),
+    ignoreDefaults: flag(s.ignoreDefaults, d.ignoreDefaults),
+    turnModel: pick(s.turnModel, CHOICES.turnModel, d.turnModel),
+    chatFiles: flag(s.chatFiles, d.chatFiles),
+    chatFilesMax: number(s.chatFilesMax, LIMITS.chatFilesMax, d.chatFilesMax),
     asrProvider: pick(s.asrProvider, CHOICES.asrProvider, d.asrProvider),
     extraKeywords: list(s.extraKeywords, (x) => (typeof x === "string" ? text(x, LIMITS.keywordLength) : ""), LIMITS.keywords[1]),
     guardFocus: flag(s.guardFocus, d.guardFocus), guardInjection: flag(s.guardInjection, d.guardInjection), recordVoice: flag(s.recordVoice, d.recordVoice),
     dailyLimit: number(s.dailyLimit, LIMITS.dailyLimit, d.dailyLimit),
     concurrencyLimit: concurrency === 0 ? 0 : clamp(concurrency, LIMITS.concurrencyLimit),
     bursting: flag(s.bursting, d.bursting),
+    queueEnabled: flag(s.queueEnabled, d.queueEnabled),
+    queueWaitSeconds: number(s.queueWaitSeconds, LIMITS.queueWaitSeconds, d.queueWaitSeconds, 5),
     summaryLanguage: pick(s.summaryLanguage, CHOICES.summaryLanguage, d.summaryLanguage),
     criteriaOff: list(s.criteriaOff, (x) => (typeof x === "string" && /^[a-z_]{3,40}$/.test(x) ? x : ""), 10),
+    tags: list(s.tags, (x) => (typeof x === "string" ? text(x, LIMITS.tagLength) : ""), LIMITS.tags),
     widget: cleanWidget(s.widget),
   };
+}
+
+function dedupeTags(v: AudioTag[]): AudioTag[] {
+  const seen = new Set<string>();
+  return v.filter((x) => (seen.has(x.tag.toLowerCase()) ? false : (seen.add(x.tag.toLowerCase()), true)));
 }
 
 function dedupeVoices(v: OfferedVoice[]): OfferedVoice[] {
@@ -358,6 +438,29 @@ export function parseWordList(raw: string, max: number, each: number): string[] 
 }
 
 /**
+ * The V3 styles box: one style per line, "tag: when to use it" (or "tag - when"), the explanation optional. Returns the styles and
+ * whether a line was too long to keep.
+ */
+export function parseAudioTags(raw: string): { tags: AudioTag[]; tooLong: boolean } {
+  let tooLong = false;
+  const tags: AudioTag[] = [];
+  for (const lineRaw of raw.replace(/\r\n/g, "\n").split("\n")) {
+    const line = lineRaw.trim();
+    if (!line) continue;
+    const m = line.match(/^\[?([^:\]\-–]+?)\]?\s*(?:[:\-–]\s*(.*))?$/);
+    const tag = (m?.[1] ?? line).replace(/\s+/g, " ").trim();
+    const description = (m?.[2] ?? "").replace(/\s+/g, " ").trim();
+    if (tag.length > LIMITS.audioTagLength || description.length > LIMITS.audioTagNote) { tooLong = true; continue; }
+    if (tag && !tags.some((t) => t.tag.toLowerCase() === tag.toLowerCase())) tags.push({ tag, description });
+  }
+  if (tags.length > LIMITS.audioTags) tooLong = true;
+  return { tags: tags.slice(0, LIMITS.audioTags), tooLong };
+}
+
+/** The V3 styles as the box shows them. */
+export const audioTagLines = (tags: AudioTag[]) => tags.map((t) => (t.description ? `${t.tag}: ${t.description}` : t.tag)).join("\n");
+
+/**
  * Reads one section's form. `current` is the client's saved settings, `known` what the page showed as selectable
  * (so a hand-edited form cannot choose a model or voice model that was never offered).
  */
@@ -366,6 +469,8 @@ export function parseSection(section: SectionId, f: FormData, current: AgentSett
   const d = studioOf(current);
   const out: ParsedSection = { studio: {}, top: {}, errors: r.errors };
   const s = out.studio;
+  // The options added in step 4 are read only from a form that shows them (the page sends `more`); an older form keeps them as saved.
+  const more = f.has("more");
   switch (section) {
     case "model": {
       const llm = val(f, "llm");
@@ -380,6 +485,7 @@ export function parseSection(section: SectionId, f: FormData, current: AgentSett
       s.backupModels = f.getAll("backupModels").map(String).filter((m) => validModelId(m) && (!known.backups || known.backups.includes(m))).slice(0, 5);
       if (s.backupMode === "custom" && !s.backupModels.length) r.bad("backupModels", "studio.err.backup");
       s.cascadeSeconds = r.num("cascadeSeconds", LIMITS.cascadeSeconds, d.cascadeSeconds, { step: 0.5 });
+      s.serviceTier = more ? r.choice("serviceTier", CHOICES.serviceTier, d.serviceTier) : d.serviceTier;
       break;
     }
     case "voice": {
@@ -405,6 +511,17 @@ export function parseSection(section: SectionId, f: FormData, current: AgentSett
       s.textNormalisation = r.choice("textNormalisation", CHOICES.textNormalisation, d.textNormalisation);
       s.expressive = r.on("expressive");
       s.offeredVoices = parseOffered(val(f, "offered"), r) ?? d.offeredVoices;
+      if (more) {
+        const parsed = parseAudioTags(String(f.get("audioTags") ?? ""));
+        if (parsed.tooLong) r.bad("audioTags", "studio.err.long");
+        s.audioTags = parsed.tags;
+        for (const k of ["effectFilter", "effectEnvironment", "effectNoise"] as const) {
+          const v = val(f, k);
+          if (v && !validEffectId(v)) r.bad(k, "studio.err.choice");
+          s[k] = v && validEffectId(v) ? v : "";
+        }
+        s.effectDistance = r.num("effectDistance", LIMITS.effectDistance, d.effectDistance, { step: 0.05 });
+      }
       break;
     }
     case "conversation": {
@@ -421,6 +538,19 @@ export function parseSection(section: SectionId, f: FormData, current: AgentSett
       s.softTimeoutMessageAr = r.str("softTimeoutMessageAr", LIMITS.shortText) || d.softTimeoutMessageAr;
       s.greetingEn = r.para("greetingEn", LIMITS.greeting);
       s.greetingAr = r.para("greetingAr", LIMITS.greeting);
+      if (!more) break;
+      s.backgroundSound = r.choice("backgroundSound", CHOICES.backgroundSound, d.backgroundSound);
+      s.backgroundVolume = r.num("backgroundVolume", LIMITS.backgroundVolume, d.backgroundVolume, { step: 0.05 });
+      s.initialWaitSeconds = r.num("initialWaitSeconds", LIMITS.initialWaitSeconds, d.initialWaitSeconds, { zero: true, step: 0.5 });
+      {
+        const raw = String(f.get("ignoreTerms") ?? "");
+        s.ignoreTerms = parseWordList(raw, LIMITS.ignoreTerms, LIMITS.ignoreTermLength);
+        if (raw.split(/[\n,;،؛]+/).some((w) => w.trim().length > LIMITS.ignoreTermLength)) r.bad("ignoreTerms", "studio.err.long");
+      }
+      s.ignoreDefaults = r.on("ignoreDefaults");
+      s.turnModel = r.choice("turnModel", CHOICES.turnModel, d.turnModel);
+      s.chatFiles = r.on("chatFiles");
+      s.chatFilesMax = r.num("chatFilesMax", LIMITS.chatFilesMax, d.chatFilesMax);
       break;
     }
     case "hearing": {
@@ -436,11 +566,20 @@ export function parseSection(section: SectionId, f: FormData, current: AgentSett
       s.dailyLimit = r.num("dailyLimit", LIMITS.dailyLimit, d.dailyLimit);
       s.concurrencyLimit = r.num("concurrencyLimit", LIMITS.concurrencyLimit, d.concurrencyLimit, { zero: true });
       s.bursting = r.on("bursting");
+      if (more) {
+        s.queueEnabled = r.on("queueEnabled");
+        s.queueWaitSeconds = r.num("queueWaitSeconds", LIMITS.queueWaitSeconds, d.queueWaitSeconds, { step: 5 });
+      }
       break;
     }
     case "analysis": {
       s.summaryLanguage = r.choice("summaryLanguage", CHOICES.summaryLanguage, d.summaryLanguage);
       s.criteriaOff = f.getAll("criteriaOff").map(String).filter((x) => /^[a-z_]{3,40}$/.test(x)).slice(0, 10);
+      if (more) {
+        const raw = String(f.get("tags") ?? "");
+        s.tags = parseWordList(raw, LIMITS.tags, LIMITS.tagLength);
+        if (raw.split(/[\n,;،؛]+/).some((w) => w.trim().length > LIMITS.tagLength)) r.bad("tags", "studio.err.long");
+      }
       break;
     }
     case "widget": {
@@ -492,12 +631,15 @@ export function resetSection(cur: AgentSettings, section: SectionId): AgentSetti
   const base = STUDIO_DEFAULTS;
   const reset: Partial<AgentStudio> = {};
   const keys: Record<SectionId, (keyof AgentStudio)[]> = {
-    model: ["llm", "maxTokens", "reasoningEffort", "parallelTools", "backupMode", "backupModels", "cascadeSeconds"],
-    voice: ["ttsModelEn", "ttsModelAr", "stability", "similarity", "speed", "textNormalisation", "expressive"],
-    conversation: ["turnEagerness", "turnTimeout", "silenceEndSeconds", "spellingPatience", "speculativeTurn", "maxDurationSeconds", "maxDurationMessage", "protectGreeting", "softTimeoutSeconds", "softTimeoutMessageEn", "softTimeoutMessageAr", "greetingEn", "greetingAr"],
+    model: ["llm", "maxTokens", "reasoningEffort", "parallelTools", "backupMode", "backupModels", "cascadeSeconds", "serviceTier"],
+    voice: ["ttsModelEn", "ttsModelAr", "stability", "similarity", "speed", "textNormalisation", "expressive", "audioTags", "effectFilter", "effectEnvironment", "effectNoise", "effectDistance"],
+    conversation: [
+      "turnEagerness", "turnTimeout", "silenceEndSeconds", "spellingPatience", "speculativeTurn", "maxDurationSeconds", "maxDurationMessage", "protectGreeting", "softTimeoutSeconds", "softTimeoutMessageEn", "softTimeoutMessageAr", "greetingEn", "greetingAr",
+      "backgroundSound", "backgroundVolume", "initialWaitSeconds", "ignoreTerms", "ignoreDefaults", "turnModel", "chatFiles", "chatFilesMax",
+    ],
     hearing: ["asrProvider", "extraKeywords"],
-    safety: ["guardFocus", "guardInjection", "recordVoice", "dailyLimit", "concurrencyLimit", "bursting"],
-    analysis: ["summaryLanguage", "criteriaOff"],
+    safety: ["guardFocus", "guardInjection", "recordVoice", "dailyLimit", "concurrencyLimit", "bursting", "queueEnabled", "queueWaitSeconds"],
+    analysis: ["summaryLanguage", "criteriaOff", "tags"],
     widget: ["widget"],
   };
   for (const k of keys[section]) (reset as Record<string, unknown>)[k] = structuredClone(base[k]);
@@ -514,14 +656,17 @@ export function describeStudioChange(before: AgentSettings, after: AgentSettings
   const note = (label: string, x: unknown, y: unknown) => { if (!same(x, y)) changed.push(label); };
   note(`model ${a.llm || "default"} → ${b.llm || "default"}`, a.llm, b.llm);
   note(`temperature ${before.temperature} → ${after.temperature}`, before.temperature, after.temperature);
-  for (const k of ["maxTokens", "reasoningEffort", "parallelTools", "backupMode", "backupModels", "cascadeSeconds"] as const) note(`model option ${k}`, a[k], b[k]);
+  for (const k of ["maxTokens", "reasoningEffort", "parallelTools", "backupMode", "backupModels", "cascadeSeconds", "serviceTier"] as const) note(`model option ${k}`, a[k], b[k]);
   note("voice (English)", before.voiceEn, after.voiceEn);
   note("voice (Arabic)", before.voiceAr, after.voiceAr);
-  for (const k of ["ttsModelEn", "ttsModelAr", "stability", "similarity", "speed", "textNormalisation", "expressive", "offeredVoices"] as const) note(`voice option ${k}`, a[k], b[k]);
-  for (const k of ["turnEagerness", "turnTimeout", "silenceEndSeconds", "spellingPatience", "speculativeTurn", "maxDurationSeconds", "maxDurationMessage", "protectGreeting", "softTimeoutSeconds", "softTimeoutMessageEn", "softTimeoutMessageAr", "greetingEn", "greetingAr"] as const) note(`conversation option ${k}`, a[k], b[k]);
+  for (const k of ["ttsModelEn", "ttsModelAr", "stability", "similarity", "speed", "textNormalisation", "expressive", "offeredVoices", "audioTags", "effectFilter", "effectEnvironment", "effectNoise", "effectDistance"] as const) note(`voice option ${k}`, a[k], b[k]);
+  for (const k of [
+    "turnEagerness", "turnTimeout", "silenceEndSeconds", "spellingPatience", "speculativeTurn", "maxDurationSeconds", "maxDurationMessage", "protectGreeting", "softTimeoutSeconds", "softTimeoutMessageEn", "softTimeoutMessageAr", "greetingEn", "greetingAr",
+    "backgroundSound", "backgroundVolume", "initialWaitSeconds", "ignoreTerms", "ignoreDefaults", "turnModel", "chatFiles", "chatFilesMax",
+  ] as const) note(`conversation option ${k}`, a[k], b[k]);
   for (const k of ["asrProvider", "extraKeywords"] as const) note(`hearing option ${k}`, a[k], b[k]);
-  for (const k of ["guardFocus", "guardInjection", "recordVoice", "dailyLimit", "concurrencyLimit", "bursting"] as const) note(`safety option ${k}`, a[k], b[k]);
-  for (const k of ["summaryLanguage", "criteriaOff"] as const) note(`analysis option ${k}`, a[k], b[k]);
+  for (const k of ["guardFocus", "guardInjection", "recordVoice", "dailyLimit", "concurrencyLimit", "bursting", "queueEnabled", "queueWaitSeconds"] as const) note(`safety option ${k}`, a[k], b[k]);
+  for (const k of ["summaryLanguage", "criteriaOff", "tags"] as const) note(`analysis option ${k}`, a[k], b[k]);
   note("widget look", a.widget, b.widget);
   return `Assistant studio: ${changed.length ? changed.join("; ") : "saved without changes"}`.slice(0, 480);
 }

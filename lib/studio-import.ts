@@ -10,6 +10,7 @@ import { greeting } from "./agent-config";
 import { defaultLlm } from "./agent-catalog";
 import { CHOICES, studioOf } from "./agent-studio";
 import { EVALUATION_CRITERIA, readableOn } from "./agent-extras";
+import { BUSINESS_TYPES } from "./business-types";
 import { explainCatalogError, type CatalogApi, type LiveAgent } from "./elevenlabs-catalog";
 import { normalizeText } from "./text-diff";
 import { diffValues, type FieldChange } from "./studio-profiles";
@@ -49,6 +50,7 @@ export function readLiveValues(i: ReadInput): Values {
     if (oneOf(mode, CHOICES.backupMode)) { set("backupMode", mode); if (mode === "custom") set("backupModels", live.backupOrder ?? []); }
   }
   set("cascadeSeconds", live.cascadeSeconds);
+  if (oneOf(live.serviceTier, CHOICES.serviceTier)) set("serviceTier", live.serviceTier);
 
   // a voice CallsDash names by its own label (voice_en_f) is the same voice when it resolves to the id ElevenLabs holds
   if (live.voiceId && live.voiceId !== resolveVoiceId(s.voiceEn, "en", i.voiceOverrides)) set("voiceEn", live.voiceId);
@@ -60,6 +62,11 @@ export function readLiveValues(i: ReadInput): Values {
   set("speed", live.speed);
   if (oneOf(live.textNormalisation, CHOICES.textNormalisation)) set("textNormalisation", live.textNormalisation);
   set("expressive", live.expressive);
+  set("audioTags", live.audioTags);
+  set("effectFilter", live.effectFilter);
+  set("effectEnvironment", live.effectEnvironment);
+  set("effectNoise", live.effectNoise);
+  set("effectDistance", live.effectDistance);
 
   if (oneOf(live.turnEagerness, CHOICES.turnEagerness)) set("turnEagerness", live.turnEagerness);
   set("turnTimeout", live.turnTimeout);
@@ -72,6 +79,13 @@ export function readLiveValues(i: ReadInput): Values {
   if (live.softTimeoutSeconds !== undefined) set("softTimeoutSeconds", live.softTimeoutSeconds > 0 ? live.softTimeoutSeconds : 0);
   set("softTimeoutMessageEn", live.softTimeoutMessage);
   set("softTimeoutMessageAr", live.arabicSoftTimeoutMessage);
+  if (live.backgroundSound !== undefined && oneOf(live.backgroundSound, CHOICES.backgroundSound)) { set("backgroundSound", live.backgroundSound); set("backgroundVolume", live.backgroundVolume); }
+  if (live.initialWaitSeconds !== undefined) set("initialWaitSeconds", live.initialWaitSeconds > 0 ? live.initialWaitSeconds : 0);
+  set("ignoreTerms", live.ignoreTerms);
+  set("ignoreDefaults", live.ignoreDefaults);
+  if (live.turnModel !== undefined && oneOf(live.turnModel, CHOICES.turnModel)) set("turnModel", live.turnModel);
+  set("chatFiles", live.chatFiles);
+  if (live.chatFilesMax !== undefined && live.chatFilesMax > 0) set("chatFilesMax", live.chatFilesMax);
 
   // a greeting that is the automatic one reads as "automatic" (blank); another text is a custom greeting, with the clinic's name as {name}
   const style = s.arabicWrittenStyle;
@@ -99,9 +113,13 @@ export function readLiveValues(i: ReadInput): Values {
   set("dailyLimit", live.dailyLimit);
   if (live.concurrencyLimit !== undefined) set("concurrencyLimit", live.concurrencyLimit > 0 ? live.concurrencyLimit : 0);
   set("bursting", live.bursting);
+  set("queueEnabled", live.queueEnabled);
+  set("queueWaitSeconds", live.queueWaitSeconds);
 
   if (live.summaryLanguage !== undefined) set("summaryLanguage", oneOf(live.summaryLanguage, CHOICES.summaryLanguage) ? live.summaryLanguage : "");
   if (live.criteriaIds) set("criteriaOff", EVALUATION_CRITERIA.map((c) => c.id).filter((id) => !live.criteriaIds!.includes(id)));
+  // CallsDash adds its own two labels (CallsDash, the business type) at every sync, so only the others are the studio's
+  if (live.tags) set("tags", live.tags.filter((x) => !["callsdash", ...BUSINESS_TYPES].includes(x.trim().toLowerCase())));
 
   Object.assign(out, readWidget(live.widget, tenant.branding.primaryColor));
   return out;

@@ -4,12 +4,12 @@ Admin, client, **Assistant studio** (`/admin/clients/<id>/assistant`). One card 
 
 | Section | What it sets |
 | --- | --- |
-| AI model | The language model (with what it costs us and what we keep), temperature, longest reply (0 = no limit, otherwise 300 to 4096), thinking level, parallel tools, backup models |
-| Voice | English and Arabic voice (search our ElevenLabs account or the public voice library, with sound samples), voice model per language, stability, similarity, speed, number reading, expressive mode, the voices the client may choose from |
-| Conversation | How quickly it answers, wait times, hang up after silence, longest call, "one moment" phrase, the greeting in each language |
+| AI model | The language model (with what it costs us and what we keep), temperature, longest reply (0 = no limit, otherwise 300 to 4096), thinking level, parallel tools, backup models, answer speed tier (Standard or Fast) |
+| Voice | English and Arabic voice (search our ElevenLabs account or the public voice library, with sound samples), voice model per language, stability, similarity, speed, number reading, expressive mode, the voices the client may choose from, V3 styles (suggested audio tags), audio effects on the voice (filter, room, noise, distance, from ElevenLabs' catalogue) |
+| Conversation | How quickly it answers, wait times, hang up after silence, longest call, "one moment" phrase, the greeting in each language, background sound and its volume, first wait when there is no greeting, words that must not interrupt (plus ElevenLabs' own English and Arabic list), turn detection model, file uploads in website chat |
 | Hearing | Speech recognition provider (Standard, or Scribe v2 Turbo), extra words to listen for (clinic and doctor names are added automatically) |
-| Safety, privacy and limits | Topic guard, prompt-injection guard, record audio, conversations per day, simultaneous calls, bursting |
-| Call analysis | Language of call summaries, which quality checks ElevenLabs runs |
+| Safety, privacy and limits | Topic guard, prompt-injection guard, record audio, conversations per day, simultaneous calls, bursting, waiting queue and its longest wait, hold audio (upload or remove an MP3/WAV) |
+| Call analysis | Language of call summaries, which quality checks ElevenLabs runs (in the client's own words; the medical-advice check only for clinics), labels on the agent in ElevenLabs (CallsDash and the business type are always added) |
 | Website widget | Brand or custom colours, size, position, texts, which controls visitors get, and the small "Powered by" line under the widget |
 
 Below the sections: **Live in ElevenLabs** (reads the assistant back from ElevenLabs and sets each value beside what CallsDash saved), **What ElevenLabs charges us** (the two fees every cost starts from) and **Try the assistant** (the same test panel as the client page).
@@ -60,9 +60,17 @@ Each finished conversation is recorded with the same sums (`lib/costing.ts`): th
 
 Rachel, the default behind the built-in voices, is on ElevenLabs' list of older voices and ElevenLabs may swap it for another voice from the end of 2026. The screen says so and suggests picking a voice of your own.
 
+## Recommended values
+
+Every section ends with **Recommended settings for this section**: each setting with the value CallsDash suggests for a receptionist and one line on what it does (the values of the built-in *Recommended* profile, `recommendedFor` in `lib/studio-profiles.ts`). It says how many settings differ; **Use recommended** (with a tick box) puts the section on those values and sends it to ElevenLabs like a save. The client's own voices, greetings, extra words, V3 styles, labels and widget texts and colours are never touched.
+
+## Added in step 4 (2026-10-31)
+
+Read from ElevenLabs' JavaScript SDK 2.75.0 (`conversation_config.agent.prompt.service_tier`, `tts.suggested_audio_tags`, `tts.audio_effects`, `conversation.background_sound`, `turn.initial_wait_time`, `turn.interruption_ignore_terms` with `interruption_ignore_term_languages` and `merge_with_default_ignore_terms`, `turn.turn_model`, `conversation.file_input`, `platform_settings.queueing_config`, top-level `tags`, `POST/DELETE /v1/convai/agents/{id}/hold-audio`, `GET /v1/audio-effects/catalog`). Each is sent in its own group (`tier`, `effects`, `sound`, `interrupt`, `files`, `queue`, `tags`), so a refusal is a warning naming the group and the rest still applies. Only `tags` is sent for every client; the others only once their section is saved. An older form without the hidden `more` field keeps the newer options as saved. Hold audio goes through `/api/hold-audio` (a plain form post, admins only, same-site), at most 4 MB because Vercel takes about 4.5 MB per request; larger clips can be uploaded inside ElevenLabs. None of this was tried against the real ElevenLabs from the build environment.
+
 ## Not in the studio
 
-ElevenLabs options that are undocumented or Enterprise only are left out on purpose: pronunciation dictionaries, audio effects and background sound, thinking budget, turn model, monitoring, redaction, zero retention. A phone number will also need the audio format `ulaw_8000` for the agent's output and input when it is connected (Twilio).
+Left out on purpose: pronunciation dictionaries, thinking budget, monitoring, PII redaction and zero retention (they would break recordings and the CPR lookups), ElevenLabs' own alerting (it needs a webhook, Slack or PagerDuty connection made inside ElevenLabs; CallsDash has its own alerts), per-channel text behaviour, keypad (DTMF) input until a phone number exists. A phone number will also need the audio format `ulaw_8000` for the agent's output and input when it is connected (Twilio).
 
 ## Tests
 
