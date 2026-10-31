@@ -1,5 +1,6 @@
 import type { Data } from "./data/demo";
 import { CustomerError, cleanPhone, phoneKey, saveCustomerByStaff } from "./customers";
+import { ID_CPR, type IdRule } from "./id-rule";
 import { ItemError, foldText, saveItemByStaff } from "./items";
 import { toCsv } from "./stats";
 import type { Customer, Doctor, Item, KnowledgeItem, Locale } from "./types";
@@ -159,7 +160,7 @@ export const customersTemplateRows = (): string[][] => [[...CUSTOMER_COLUMNS], [
 type CustomerDeps = Pick<Data, "getCustomer" | "findCustomer" | "putCustomer" | "deleteCustomer">;
 
 /** Adds the customers in a CSV; one whose phone number is already there is updated, and a blank cell keeps what is stored. */
-export async function importCustomers(d: CustomerDeps, tenantId: string, text: SheetInput, actor: string): Promise<ImportResult> {
+export async function importCustomers(d: CustomerDeps, tenantId: string, text: SheetInput, actor: string, rule: IdRule = ID_CPR): Promise<ImportResult> {
   const { headers, rows, tooMany } = readRecords(text);
   const res = empty();
   res.tooMany = tooMany;
@@ -175,7 +176,7 @@ export async function importCustomers(d: CustomerDeps, tenantId: string, text: S
       await saveCustomerByStaff(d, tenantId, {
         id: cur?.id, name: r.name || (cur?.name ?? ""), phone, cpr: r.cpr || (cur?.cpr ?? ""), email: r.email || (cur?.email ?? ""),
         language, notes: r.notes || (cur?.notes ?? ""),
-      }, actor);
+      }, actor, rule);
       if (cur) res.updated++; else res.added++;
     } catch (e) {
       if (!(e instanceof CustomerError)) throw e;

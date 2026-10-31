@@ -317,6 +317,9 @@ export async function adminBusinessAction(f: FormData) {
   if (!tenant) redirect("/admin");
   const business = businessFromForm((k) => str(f, k), (k) => f.has(k));
   const before = businessOf(tenant);
+  if (str(f, "idKind") === "custom" && !str(f, "idEn")) go(f, `/admin/clients/${id}/business`, "err=id_name", "#business");
+  // a form without the ID box (none today) keeps the rule the client has
+  if (!f.has("idShown") && before.id) business.id = before.id;
   // a role still given to someone cannot be removed: they would silently become another role
   if (business.roles) {
     const kept = new Set(business.roles.map((r) => r.key));

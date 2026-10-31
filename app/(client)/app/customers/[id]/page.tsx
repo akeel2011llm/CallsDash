@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { idRuleOf } from "@/lib/id-rule";
 import { notFound } from "next/navigation";
 import { requireClient } from "@/lib/auth";
 import { dictionaries, getT } from "@/lib/i18n";
@@ -26,7 +27,7 @@ export default async function CustomerPage({ params, searchParams }: { params: P
       <div className="grid two">
         <section className="card stack">
           <form action={saveCustomerAction} className="stack">
-            <CustomerFields t={t} c={c} />
+            <CustomerFields t={t} c={c} id={idRuleOf(tenant)} />
             <div><SubmitButton className="btn" type="submit">{t("customers.save")}</SubmitButton></div>
           </form>
           <small className="muted">{t("customers.since")} {fmtDateTime(c.createdAt, locale)}</small>

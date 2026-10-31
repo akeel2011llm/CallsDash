@@ -7,6 +7,7 @@
  * Pure module (no server code), so it can be tested and used by both server and browser components.
  */
 import type { Locale, Tenant } from "./types";
+import { ID_KINDS, type IdKind, type IdRule } from "./id-rule";
 
 export const BUSINESS_TYPES = ["clinic", "salon", "retail", "restaurant", "service", "custom"] as const;
 export type BusinessType = (typeof BUSINESS_TYPES)[number];
@@ -23,6 +24,8 @@ export interface BusinessProfile {
   words?: Partial<Record<WordKey, string>>;
   /** The kinds of people who take bookings (Doctor, Nurse, Stylist). Missing = one role named after the type. */
   roles?: Role[];
+  /** The ID number customers give (lib/id-rule.ts). Missing = the CPR number, as every client asked before the rule existed. */
+  id?: IdRule;
 }
 
 export const WORD_KEYS = [
@@ -215,7 +218,19 @@ export function businessFromForm(get: (k: string) => string, has: (k: string) =>
     staffScheduling: type === "clinic" ? true : has("schedulingShown") ? get("staffScheduling") === "on" : SCHEDULING_DEFAULT[type],
     ...(words && Object.keys(words).length ? { words } : {}),
     ...(roles && roles.length ? { roles } : {}),
+    ...(has("idShown") ? { id: idFromForm(get) } : {}),
   };
+}
+
+/** The ID rule inputs of the business form (idKind, idEn, idAr, idFormat, idLength). A custom ID needs an English name. */
+export function idFromForm(get: (k: string) => string): IdRule {
+  const kind = (ID_KINDS as readonly string[]).includes(get("idKind")) ? (get("idKind") as IdKind) : "cpr";
+  if (kind !== "custom") return { kind };
+  const t = (k: string) => get(k).replace(/\s+/g, " ").trim().slice(0, 40);
+  const n = Math.round(Number(get("idLength")));
+  const en = t("idEn");
+  if (!en) return { kind: "cpr" };
+  return { kind, en, ar: t("idAr") || en, format: get("idFormat") === "text" ? "text" : "digits", ...(n >= 4 && n <= 20 ? { length: n } : {}) };
 }
 
 /** A role key from its English name: lower case latin letters, digits and "_", unique among the client's roles. */

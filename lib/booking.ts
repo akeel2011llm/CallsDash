@@ -1,6 +1,7 @@
 import { LOCAL_OFFSET_MIN, computeSlots, describeSlot, isOpenAt, isSlotFree, nextOpening, type Busy } from "./availability";
 import { SlotTakenError } from "./errors";
-import { asciiDigits, normalizeCpr } from "./cpr";
+import { asciiDigits } from "./cpr";
+import { asksId, idRuleOf, idify, normalizeId, type IdRule } from "./id-rule";
 import type { Calendar, EventInput } from "./google-calendar";
 import type { Data } from "./data/demo";
 import type { Booking, BookingSource, BookingStatus, DateRange, Doctor, Locale, Tenant } from "./types";
@@ -29,6 +30,9 @@ const HORIZON_DAYS = 30;
 const live = (b: Booking) => b.status === "confirmed" || b.status === "rescheduled";
 const lastDigits = (p: string) => asciiDigits(p).replace(/\D/g, "").slice(-8);
 const ASK_CPR = "Ask for the patient's CPR number: the 9 digits on their Bahraini ID card. Read it back to confirm.";
+/** What the assistant is told when the ID number is missing or not valid, in the client's own ID (lib/id-rule.ts). */
+const askId = (r: IdRule) => idify(ASK_CPR, r);
+const ASK_PHONE = "Ask for the phone number the booking was made with, and pass it as patient_phone.";
 const DAY_MS = 86_400_000;
 /** A doctor with their own hours works those; otherwise the clinic's opening hours. */
 export const hoursFor = (tenant: Tenant, doctor: Doctor) => doctor.hours ?? tenant.openingHours;
@@ -211,9 +215,11 @@ export function createBookingService(data: Data, calendar: Calendar | null, nowF
       if (Number.isNaN(startMs)) throw new ToolError("bad_time", "The start time must be an ISO date-time.");
       if (!p.patientName.trim() || lastDigits(p.patientPhone).length < 8) throw new ToolError("missing_details", "Ask the patient for their name and a full phone number.");
       // The receptionist can book a patient who has no CPR number (a visitor); the AI always asks, so a number can be found again later.
-      const cprGiven = (p.patientCpr ?? "").trim();
-      const cpr = normalizeCpr(cprGiven);
-      if (!cpr && (cprGiven || (p.source ?? "ai") === "ai")) throw new ToolError("bad_cpr", cprGiven ? "The CPR number must be 9 digits, or left empty for a visitor." : ASK_CPR);
+      // A business that asks for no ID number books with the name and phone number alone.
+      const rule = idRuleOf(tenant);
+      const cprGiven = asksId(rule) ? (p.patientCpr ?? "").trim() : "";
+      const cpr = normalizeId(rule, cprGiven);
+      if (asksId(rule) && !cpr && (cprGiven || (p.source ?? "ai") === "ai")) throw new ToolError("bad_cpr", cprGiven ? idify("The CPR number must be 9 digits, or left empty for a visitor.", rule) : askId(rule));
       const free = isSlotFree({ openingHours: hoursFor(tenant, doctor), busy: await busyFor(tenant, doctor, startMs, startMs + SLOT_MIN * 60_000), startMs, durationMin: SLOT_MIN, nowMs: nowFn().getTime() });
       if (!free) throw new ToolError("slot_taken", "That time is no longer available. Offer other slots.");
       let booking: Booking;
@@ -245,10 +251,12 @@ export function createBookingService(data: Data, calendar: Calendar | null, nowF
      * found by the phone number they were made with, when the patient gives it too.
      */
     async findPatientBookings(tenantId: string, p: { patientCpr: string; patientPhone?: string; locale?: "en" | "ar" }) {
-      await context(tenantId);
-      const cpr = normalizeCpr(p.patientCpr);
-      if (!cpr) throw new ToolError("bad_cpr", ASK_CPR);
+      const { tenant } = await context(tenantId);
+      const rule = idRuleOf(tenant);
+      const cpr = normalizeId(rule, p.patientCpr);
       const phone = lastDigits(p.patientPhone ?? "");
+      if (asksId(rule) && !cpr) throw new ToolError("bad_cpr", askId(rule));
+      if (!asksId(rule) && phone.length < 8) throw new ToolError("missing_details", ASK_PHONE);
       const doctors = new Map((await data.getDoctors(tenantId)).map((d) => [d.id, d.name]));
       const now = nowFn().getTime();
       return {
@@ -379,9 +387,10 @@ export function createBookingService(data: Data, calendar: Calendar | null, nowF
         patch.patientPhone = p.patientPhone.trim().slice(0, 30);
       }
       // Left empty, the CPR stays as it is: a booking made before the CPR was asked can still be edited without one.
-      if (p.patientCpr?.trim()) {
-        const cpr = normalizeCpr(p.patientCpr);
-        if (!cpr) throw new ToolError("bad_cpr", "The CPR number must be 9 digits.");
+      const rule = idRuleOf(tenant);
+      if (p.patientCpr?.trim() && asksId(rule)) {
+        const cpr = normalizeId(rule, p.patientCpr);
+        if (!cpr) throw new ToolError("bad_cpr", idify("The CPR number must be 9 digits.", rule));
         patch.patientCpr = cpr;
       }
       if (p.service !== undefined) patch.service = p.service.trim().slice(0, 120) || "Consultation";
@@ -448,19 +457,27 @@ export function createBookingService(data: Data, calendar: Calendar | null, nowF
 
   /** A booking can only be changed by someone who knows the CPR number it was made with (or, before CPR was asked, its phone number). */
   async function owned(tenantId: string, bookingId: string, cprGiven: string, phone = "") {
-    const cpr = normalizeCpr(cprGiven);
-    if (!cpr) throw new ToolError("bad_cpr", ASK_CPR);
+    const { tenant } = await context(tenantId);
+    const rule = idRuleOf(tenant);
+    const cpr = normalizeId(rule, cprGiven);
+    if (asksId(rule) && !cpr) throw new ToolError("bad_cpr", askId(rule));
+    if (!asksId(rule) && lastDigits(phone).length < 8) throw new ToolError("missing_details", ASK_PHONE);
     const booking = (await data.getBookings(tenantId)).find((b) => b.id === bookingId);
     const doctor = booking && (await data.getDoctors(tenantId)).find((d) => d.id === booking.doctorId);
     if (!booking || !doctor || !live(booking) || !belongsTo(booking, cpr, lastDigits(phone)))
-      throw new ToolError("not_found", "No active booking matches that booking and CPR number. Call find_patient_booking with the patient's CPR number (and patient_phone for a booking made before CPR numbers were asked).");
+      throw new ToolError("not_found", asksId(rule)
+        ? idify("No active booking matches that booking and CPR number. Call find_patient_booking with the patient's CPR number (and patient_phone for a booking made before CPR numbers were asked).", rule)
+        : "No active booking matches that booking and phone number. Call find_patient_booking with the phone number the booking was made with.");
     return { booking, doctor };
   }
 }
 
-/** Whether a booking is the patient's: the same CPR number, or for a booking that has none, the same phone number. */
-function belongsTo(b: Booking, cpr: string, phoneDigits: string) {
-  if (b.patientCpr) return b.patientCpr === cpr;
+/**
+ * Whether a booking is the patient's: the same ID number, or for a booking that has none, the same phone number. With no ID
+ * number asked (`cpr` null: the business asks for none), the phone number decides for every booking.
+ */
+function belongsTo(b: Booking, cpr: string | null, phoneDigits: string) {
+  if (cpr && b.patientCpr) return b.patientCpr === cpr;
   return phoneDigits.length >= 8 && lastDigits(b.patientPhone) === phoneDigits;
 }
 

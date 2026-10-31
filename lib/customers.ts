@@ -1,5 +1,6 @@
 import type { Data } from "./data/demo";
-import { asciiDigits, normalizeCpr } from "./cpr";
+import { asciiDigits } from "./cpr";
+import { ID_CPR, asksId, idify, normalizeId, type IdRule } from "./id-rule";
 import type { Channel, Customer, Locale } from "./types";
 
 export type CustomerDeps = Pick<Data, "getCustomer" | "findCustomer" | "putCustomer" | "deleteCustomer">;
@@ -32,43 +33,50 @@ const emailOk = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
 /** What the assistant is told about a caller. A phone number alone is not proof of who is calling, so notes and history need the CPR on file. */
 export type LookupMode = "phone" | "cpr";
 
-/** How this clinic's assistant finds a returning customer. Phone number unless the clinic chose the CPR number. */
-export const lookupModeOf = (s: { customerLookup?: LookupMode } | undefined): LookupMode => (s?.customerLookup === "cpr" ? "cpr" : "phone");
+/**
+ * How this clinic's assistant finds a returning customer. Phone number unless the clinic chose the CPR number (or its own ID
+ * number, lib/id-rule.ts). A business that asks for no ID number always finds customers by phone number.
+ */
+export const lookupModeOf = (s: { customerLookup?: LookupMode } | undefined, rule: IdRule = ID_CPR): LookupMode =>
+  (s?.customerLookup === "cpr" && asksId(rule) ? "cpr" : "phone");
 
-export async function lookupCustomer(d: CustomerDeps, tenantId: string, input: { phone?: string; cpr?: string }, mode: LookupMode = "phone") {
-  if (mode === "cpr") return lookupByCpr(d, tenantId, input.cpr ?? "");
+/** `rule` is the client's ID number (lib/id-rule.ts); the CPR number unless the client chose another. */
+export async function lookupCustomer(d: CustomerDeps, tenantId: string, input: { phone?: string; cpr?: string }, mode: LookupMode = "phone", rule: IdRule = ID_CPR) {
+  if (mode === "cpr" && asksId(rule)) return lookupByCpr(d, tenantId, input.cpr ?? "", rule);
   const key = phoneKey(input.phone);
   if (!key) return { found: false, message: "That is not a full phone number. Ask the customer for it, or carry on without looking them up." };
   const c = await d.findCustomer(tenantId, { phoneKey: key });
   if (!c) return { found: false, message: "No customer with this number yet. Carry on, and when you have their name call save_customer." };
-  const given = normalizeCpr(input.cpr ?? "");
-  if (input.cpr && !given) return { found: true, verified: false, first_name: firstName(c.name), language: c.language, message: "The CPR number is not 9 digits. Read it back to the customer and ask again. Share nothing but the first name until it matches." };
-  if (given && c.cpr && given !== c.cpr) return { found: true, verified: false, cpr_mismatch: true, message: "The CPR number does not match this phone number. Do not share anything about this customer. Do not say which part did not match." };
+  // without an ID number nothing proves who is calling, so only the first name is ever shared
+  if (!asksId(rule)) return { found: true, verified: false, first_name: firstName(c.name), language: c.language, message: "A returning customer. Greet them by first name only; nothing else about them can be shared." };
+  const given = normalizeId(rule, input.cpr ?? "");
+  if (input.cpr && !given) return { found: true, verified: false, first_name: firstName(c.name), language: c.language, message: idify("The CPR number is not 9 digits. Read it back to the customer and ask again. Share nothing but the first name until it matches.", rule) };
+  if (given && c.cpr && given !== c.cpr) return { found: true, verified: false, cpr_mismatch: true, message: idify("The CPR number does not match this phone number. Do not share anything about this customer. Do not say which part did not match.", rule) };
   if (given && c.cpr && given === c.cpr) {
     return {
       found: true, verified: true, name: c.name, language: c.language, email: c.email, notes: c.notes || undefined,
       last_contact: c.lastContactAt, recent_conversations: c.history.slice(0, 3).map((h) => ({ at: h.at, channel: h.channel, summary: h.summary })),
-      message: "Verified by CPR number. You may use these details to help the customer.",
+      message: idify("Verified by CPR number. You may use these details to help the customer.", rule),
     };
   }
   return {
     found: true, verified: false, first_name: firstName(c.name), language: c.language,
     message: c.cpr
-      ? "A returning customer. Greet them by first name only. To go further (notes, past conversations), ask for their CPR number and call lookup_customer again with it."
-      : "A returning customer, but no CPR number is on file, so nothing more can be shared. Greet them by first name only. If they give their CPR number, pass it to save_customer so it can be checked next time.",
+      ? idify("A returning customer. Greet them by first name only. To go further (notes, past conversations), ask for their CPR number and call lookup_customer again with it.", rule)
+      : idify("A returning customer, but no CPR number is on file, so nothing more can be shared. Greet them by first name only. If they give their CPR number, pass it to save_customer so it can be checked next time.", rule),
   };
 }
 
 /** CPR mode: the CPR number is the key and the proof at once, so a match gives the customer's details. */
-async function lookupByCpr(d: CustomerDeps, tenantId: string, rawCpr: string) {
-  const cpr = normalizeCpr(rawCpr);
-  if (!cpr) return { found: false, message: "Ask the customer for their CPR number (9 digits, from the Bahraini ID card), read it back digit by digit, then call lookup_customer again with it as patient_cpr. Without a valid CPR number, carry on without looking them up." };
+async function lookupByCpr(d: CustomerDeps, tenantId: string, rawCpr: string, rule: IdRule) {
+  const cpr = normalizeId(rule, rawCpr);
+  if (!cpr) return { found: false, message: idify("Ask the customer for their CPR number (9 digits, from the Bahraini ID card), read it back digit by digit, then call lookup_customer again with it as patient_cpr. Without a valid CPR number, carry on without looking them up.", rule) };
   const c = await d.findCustomer(tenantId, { cpr });
-  if (!c) return { found: false, message: "No customer with this CPR number yet. Carry on, and when you have their name and phone number call save_customer." };
+  if (!c) return { found: false, message: idify("No customer with this CPR number yet. Carry on, and when you have their name and phone number call save_customer.", rule) };
   return {
     found: true, verified: true, name: c.name, language: c.language, email: c.email, notes: c.notes || undefined,
     last_contact: c.lastContactAt, recent_conversations: c.history.slice(0, 3).map((h) => ({ at: h.at, channel: h.channel, summary: h.summary })),
-    message: "Found by CPR number. You may use these details to help the customer. Never say the CPR number aloud.",
+    message: idify("Found by CPR number. You may use these details to help the customer. Never say the CPR number aloud.", rule),
   };
 }
 
@@ -83,8 +91,8 @@ export interface AssistantSave {
  * notes, no conversations): otherwise someone quoting another person's number could add their own CPR and then read that person's
  * notes. Staff add a CPR to any other record on the Customers screen.
  */
-export async function saveCustomerFromAssistant(d: CustomerDeps, tenantId: string, input: AssistantSave, mode: LookupMode = "phone"): Promise<{ customer: Customer; created: boolean; cprSaved: boolean }> {
-  const cpr = input.cpr ? normalizeCpr(input.cpr) : null;
+export async function saveCustomerFromAssistant(d: CustomerDeps, tenantId: string, input: AssistantSave, mode: LookupMode = "phone", rule: IdRule = ID_CPR): Promise<{ customer: Customer; created: boolean; cprSaved: boolean }> {
+  const cpr = input.cpr ? normalizeId(rule, input.cpr) : null;
   // CPR mode: the customer is the one with this CPR number, whatever phone they call from now
   const byCpr = mode === "cpr" && cpr ? await d.findCustomer(tenantId, { cpr }) : undefined;
   const phone = cleanPhone(input.phone) ?? (byCpr ? byCpr.phone : null);
@@ -150,12 +158,17 @@ export async function recordVisit(d: CustomerDeps, tenantId: string, v: { conver
 
 export interface StaffCustomerInput { id?: string; name: string; phone: string; cpr?: string; email?: string; language?: Locale; notes?: string }
 
-/** Add (no id) or edit a customer from the Customers screen. Phone numbers are unique per client. */
-export async function saveCustomerByStaff(d: CustomerDeps, tenantId: string, input: StaffCustomerInput, actor: string): Promise<Customer> {
+/**
+ * Add (no id) or edit a customer from the Customers screen. Phone numbers are unique per client. A business that asks for no
+ * ID number has no ID box, so an edit keeps any number saved before.
+ */
+export async function saveCustomerByStaff(d: CustomerDeps, tenantId: string, input: StaffCustomerInput, actor: string, rule: IdRule = ID_CPR): Promise<Customer> {
   const phone = cleanPhone(input.phone);
   if (!phone) throw new CustomerError("bad_phone");
-  const cprRaw = (input.cpr ?? "").trim();
-  const cpr = cprRaw ? normalizeCpr(cprRaw) : null;
+  const cprRaw = asksId(rule) ? (input.cpr ?? "").trim() : "";
+  const before = input.id ? (await d.getCustomer(tenantId, input.id))?.cpr : undefined;
+  // a number saved before the client changed its ID rule stays valid while nobody changes it
+  const cpr = cprRaw && cprRaw === before ? before : cprRaw ? normalizeId(rule, cprRaw) : null;
   if (cprRaw && !cpr) throw new CustomerError("bad_cpr");
   const email = (input.email ?? "").trim();
   if (email && !emailOk(email)) throw new CustomerError("bad_email");
@@ -166,7 +179,7 @@ export async function saveCustomerByStaff(d: CustomerDeps, tenantId: string, inp
     const cur = await d.getCustomer(tenantId, input.id);
     if (!cur) throw new CustomerError("unknown");
     return d.putCustomer(tenantId, {
-      ...cur, name: clip(input.name, 120), phone, cpr: cpr ?? undefined, email: email || undefined, language: input.language,
+      ...cur, name: clip(input.name, 120), phone, cpr: asksId(rule) ? cpr ?? undefined : cur.cpr, email: email || undefined, language: input.language,
       notes: clip(input.notes ?? "", MAX_NOTES), updatedAt: now,
     }, actor);
   }

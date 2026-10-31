@@ -2,6 +2,8 @@ import "server-only";
 import { cookies } from "next/headers";
 import type { Locale, Tenant } from "./types";
 import { VOCAB, relabel, vocabOf } from "./business-types";
+import { idRuleOf } from "./id-rule";
+import { idTexts } from "./id-texts";
 
 const en = {
   "nav.clients": "Clients",
@@ -1788,6 +1790,21 @@ const en = {
   "biz.preview": "This client's screens say: {staff}, {customers}, {place}.",
   "team.allRoles": "All roles",
   "team.role": "Role",
+  "biz.id": "ID number customers give",
+  "biz.id.help": "What customers give to book, and again to find, move or cancel a booking. The assistant asks for it and reads it back.",
+  "biz.id.kind": "Customers give",
+  "biz.id.kind.cpr": "CPR number (Bahraini ID card, 9 digits)",
+  "biz.id.kind.custom": "Another ID number (passport, membership, file number...)",
+  "biz.id.kind.none": "No ID number: the phone number finds a booking",
+  "biz.id.en": "Its name in English",
+  "biz.id.ar": "Its name in Arabic",
+  "biz.id.format": "It is made of",
+  "biz.id.format.digits": "Digits only",
+  "biz.id.format.text": "Letters and digits",
+  "biz.id.length": "Exact length (optional)",
+  "biz.id.length.help": "Fill in the length only when every number has the same length (4 to 20). Left empty, 4 to 20 characters are accepted.",
+  "biz.id.note": "Numbers already saved on bookings and customers stay as they are. With no ID number, anyone who knows the phone number a booking was made with can move or cancel it, and the assistant never shares a customer's notes.",
+  "biz.err.id_name": "Give the ID number a name in English, for example Passport number.",
   "biz.err.role_in_use": "{who} still has a role you removed. Give them another role on the People tab first.",
   "biz.roles.more": "Need more roles? Save, and new empty lines appear (up to 12).",
   "biz.role.remove": "Remove this role (only when nobody has it)",
@@ -3894,6 +3911,21 @@ const ar: Record<Key, string> = {
   "biz.preview": "شاشات هذا العميل تقول: {staff}، {customers}، {place}.",
   "team.allRoles": "كل الأدوار",
   "team.role": "الدور",
+  "biz.id": "رقم الهوية الذي يذكره العملاء",
+  "biz.id.help": "ما يذكره العميل ليحجز، ثم ليستعلم عن حجزه أو يغيّره أو يلغيه. يطلبه المساعد ويعيده للتأكد.",
+  "biz.id.kind": "يذكر العملاء",
+  "biz.id.kind.cpr": "الرقم الشخصي CPR (بطاقة الهوية البحرينية، 9 أرقام)",
+  "biz.id.kind.custom": "رقم هوية آخر (جواز سفر، عضوية، رقم ملف...)",
+  "biz.id.kind.none": "لا رقم هوية: رقم الهاتف يحدّد الحجز",
+  "biz.id.en": "اسمه بالإنجليزية",
+  "biz.id.ar": "اسمه بالعربية",
+  "biz.id.format": "يتكوّن من",
+  "biz.id.format.digits": "أرقام فقط",
+  "biz.id.format.text": "أحرف وأرقام",
+  "biz.id.length": "الطول المحدد (اختياري)",
+  "biz.id.length.help": "اكتبوا الطول فقط إذا كانت كل الأرقام بنفس الطول (من 4 إلى 20). إذا تُرك فارغاً يُقبل من 4 إلى 20 خانة.",
+  "biz.id.note": "الأرقام المحفوظة في الحجوزات والعملاء تبقى كما هي. من دون رقم هوية، يستطيع أي شخص يعرف رقم الهاتف الذي حُجز به أن يغيّر الحجز أو يلغيه، ولا يشارك المساعد ملاحظات العميل أبداً.",
+  "biz.err.id_name": "اكتبوا اسماً بالإنجليزية لرقم الهوية، مثلاً Passport number.",
   "biz.err.role_in_use": "لدى {who} دور قمت بحذفه. أعطه دوراً آخر من تبويب الأشخاص أولاً.",
   "biz.roles.more": "تحتاج أدواراً أكثر؟ احفظ وستظهر أسطر فارغة جديدة (حتى 12).",
   "biz.role.remove": "حذف هذا الدور (فقط إن لم يكن لدى أحد)",
@@ -4231,11 +4263,13 @@ export async function getT(tenant?: Pick<Tenant, "business"> | null) {
   const dir = (locale === "ar" ? "rtl" : "ltr") as "rtl" | "ltr";
   // a clinic with the clinic words (most clients) reads the texts as written; any own words or roles reword them
   const v = vocabOf(tenant, locale);
-  if (JSON.stringify(v) === JSON.stringify(VOCAB.clinic[locale])) return { locale, dir, t: (k: Key) => d[k] };
+  // a client that asks for another ID number than the CPR, or none, reads its own wording for those texts (lib/id-texts.ts)
+  const ids = idTexts(idRuleOf(tenant), locale) as Partial<Record<Key, string>>;
+  if (JSON.stringify(v) === JSON.stringify(VOCAB.clinic[locale]) && !Object.keys(ids).length) return { locale, dir, t: (k: Key) => d[k] };
   const seen = new Map<Key, string>();
   const t = (k: Key) => {
     let s = seen.get(k);
-    if (s === undefined) { s = relabel(d[k], locale, v); seen.set(k, s); }
+    if (s === undefined) { s = relabel(ids[k] ?? d[k], locale, v); seen.set(k, s); }
     return s;
   };
   return { locale, dir, t };

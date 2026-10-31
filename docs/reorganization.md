@@ -139,7 +139,19 @@ It also checks that every menu link points at a real page, and that every Englis
   never reworded. The client's own sections are untouched, except sections still exactly as created, which follow the
   words (`lib/business-words.ts`). Shared tool descriptions say team member and customer. Each client needs "Update the
   assistant" once (saving the Business tab does it when the assistant is connected).
-- Still clinic-only: the CPR rules (next step: the ID rule becomes a per-client setting), and booking words (appointment).
+- Still clinic-only: booking words (appointment).
+
+## Any business: the ID number customers give (step 2a)
+
+- `tenants.business.id` (lib/id-rule.ts): `cpr` (missing = this; every earlier client), `custom` (the admin names it in
+  English and Arabic, digits only or letters and digits, optional exact length 4 to 20) or `none` (no ID; the phone number
+  the booking was made with finds, moves and cancels it). Set in the "ID number customers give" box on the Business tab.
+- The value is stored where the CPR always was (`bookings.patient_cpr`, `customers.cpr`) and the tools keep `patient_cpr`.
+  Numbers saved under an earlier rule stay; a customer's saved number is accepted unchanged on edit.
+- Screens: `getT(tenant)` swaps the CPR texts for lib/id-texts.ts; with `none` the ID inputs and the customer lookup
+  choice are hidden. The assistant's booking and customer rules come from `bookingRules(rule)` and `customerRules(mode,
+  rule)`: CPR wording is unchanged, another ID is named by `idify()`, and `none` has its own phone-number rules. With
+  `none` a returning customer is greeted by first name only; notes are never shared. Agent version 13.
 
 ---
 

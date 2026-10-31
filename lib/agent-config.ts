@@ -3,6 +3,7 @@ import { acceptsTemperature, defaultLlm } from "./agent-catalog";
 import { STUDIO_DEFAULTS, studioOf } from "./agent-studio";
 import { resolveVoiceId } from "./voices";
 import { relabel, roleName, roleOf, rolesOf, vocabOf } from "./business-types";
+import { ID_CPR, asksId, idRuleOf, idify, type IdRule } from "./id-rule";
 import type { AgentSettings, Doctor, KnowledgeItem, Tenant } from "./types";
 
 const REPLY_LENGTH = {
@@ -36,18 +37,40 @@ const ARABIC_STYLE = {
  * 11: find_record searches the business's custom tables (stock, menu, price list) that the admin marked for the assistant.
  * 12: the built-in instructions use the client's own words and roles (a salon's stylists, a clinic's doctors and nurses), and the
  *     shared tools describe team members and customers instead of doctors and patients.
+ * 13: each client chooses the ID number customers give (the CPR number, another ID, or none: the phone number finds a booking),
+ *     and the shared tools describe patient_cpr as that ID.
  */
-export const AGENT_VERSION = 12;
+export const AGENT_VERSION = 13;
 
-/** How the assistant finds and saves returning customers, which depends on what the clinic chose on its Customers screen. */
-export function customerRules(mode: "phone" | "cpr"): string[] {
+/**
+ * How the assistant finds and saves returning customers, which depends on what the clinic chose on its Customers screen, and on
+ * the ID number it asks for (lib/id-rule.ts): written for the CPR number and reworded for another ID; with none, by phone only.
+ */
+export function customerRules(mode: "phone" | "cpr", rule: IdRule = ID_CPR): string[] {
   const keep = "Put only preferences and practical notes in note, never medical details. Never tell a customer what another customer's record holds.";
-  return mode === "cpr" ? [
+  if (!asksId(rule)) return [
+    "When the caller's phone number is known (a phone call or WhatsApp chat), call lookup_customer with it as patient_phone before you greet them. On the website, call it once the customer has given their number. If the customer is found, greet them by their first name. Share nothing else about them: this business asks for no ID number, so nobody can be checked.",
+    `Once you know a customer's name, or learn something worth remembering (their language, email, a preference), call save_customer with their phone number as patient_phone, their patient_name, the language and the conversation_id. ${keep}`,
+  ];
+  return (mode === "cpr" ? [
     "This clinic knows its customers by CPR number. When someone starts to need their own details (a booking, a change, or a returning customer), ask for their CPR number (9 digits), read it back digit by digit, and call lookup_customer with it as patient_cpr. If it returns found:true, greet them by name and use the details it returns. If not, carry on and learn their name.",
     `Once you know a customer's name and CPR number, or learn something worth remembering (their language, email, a preference), call save_customer with patient_cpr, patient_name, their phone number as patient_phone if you know it, the language and the conversation_id. ${keep}`,
   ] : [
     "When the caller's phone number is known (a phone call or WhatsApp chat), call lookup_customer with it as patient_phone before you greet them. On the website, call it once the customer has given their number. If the customer is found, greet them by their first name. Share nothing else about them unless lookup_customer returns verified:true; it only does so when you also pass their CPR number as patient_cpr, which you ask for only when they need their own notes or earlier conversations.",
     `Once you know a customer's name, or learn something worth remembering (their language, email, a preference), call save_customer with their phone number as patient_phone, their patient_name, the language and the conversation_id. ${keep}`,
+  ]).map((r) => idify(r, rule));
+}
+
+/** The booking rules for the client's ID number: as written for the CPR number, reworded for another ID, or by phone number with none. */
+export function bookingRules(rule: IdRule = ID_CPR): string[] {
+  if (asksId(rule)) return BOOKING_RULES.map((r) => idify(r, rule));
+  return [
+    BOOKING_RULES[0],
+    "To book, ask for the patient's full name and phone number, then confirm doctor, time, name and phone with the patient before calling book_appointment. This business asks for no ID number: pass patient_cpr as an empty string.",
+    BOOKING_RULES[2], BOOKING_RULES[3],
+    "When someone asks about their booking, or wants to move or cancel it, first ask for the phone number the booking was made with and call find_patient_booking with it as patient_phone (patient_cpr empty). Only talk about the bookings it returns. Use their booking_id and the same patient_phone for cancel_appointment or reschedule_appointment, and confirm the change with the patient before calling the tool.",
+    BOOKING_RULES[5],
+    "Never read out a phone number except to confirm the one the patient just gave.",
   ];
 }
 
@@ -105,6 +128,7 @@ function doctorSection(doctors: DoctorLine[], tenant?: Pick<Tenant, "business"> 
  */
 export function buildPrompt(settings: AgentSettings, doctors: DoctorLine[] = [], tenant?: Pick<Tenant, "business"> | null): string {
   const p = settings.prompt;
+  const id = idRuleOf(tenant);
   // `quoted` words are values the tools return (kind `doctor`) and stay as they are
   const ours = (text: string) => (tenant ? text.split(/(`[^`]*`)/g).map((x) => (x.startsWith("`") ? x : relabel(x, "en", vocabOf(tenant, "en")))).join("") : text);
   return [
@@ -117,7 +141,7 @@ export function buildPrompt(settings: AgentSettings, doctors: DoctorLine[] = [],
     `# Style\n${REPLY_LENGTH[settings.replyLength]} ${FORMALITY[settings.formality]} Answer only from the knowledge base and the facts below; if you do not know, say so and offer to take a message.`,
     ours(`# Facts for this conversation\nToday is {{today}}. The clinic is open now: {{open_now}}. Opening hours today: {{hours_today}}. If closed, it next opens {{next_opening}}. Channel: {{channel}}. Typed chat: {{system__is_text_only}}. The caller's phone number, if known: {{caller_phone}} (ask them to confirm it before booking).`),
     doctorSection(doctors, tenant, ours),
-    ours(`# Tools\n${[...BOOKING_RULES, ...customerRules(settings.customerLookup === "cpr" ? "cpr" : "phone"), ...CATALOGUE_RULES, ...CLOSING_RULES].map((r) => `- ${r}`).join("\n")}`),
+    ours(`# Tools\n${[...bookingRules(id), ...customerRules(settings.customerLookup === "cpr" ? "cpr" : "phone", id), ...CATALOGUE_RULES, ...CLOSING_RULES].map((r) => `- ${r}`).join("\n")}`),
   ].filter(Boolean).join("\n\n");
 }
 
@@ -237,7 +261,7 @@ type Prop = { type: "string" | "boolean" | "integer"; description?: string; dyna
 const str = (description: string): Prop => ({ type: "string", description });
 const agentId: Prop = { type: "string", dynamic_variable: "system__agent_id" };
 const conversationId: Prop = { type: "string", dynamic_variable: "system__conversation_id" };
-const CPR_HELP = "The customer's CPR number: the 9 digits on the Bahraini ID card, digits only.";
+const CPR_HELP = "The customer's ID number, the one your instructions name (for example the CPR number), exactly as they gave it. If your instructions say the business asks for no ID number, pass an empty string.";
 
 /** The booking, customer, catalogue and hand-over tools (docs/agent-tools.md), as ElevenLabs webhook tool configs. One shared set serves every client; `agent_id` tells them apart. */
 export function toolDefinitions(appUrl: string, secret: string): Record<string, Record<string, unknown>> {
@@ -259,8 +283,8 @@ export function toolDefinitions(appUrl: string, secret: string): Record<string, 
       patient_name: str("The customer's full name."), patient_phone: str("The customer's phone number."), patient_cpr: str(CPR_HELP),
       service: str("What the booking is for."), language: str("en or ar, the language the customer is speaking or writing. Their WhatsApp confirmation is sent in it."), conversation_id: conversationId,
     }, ["doctor_id", "starts_at", "patient_name", "patient_phone", "patient_cpr"]),
-    find_patient_booking: tool("find_patient_booking", "Find a customer's upcoming bookings by their CPR number.", {
-      patient_cpr: str(CPR_HELP), patient_phone: str("Only for a booking made before CPR numbers were asked: the phone number it was made with."),
+    find_patient_booking: tool("find_patient_booking", "Find a customer's upcoming bookings by their ID number, or by phone number when your instructions say so.", {
+      patient_cpr: str(CPR_HELP), patient_phone: str("The phone number the booking was made with, when your instructions say to pass it (a booking made before ID numbers were asked, or a business that asks for none)."),
       language: str("en or ar, the language the time labels should be in."),
     }, ["patient_cpr"]),
     cancel_appointment: tool("cancel_appointment", "Cancel a booking found with find_patient_booking.", {
@@ -271,12 +295,12 @@ export function toolDefinitions(appUrl: string, secret: string): Record<string, 
       doctor_id: str("Only when the customer wants another team member: the doctor_id of the chosen slot."), patient_phone: str("Only if find_patient_booking needed the phone number too."),
       language: str("en or ar, the language the customer is speaking or writing. Their WhatsApp confirmation is sent in it."),
     }, ["booking_id", "patient_cpr", "new_starts_at"]),
-    lookup_customer: tool("lookup_customer", "Look up a returning customer the way your instructions say: by phone number, or by CPR number.", {
+    lookup_customer: tool("lookup_customer", "Look up a returning customer the way your instructions say: by phone number, or by ID number.", {
       patient_phone: str("The customer's phone number. Pass it when the instructions say customers are found by phone number."),
-      patient_cpr: str("The customer's CPR number, 9 digits. Pass it when the instructions say customers are found by CPR number; otherwise only when the customer gave it, to unlock their notes and recent conversations."),
+      patient_cpr: str("The customer's ID number (the one your instructions name). Pass it when the instructions say customers are found by it; otherwise only when the customer gave it, to unlock their notes and recent conversations."),
     }, []),
     save_customer: tool("save_customer", "Save or update a customer's details (name, language, email, a short note), so they are known next time.", {
-      patient_phone: str("The customer's phone number."), patient_name: str("The customer's name."), patient_cpr: str("Their CPR number if they gave it, 9 digits. Never guess it."),
+      patient_phone: str("The customer's phone number."), patient_name: str("The customer's name."), patient_cpr: str("Their ID number (the one your instructions name) if they gave it. Never guess it."),
       email: str("Their email address, if they gave one."), note: str("A short practical note to remember (a preference). No medical details."),
       language: str("en or ar, the language the customer speaks or writes."), conversation_id: conversationId,
     }, []),

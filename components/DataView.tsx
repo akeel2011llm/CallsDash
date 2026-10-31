@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { idRuleOf } from "@/lib/id-rule";
 import { dictionaries, type Key } from "@/lib/i18n";
 import { fill, fmtDate } from "@/lib/format";
 import { foldText } from "@/lib/items";
@@ -220,7 +221,7 @@ export async function DataView({ tenant, scope, sp, t, locale, base }: {
           <summary><strong>{t("data.cust.add")}</strong></summary>
           <form action={dataRowAction} className="stack" style={{ marginBlockStart: ".75rem" }}>
             {hidden}<input type="hidden" name="kind" value="customers" />
-            <CustomerFields t={t as unknown as (k: never) => string} />
+            <CustomerFields t={t as unknown as (k: never) => string} id={idRuleOf(tenant)} />
             <div><SubmitButton className="btn" type="submit">{t("data.rows.add")}</SubmitButton></div>
           </form>
         </details>
@@ -230,7 +231,7 @@ export async function DataView({ tenant, scope, sp, t, locale, base }: {
             <SelectAll form="bulk-customers" label={t("data.rows.selectAll")} />
             {custRows.slice(0, SHOWN).map((c: Customer) => rowShell("customers", c.id, (
               <span><strong dir="auto">{c.name || "-"}</strong> <small className="muted" dir="ltr">{c.phone}</small>{c.lastContactAt && <small className="muted"> · {fmtDate(c.lastContactAt, locale)}</small>}</span>
-            ), <CustomerFields t={t as unknown as (k: never) => string} c={c} />, false))}
+            ), <CustomerFields t={t as unknown as (k: never) => string} c={c} id={idRuleOf(tenant)} />, false))}
           </>
         )}
         {listFoot(Math.min(SHOWN, custRows.length), custRows.length)}

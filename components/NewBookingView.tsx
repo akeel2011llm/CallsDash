@@ -9,6 +9,7 @@ import { Notice, PageHead } from "@/components/ui";
 import { SubmitButton } from "@/components/SubmitButton";
 import { confirmationOptions } from "@/lib/whatsapp";
 import type { BookingScope } from "@/components/BookingList";
+import { asksId, idInputProps, idRuleOf } from "@/lib/id-rule";
 
 export type NewBookingParams = { doctor?: string; date?: string; err?: string; name?: string; phone?: string; service?: string };
 
@@ -19,6 +20,7 @@ export async function NewBookingView({ base, tenant, doctorId, sp }: BookingScop
   const date = /^\d{4}-\d{2}-\d{2}$/.test(sp.date ?? "") ? sp.date! : todayKey();
   const picked = doctor ? await daySlots(await bookingService(), tenant.id, doctor.id, date) : null;
   const wa = confirmationOptions(tenant);
+  const id = idRuleOf(tenant);
   return (
     <>
       <PageHead title={t("bookings.new")} actions={<Link className="btn ghost" href={`${base}/bookings`}>{t("common.back")}</Link>} />
@@ -49,8 +51,10 @@ export async function NewBookingView({ base, tenant, doctorId, sp }: BookingScop
             </label>
             <label>{t("bookings.patientName")}<input name="patientName" required maxLength={120} defaultValue={sp.name ?? ""} /></label>
             <label>{t("bookings.patientPhone")}<input name="patientPhone" required maxLength={30} inputMode="tel" dir="ltr" placeholder="+973 3xxx xxxx" defaultValue={sp.phone ?? ""} /></label>
-            <label>{t("bookings.patientCpr")}<input name="patientCpr" maxLength={12} inputMode="numeric" autoComplete="off" dir="ltr" placeholder="850123456" /></label>
-            <small className="muted">{t("bookings.cprHelp")}</small>
+            {asksId(id) && <>
+              <label>{t("bookings.patientCpr")}<input name="patientCpr" {...idInputProps(id)} /></label>
+              <small className="muted">{t("bookings.cprHelp")}</small>
+            </>}
             <label>{t("common.service")}<input name="service" maxLength={120} placeholder={t("bookings.servicePlaceholder")} defaultValue={sp.service ?? ""} /></label>
             <label>{t("bookings.notes")}<textarea name="notes" rows={3} maxLength={1000} /></label>
             <small className="muted">{t("bookings.remindersNote")}</small>
