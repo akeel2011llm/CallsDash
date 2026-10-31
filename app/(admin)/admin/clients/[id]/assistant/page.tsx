@@ -4,8 +4,8 @@ import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/auth";
 import { dictionaries, getT } from "@/lib/i18n";
 import { fmtDateTime } from "@/lib/format";
-import { getAgent, getConversations, getDoctors, getSetting, getTenant } from "@/lib/data";
-import { RECORDING_NOTICE, greeting, mentionsRecording } from "@/lib/agent-config";
+import { getAgent, getConversations, getDoctors, getKnowledge, getSetting, getTenant } from "@/lib/data";
+import { RECORDING_NOTICE, greeting, knowledgeText, mentionsRecording } from "@/lib/agent-config";
 import { agentTags, criteriaFor } from "@/lib/agent-extras";
 import { PROVIDER_LABEL, defaultLlm, rowFor } from "@/lib/agent-catalog";
 import { CHOICES, LIMITS, audioTagLines, studioOf, type SectionId, type VoiceNote } from "@/lib/agent-studio";
@@ -39,9 +39,11 @@ type Query = {
 };
 
 const HOLD_OK = ["uploaded", "removed"];
+/** Above this much knowledge, searching it (RAG) is suggested instead of giving the assistant all of it on every turn. */
+const RAG_ADVICE_CHARS = 30_000;
 const HOLD_ERR = ["missing", "too_big", "not_audio", "no_agent", "no_key", "refused", "confirm"];
 
-const SECTION_ORDER: SectionId[] = ["model", "voice", "conversation", "hearing", "safety", "analysis", "widget"];
+const SECTION_ORDER: SectionId[] = ["model", "voice", "conversation", "hearing", "knowledge", "safety", "analysis", "widget"];
 const FIELD = /^[\w.]{1,40}$/;
 const KEY = /^studio\.err\.\w{1,30}$/;
 const CODE = /^[a-z_]{3,30}$/;
@@ -91,7 +93,8 @@ export default async function AssistantStudioPage({ params, searchParams }: { pa
   /** The texts a client component needs, picked by prefix so a page does not ship the whole dictionary. */
   const labelsFor = (...prefixes: string[]) => Object.fromEntries(Object.entries(dict).filter(([k]) => prefixes.some((p) => k.startsWith(p))));
 
-  const [agent, doctors, conversations, fees, effects] = await Promise.all([getAgent(id), getDoctors(id), getConversations(id), loadFees(), loadEffects()]);
+  const [agent, doctors, conversations, fees, effects, knowledge] = await Promise.all([getAgent(id), getDoctors(id), getConversations(id), loadFees(), loadEffects(), getKnowledge(id)]);
+  const knowledgeChars = knowledgeText(knowledge).length;
   const st = studioOf(agent);
   // ElevenLabs' reason for the last refusal is read from here, never from the address, so a link cannot put its own words on this screen
   const failed = sp.fail && SECTION_ORDER.includes(sp.section as SectionId)
@@ -333,6 +336,13 @@ export default async function AssistantStudioPage({ params, searchParams }: { pa
         </div>
         <Link className="btn" href={`/admin/clients/${id}/assistant/profiles`}>{T("prof.card.button")}</Link>
       </section>
+      <section className="card row" style={{ justifyContent: "space-between" }}>
+        <div>
+          <strong>{T("proc.card.title")}</strong>
+          <p className="muted" style={{ margin: 0 }}>{T("proc.card.help")}</p>
+        </div>
+        <Link className="btn" href={`/admin/clients/${id}/assistant/procedures`}>{T("proc.card.button")}</Link>
+      </section>
 
       <FoldControls openAll={T("fold.openAll")} closeAll={T("fold.closeAll")} />
 
@@ -437,6 +447,20 @@ export default async function AssistantStudioPage({ params, searchParams }: { pa
               <small className="muted">{T("studio.keywords.autoHelp")}</small>
             </div>
             {area("extraKeywords", st.extraKeywords.join("\n"), { max: 1200, rows: 5 })}
+          </div>
+        ))}
+
+        {section("knowledge", (
+          <div className="stack">
+            <Notice tone={knowledgeChars > RAG_ADVICE_CHARS ? "warn" : "ok"}>
+              {T("studio.rag.size", { n: knowledge.length, chars: knowledgeChars.toLocaleString("en") })} {T(knowledgeChars > RAG_ADVICE_CHARS ? "studio.rag.adviceOn" : "studio.rag.adviceOff")}
+            </Notice>
+            {check("ragEnabled", st.ragEnabled)}
+            <div className="grid two">
+              {select("ragEmbedding", st.ragEmbedding, CHOICES.ragEmbedding)}
+              {num("ragMaxLength", st.ragMaxLength, { min: LIMITS.ragMaxLength[0], max: LIMITS.ragMaxLength[1], step: 500 })}
+              {num("ragMaxChunks", st.ragMaxChunks, { min: LIMITS.ragMaxChunks[0], max: LIMITS.ragMaxChunks[1] })}
+            </div>
           </div>
         ))}
 

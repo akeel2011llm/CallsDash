@@ -74,6 +74,7 @@ export function liveRows(i: {
   add("maxDurationSeconds", "conversation", st.maxDurationSeconds, orNull(live.maxDurationSeconds), true, { unit: "s" });
   add("backgroundSound", "conversation", st.backgroundSound || null, live.backgroundSound || null, saved("conversation"), { none: "default" });
   add("asrProvider", "hearing", st.asrProvider, orNull(live.asrProvider), saved("hearing"), { none: "default" });
+  add("ragEnabled", "knowledge", st.ragEnabled, live.ragEnabled ?? false, saved("knowledge"));
   add("dailyLimit", "safety", st.dailyLimit, orNull(live.dailyLimit), true);
   add("recordVoice", "safety", st.recordVoice, orNull(live.recordVoice), true);
   add("retentionDays", "safety", Math.max(1, Math.round(i.tenant.retentionDays || 90)), orNull(live.retentionDays), true);

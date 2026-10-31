@@ -12,6 +12,7 @@ export const GUIDES = {
   catalogue: "catalogue.guide.title",
   waPhotos: "channels.wa.photo.guide.title",
   studioProfiles: "prof.guide.title",
+  procedures: "proc.guide.title",
   data: "data.guide.title",
   tables: "tables.guide.title",
 } as const satisfies Record<string, Key>;
