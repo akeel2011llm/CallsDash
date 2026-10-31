@@ -319,22 +319,22 @@ export async function adminSavePackageAction(f: FormData) {
     includedCredits: Number(str(f, "includedCredits")), monthlyPriceBhd: Number(str(f, "monthlyPriceBhd")),
     pricePerCreditBhd: Number(str(f, "pricePerCreditBhd")), rolloverCap: Number(str(f, "rolloverPercent") || 0) / 100,
   });
-  if (!input) redirect("/admin/packages?error=invalid");
+  if (!input) redirect("/admin/billing/packages?error=invalid");
   try {
     await store.savePackage({ ...input, id: pid || undefined }, actor);
   } catch (e) {
-    if (e instanceof DuplicateError) redirect("/admin/packages?error=name");
+    if (e instanceof DuplicateError) redirect("/admin/billing/packages?error=name");
     throw e;
   }
   revalidatePath("/admin", "layout");
-  redirect("/admin/packages?saved=1");
+  redirect("/admin/billing/packages?saved=1");
 }
 
 export async function adminArchivePackageAction(f: FormData) {
   const { actor } = await requireAdmin();
   await store.archivePackage(str(f, "id"), str(f, "archived") === "1", actor);
   revalidatePath("/admin", "layout");
-  redirect("/admin/packages?saved=1");
+  redirect("/admin/billing/packages?saved=1");
 }
 
 export async function adminPermissionsAction(f: FormData) {

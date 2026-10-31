@@ -7,6 +7,10 @@ const nextConfig: NextConfig = {
     return [
       { source: "/admin/clients/:id/branding", destination: "/admin/clients/:id/business/branding", permanent: false },
       { source: "/admin/clients/:id/duplicate", destination: "/admin/clients/:id/activity/duplicate", permanent: false },
+      { source: "/admin/packages", destination: "/admin/billing/packages", permanent: false },
+      { source: "/admin/usage", destination: "/admin/billing/usage", permanent: false },
+      // the Billing menu item opens its first tab (the page file stays as a fallback)
+      { source: "/admin/billing", destination: "/admin/billing/packages", permanent: false },
     ];
   },
   // The widget script is embedded on clinic websites, so it must be cacheable but never stale for long.

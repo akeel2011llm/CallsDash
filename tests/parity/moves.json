@@ -2,7 +2,9 @@
   "_help": "When a reorganisation moves or retires something on purpose, write it here. routes: old URL -> new URL (also add a redirect in next.config.ts). actions / fields: retired key -> where it went or why it is safe.",
   "routes": {
     "/admin/clients/[id]/branding": "/admin/clients/[id]/business/branding",
-    "/admin/clients/[id]/duplicate": "/admin/clients/[id]/activity/duplicate"
+    "/admin/clients/[id]/duplicate": "/admin/clients/[id]/activity/duplicate",
+    "/admin/packages": "/admin/billing/packages",
+    "/admin/usage": "/admin/billing/usage"
   },
   "actions": {},
   "fields": {
@@ -11,6 +13,7 @@
     "adminBrandingAction:supportWhatsapp": "Same value now edited in one place: Business > Website and contact details (setupDetailsAction:supportWhatsapp). adminBrandingAction keeps the stored value when the field is not sent.",
     "adminTenantSettingsAction:displayName": "Same value already edited in the branding studio (adminBrandingAction:displayName); the duplicate on the Business tab was removed.",
     "adminTenantSettingsAction:displayNameAr": "Same value already edited in the branding studio (adminBrandingAction:displayNameAr); the duplicate on the Business tab was removed.",
-    "adminTenantSettingsAction:primaryColor": "Same value already edited in the branding studio (adminBrandingAction:primaryColor); the duplicate on the Business tab was removed."
+    "adminTenantSettingsAction:primaryColor": "Same value already edited in the branding studio (adminBrandingAction:primaryColor); the duplicate on the Business tab was removed.",
+    "saveFeesAction:tenantId": "The ElevenLabs fees are the same for every client: the form moved from the assistant studio to Platform settings, which sends no client (saveFeesAction:minuteUsd and :messageUsd are unchanged)."
   }
 }

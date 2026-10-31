@@ -14,7 +14,7 @@ import { catalogFromEnv, explainCatalogError, type CatalogVoice } from "@/lib/el
 import { liveRows, liveSummary, liveTexts, type LiveRow, type LiveText, type LiveValue } from "@/lib/studio-live";
 import { loadFees, modelBook } from "@/lib/studio-server";
 import { failKey, failToShow } from "@/lib/studio-fail";
-import { refreshModelsAction, resetStudioSectionAction, saveFeesAction, saveStudioSectionAction } from "@/lib/studio-actions";
+import { refreshModelsAction, resetStudioSectionAction, saveStudioSectionAction } from "@/lib/studio-actions";
 import { VOICES, resolveVoiceId } from "@/lib/voices";
 import type { AgentSettings, Tenant } from "@/lib/types";
 import { ConfirmDelete } from "@/components/Confirm";
@@ -392,18 +392,12 @@ export default async function AssistantStudioPage({ params, searchParams }: { pa
           </Suspense>
         </Fold>
 
-        <Fold id="pricing" open={Boolean(sp.feesSaved || sp.feesBad)} title={T("studio.fees.title")} hint={T("studio.fees.help")}>
-          {sp.feesSaved && <Notice tone="ok">{T("studio.fees.saved")}</Notice>}
-          {sp.feesBad && <Notice tone="warn">{T("studio.fees.bad")}</Notice>}
-          <form action={saveFeesAction} className="stack">
-            <input type="hidden" name="tenantId" value={id} />
-            <div className="grid two">
-              <label>{T("studio.fees.minute")}<input type="number" name="minuteUsd" defaultValue={fees.minuteUsd} min={0} max={9.999} step="any" dir="ltr" inputMode="decimal" /></label>
-              <label>{T("studio.fees.message")}<input type="number" name="messageUsd" defaultValue={fees.messageUsd} min={0} max={9.999} step="any" dir="ltr" inputMode="decimal" /></label>
-            </div>
-            <small className="muted">{T("studio.fees.where")}</small>
-            <div><SubmitButton className="btn" type="submit">{T("studio.fees.save")}</SubmitButton></div>
-          </form>
+        <Fold id="pricing" title={T("studio.fees.title")} hint={T("studio.fees.help")}>
+          <dl className="scan-grid">
+            <dt>{T("studio.fees.minute")}</dt><dd dir="ltr">{fees.minuteUsd}</dd>
+            <dt>{T("studio.fees.message")}</dt><dd dir="ltr">{fees.messageUsd}</dd>
+          </dl>
+          <small><Link href="/admin/settings#fees">{T("studio.fees.onPlatform")}</Link></small>
           <dl className="scan-grid">
             <dt>{T("studio.fees.rate")}</dt><dd dir="ltr">{rate ? `${fmtBhd(rate)} ${T("studio.fees.perCredit")}` : T("studio.model.noPlan")}</dd>
             <dt>{T("studio.fees.unit")}</dt><dd>{T("studio.fees.unitText")}</dd>
