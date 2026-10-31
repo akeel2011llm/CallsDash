@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/auth";
 import { getT } from "@/lib/i18n";
@@ -15,9 +14,8 @@ export default async function AdminDataPage({ params, searchParams }: { params: 
   return (
     <>
       <PageHead
-        title={`${t("data.title")}: ${tenant.name}`}
+        title={t("data.title")}
         subtitle={t("data.help")}
-        actions={<Link className="btn ghost" href={`/admin/clients/${id}`}>{t("common.back")}</Link>}
       />
       <DataView tenant={tenant} scope="admin" sp={sp} t={t} locale={locale} base={`/admin/clients/${id}/data`} />
     </>

@@ -223,11 +223,10 @@ export default async function AssistantStudioPage({ params, searchParams }: { pa
   return (
     <>
       <PageHead
-        title={`${T("studio.title")}: ${locale === "ar" ? tenant.branding.displayNameAr || tenant.name : tenant.name}`}
+        title={T("studio.title")}
         subtitle={T("studio.subtitle")}
         actions={
           <>
-            <Link className="btn ghost" href={`/admin/clients/${id}`}>{T("studio.toClient")}</Link>
             <Link className="btn ghost" href={`/admin/clients/${id}/channels`}>{T("nav.channels")}</Link>
             <a className="btn" href="#try">{T("studio.testIt")}</a>
           </>

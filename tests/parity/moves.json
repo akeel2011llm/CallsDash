@@ -5,5 +5,12 @@
     "/admin/clients/[id]/duplicate": "/admin/clients/[id]/activity/duplicate"
   },
   "actions": {},
-  "fields": {}
+  "fields": {
+    "adminBrandingAction:supportPhone": "Same value now edited in one place: Business > Website and contact details (setupDetailsAction:supportPhone). adminBrandingAction keeps the stored value when the field is not sent.",
+    "adminBrandingAction:supportEmail": "Same value now edited in one place: Business > Website and contact details (setupDetailsAction:supportEmail). adminBrandingAction keeps the stored value when the field is not sent.",
+    "adminBrandingAction:supportWhatsapp": "Same value now edited in one place: Business > Website and contact details (setupDetailsAction:supportWhatsapp). adminBrandingAction keeps the stored value when the field is not sent.",
+    "adminTenantSettingsAction:displayName": "Same value already edited in the branding studio (adminBrandingAction:displayName); the duplicate on the Business tab was removed.",
+    "adminTenantSettingsAction:displayNameAr": "Same value already edited in the branding studio (adminBrandingAction:displayNameAr); the duplicate on the Business tab was removed.",
+    "adminTenantSettingsAction:primaryColor": "Same value already edited in the branding studio (adminBrandingAction:primaryColor); the duplicate on the Business tab was removed."
+  }
 }

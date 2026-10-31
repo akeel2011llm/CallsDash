@@ -362,10 +362,11 @@ export async function adminTenantSettingsAction(f: FormData) {
   if (str(f, "displayNameAr")) branding.displayNameAr = str(f, "displayNameAr").slice(0, 120);
   if (hex.test(color)) branding.primaryColor = color;
   try {
+    // the Business tab sends the allowed websites, the Billing tab the zero-balance rule: change only what was sent
     await store.updateTenant(id, {
-      zeroBalancePolicy: str(f, "zeroBalancePolicy") === "overdraft" ? "overdraft" : "pause",
-      allowedDomains: str(f, "allowedDomains").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean),
-      branding,
+      ...(f.has("zeroBalancePolicy") ? { zeroBalancePolicy: str(f, "zeroBalancePolicy") === "overdraft" ? "overdraft" as const : "pause" as const } : {}),
+      ...(f.has("allowedDomains") ? { allowedDomains: str(f, "allowedDomains").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean) } : {}),
+      ...(Object.keys(branding).length ? { branding } : {}),
     }, actor);
   } catch (e) {
     if (e instanceof DuplicateError) redirect(`/admin/clients/${id}/business?error=${e.field}`);
@@ -385,7 +386,10 @@ export async function adminBrandingAction(f: FormData) {
   const b: Partial<Branding> = {
     welcome: text(f, "welcome", 240), welcomeAr: text(f, "welcomeAr", 240),
     tagline: text(f, "tagline", 160), taglineAr: text(f, "taglineAr", 160),
-    supportPhone: text(f, "supportPhone", 40), supportEmail: text(f, "supportEmail", 120), supportWhatsapp: text(f, "supportWhatsapp", 40),
+    // contact details are edited under Business, Website and contact details; kept only if a form still sends them
+    ...(f.has("supportPhone") ? { supportPhone: text(f, "supportPhone", 40) } : {}),
+    ...(f.has("supportEmail") ? { supportEmail: text(f, "supportEmail", 120) } : {}),
+    ...(f.has("supportWhatsapp") ? { supportWhatsapp: text(f, "supportWhatsapp", 40) } : {}),
     reportFooter: text(f, "reportFooter", 200),
     hidePoweredBy: f.get("hidePoweredBy") === "on",
   };

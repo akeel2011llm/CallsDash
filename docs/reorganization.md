@@ -44,6 +44,17 @@ It also checks that every menu link points at a real page, and that every Englis
 - Setup, Catalog and data, Assistant and Channels are unchanged inside; they still have their own heading and Back button
   (tidied in milestone 3).
 
+## One place per setting (milestone 3)
+
+- Website and contact details (domain, phone, email, WhatsApp): only on Business > Website and contact details
+  (`components/ContactForm.tsx`, `setupDetailsAction`, which now returns to the form's page). The Setup page and the branding
+  studio show them read-only with a link.
+- Display names and colour: only in the branding studio. Business keeps the allowed websites; the zero-balance rule moved to
+  Billing. `adminTenantSettingsAction` and `adminBrandingAction` change only the fields a form sends, so a form without a field
+  never clears it.
+- The tabs no longer repeat the client name and a Back button (the workspace header has them).
+- Retired fields are listed with their reason in tests/parity/moves.json.
+
 ---
 
 # CallsDash reorganization proposal (Phase 1 audit + Phase 2 blueprint)

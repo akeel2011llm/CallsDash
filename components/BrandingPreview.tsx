@@ -29,7 +29,7 @@ export function BrandingPreview({ formId, initial, words }: { formId: string; in
         displayName: s("displayName") || cur.displayName, displayNameAr: s("displayNameAr") || cur.displayNameAr,
         primaryColor: s("primaryColor") || cur.primaryColor, accentColor: s("accentColor") || undefined,
         sidebar: s("sidebar") as Branding["sidebar"], radius: s("radius") as Branding["radius"], font: s("font") as Branding["font"],
-        welcome: s("welcome"), welcomeAr: s("welcomeAr"), supportPhone: s("supportPhone"), supportEmail: s("supportEmail"),
+        welcome: s("welcome"), welcomeAr: s("welcomeAr"), supportPhone: f.has("supportPhone") ? s("supportPhone") : cur.supportPhone, supportEmail: f.has("supportEmail") ? s("supportEmail") : cur.supportEmail,
         hidePoweredBy: f.get("hidePoweredBy") === "on", pattern: s("pattern") as Branding["pattern"],
       }));
       const cf = f.get("cover");
