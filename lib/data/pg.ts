@@ -55,7 +55,7 @@ const profileOf = (r: Row): Profile => ({
   disabled: Boolean(r.disabled), mustChangePassword: Boolean(r.must_change_password), createdAt: iso(r.created_at),
 });
 const doctorOf = (r: Row): Doctor => ({
-  id: r.id, tenantId: r.tenant_id, name: r.name, specialty: r.specialty ?? "", ...(r.about ? { about: r.about } : {}), ...(r.about_ar ? { aboutAr: r.about_ar } : {}), color: r.color, googleCalendarId: r.google_calendar_id ?? undefined,
+  id: r.id, tenantId: r.tenant_id, name: r.name, specialty: r.specialty ?? "", ...(r.about ? { about: r.about } : {}), ...(r.about_ar ? { aboutAr: r.about_ar } : {}), ...(r.role ? { role: r.role } : {}), color: r.color, googleCalendarId: r.google_calendar_id ?? undefined,
   active: r.active ?? true, hours: r.hours == null ? null : jsonish(r.hours), timeOff: r.time_off == null ? [] : jsonish(r.time_off),
   photoAt: r.photo_at ? iso(r.photo_at) : undefined,
 });
@@ -115,6 +115,7 @@ export const SCHEMA_ADDITIONS = [
   `alter table doctors add column if not exists time_off jsonb not null default '[]'`,
   `alter table doctors add column if not exists about text`,
   `alter table doctors add column if not exists about_ar text`,
+  `alter table doctors add column if not exists role text`,
   `alter table tenants add column if not exists closures jsonb not null default '[]'`,
   `alter table credit_ledger drop constraint if exists credit_ledger_kind_check`,
   `do $$ begin if not exists (select 1 from pg_constraint where conname = 'credit_ledger_kind_v2') then
@@ -882,7 +883,7 @@ export function createPgData(db: Db): Data {
     addDoctor: async (tenantId, input, actor) => tx(async (run) => {
       const colours = ["#0e7c86", "#d97706", "#be185d", "#7c3aed", "#c2410c", "#2563eb", "#15803d"];
       const n = Number((await run<Row>(`select count(*)::int as n from doctors where tenant_id = $1`, [tenantId]))[0].n);
-      const r = await run<Row>(`insert into doctors (tenant_id, name, specialty, color, about, about_ar) values ($1,$2,$3,$4,$5,$6) returning *`, [tenantId, input.name, input.specialty, colours[n % colours.length], input.about || null, input.aboutAr || null]);
+      const r = await run<Row>(`insert into doctors (tenant_id, name, specialty, color, about, about_ar, role) values ($1,$2,$3,$4,$5,$6,$7) returning *`, [tenantId, input.name, input.specialty, colours[n % colours.length], input.about || null, input.aboutAr || null, input.role || null]);
       await audit(run, actor, `Doctor added: ${input.name}`, tenantId);
       return doctorOf(r[0]);
     }),
@@ -898,8 +899,8 @@ export function createPgData(db: Db): Data {
       const cur = await run<Row>(`select * from doctors where tenant_id = $1 and id = $2 for update`, [tenantId, doctorId]);
       if (!cur[0]) throw new Error("doctor not found");
       const d = { ...doctorOf(cur[0]), ...patch };
-      const r = await run<Row>(`update doctors set name = $3, specialty = $4, color = $5, active = $6, hours = $7, time_off = $8, about = $9, about_ar = $10 where tenant_id = $1 and id = $2 returning *`,
-        [tenantId, doctorId, d.name, d.specialty, d.color, d.active !== false, d.hours ? JSON.stringify(d.hours) : null, JSON.stringify(d.timeOff ?? []), d.about || null, d.aboutAr || null]);
+      const r = await run<Row>(`update doctors set name = $3, specialty = $4, color = $5, active = $6, hours = $7, time_off = $8, about = $9, about_ar = $10, role = $11 where tenant_id = $1 and id = $2 returning *`,
+        [tenantId, doctorId, d.name, d.specialty, d.color, d.active !== false, d.hours ? JSON.stringify(d.hours) : null, JSON.stringify(d.timeOff ?? []), d.about || null, d.aboutAr || null, d.role || null]);
       await audit(run, actor, `Doctor updated: ${d.name}`, tenantId);
       return doctorOf(r[0]);
     }),

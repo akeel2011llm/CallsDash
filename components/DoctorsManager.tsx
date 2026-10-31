@@ -5,12 +5,13 @@ import {
   addDoctorAction, addTimeOffAction, removeDoctorAction, removeTimeOffAction, saveDoctorAction, saveDoctorHoursAction, testDoctorCalendarAction,
 } from "@/lib/manage-actions";
 import { todayKey } from "@/lib/booking-ui";
+import { roleName, roleOf, rolesOf } from "@/lib/business-types";
 import { Badge, Notice } from "./ui";
 import { SubmitButton } from "./SubmitButton";
 import { HoursFields } from "./HoursFields";
 import { ConfirmDelete } from "./Confirm";
 
-export type DoctorNotice = { doc?: string; cal?: string; clash?: string };
+export type DoctorNotice = { doc?: string; cal?: string; clash?: string; role?: string };
 const DOC_NOTICES = ["added", "saved", "removed", "name_missing", "name_taken", "hours_invalid", "dates_invalid", "confirm", "has_bookings", "has_login"];
 const CAL_RESULTS = ["ok", "no_id", "no_key", "key_rejected", "not_shared", "timeout", "other"];
 
@@ -30,6 +31,17 @@ export function DoctorsManager({ tenant, doctors, bookings, logins, returnTo, sp
   const clash = Number(sp.clash) || 0;
   const now = Date.now();
   const today = todayKey();
+  // roles (Doctor, Nurse, Stylist...): a picker and a filter appear once the client has more than one
+  const roles = rolesOf(tenant);
+  const many = roles.length > 1;
+  const filter = many && roles.some((r) => r.key === sp.role) ? sp.role : "";
+  const shown = filter ? doctors.filter((d) => roleOf(roles, d.role).key === filter) : doctors;
+  const base = returnTo.split(/[?#]/)[0];
+  const rolePick = (cur?: string) => many ? (
+    <label style={{ flex: 1, minWidth: 140 }}>{t("team.role")}
+      <select name="role" defaultValue={roleOf(roles, cur).key}>{roles.map((r) => <option key={r.key} value={r.key}>{roleName(r, locale)}</option>)}</select>
+    </label>
+  ) : null;
   return (
     <section className="card stack" id="doctors">
       <h2>{t("doctors.title")}</h2>
@@ -37,7 +49,16 @@ export function DoctorsManager({ tenant, doctors, bookings, logins, returnTo, sp
       {notice && <Notice tone={good ? "ok" : "warn"}>{t(`doctors.n.${notice}` as Key)}</Notice>}
       {clash > 0 && <Notice tone="warn">{t("doctors.clash").replace("{n}", String(clash))}</Notice>}
       {doctors.length === 0 && <small className="muted">{t("admin.doctor.none")}</small>}
-      {doctors.map((d) => {
+      {many && doctors.length > 0 && (
+        <nav className="row" aria-label={t("team.role")}>
+          <a className={filter ? "btn small ghost" : "btn small"} href={`${base}#doctors`} aria-current={filter ? undefined : "true"}>{t("team.allRoles")} ({doctors.length})</a>
+          {roles.map((r) => {
+            const n = doctors.filter((d) => roleOf(roles, d.role).key === r.key).length;
+            return <a key={r.key} className={filter === r.key ? "btn small" : "btn small ghost"} href={`${base}?role=${r.key}#doctors`} aria-current={filter === r.key ? "true" : undefined}>{roleName(r, locale, true)} ({n})</a>;
+          })}
+        </nav>
+      )}
+      {shown.map((d) => {
         const upcoming = bookings.filter((b) => b.doctorId === d.id && (b.status === "confirmed" || b.status === "rescheduled") && Date.parse(b.startsAt) > now).length;
         const login = logins.find((p) => p.role === "doctor" && p.doctorId === d.id);
         const leave = (d.timeOff ?? []).filter((r) => r.to >= today);
@@ -51,7 +72,7 @@ export function DoctorsManager({ tenant, doctors, bookings, logins, returnTo, sp
                   // eslint-disable-next-line @next/next/no-img-element
                   ? <img src={`/api/data/photo/doctor/${d.id}?v=${Date.parse(d.photoAt) || 0}&t=${tenant.id}`} alt="" width={36} height={36} loading="lazy" style={{ objectFit: "cover", borderRadius: "50%" }} />
                   : null}
-                <span><strong>{d.name}</strong>{d.specialty ? <span className="muted"> · {d.specialty}</span> : null}</span>
+                <span><strong>{d.name}</strong>{many ? <span className="muted"> · {roleName(roleOf(roles, d.role), locale)}</span> : null}{d.specialty ? <span className="muted"> · {d.specialty}</span> : null}</span>
               </span>
               <span className="row">
                 <Badge tone={active ? "ok" : "neutral"}>{active ? t("doctors.active") : t("doctors.inactive")}</Badge>
@@ -69,6 +90,7 @@ export function DoctorsManager({ tenant, doctors, bookings, logins, returnTo, sp
                 {doctorHidden}
                 <div className="row">
                   <label style={{ flex: 2, minWidth: 180 }}>{t("admin.doctor.name")}<input name="name" required maxLength={120} defaultValue={d.name} /></label>
+                  {rolePick(d.role)}
                   <label style={{ flex: 2, minWidth: 160 }}>{t("admin.doctor.specialty")}<input name="specialty" maxLength={120} defaultValue={d.specialty} /></label>
                   <label style={{ flex: 0 }}>{t("doctors.color")}<input type="color" name="color" defaultValue={d.color} /></label>
                 </div>
@@ -135,6 +157,7 @@ export function DoctorsManager({ tenant, doctors, bookings, logins, returnTo, sp
       <form action={addDoctorAction} className="row" style={{ alignItems: "end" }}>
         {hidden}
         <label style={{ flex: 2, minWidth: 180 }}>{t("admin.doctor.name")}<input name="name" required maxLength={120} /></label>
+        {rolePick(filter || undefined)}
         <label style={{ flex: 2, minWidth: 160 }}>{t("admin.doctor.specialty")}<input name="specialty" maxLength={120} /></label>
         <label style={{ flex: "1 1 100%" }}>{t("admin.doctor.about")}<textarea name="about" rows={2} maxLength={800} /></label>
         <SubmitButton className="btn small" type="submit">{t("admin.doctor.add")}</SubmitButton>

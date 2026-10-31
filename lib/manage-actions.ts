@@ -17,7 +17,8 @@ import { ToolError } from "./booking";
 import { DuplicateError } from "./errors";
 import { autoSync } from "./auto-sync";
 import type { Booking, DateRange } from "./types";
-import { businessFromForm, businessOf } from "./business-types";
+import { businessFromForm, businessOf, rolesOf } from "./business-types";
+import { promptForWords } from "./business-words";
 
 const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 const confirmed = (f: FormData) => f.get("confirm") === "on";
@@ -52,6 +53,12 @@ const refreshAll = () => { revalidatePath("/admin", "layout"); revalidatePath("/
 
 /* ---------- doctors ---------- */
 
+/** The role key the form chose, if it is one of the client's roles; otherwise none (the first role). */
+async function roleFrom(f: FormData, tenantId: string): Promise<string | undefined> {
+  const key = str(f, "role");
+  return key && rolesOf(await store.getTenant(tenantId)).some((r) => r.key === key) ? key : undefined;
+}
+
 async function doctorOf(tenantId: string, doctorId: string) {
   const d = (await store.getDoctors(tenantId)).find((x) => x.id === doctorId);
   if (!d) redirect("/app");
@@ -63,7 +70,7 @@ export async function addDoctorAction(f: FormData) {
   const name = str(f, "name").replace(/\s+/g, " ").slice(0, 120);
   if (!name) go(f, fallback, "doc=name_missing", "#doctors");
   if ((await store.getDoctors(tenantId)).some((d) => d.name.toLowerCase() === name.toLowerCase())) go(f, fallback, "doc=name_taken", "#doctors");
-  await store.addDoctor(tenantId, { name, specialty: str(f, "specialty").slice(0, 120), about: str(f, "about").slice(0, 800), aboutAr: str(f, "aboutAr").slice(0, 800) }, actor);
+  await store.addDoctor(tenantId, { name, specialty: str(f, "specialty").slice(0, 120), about: str(f, "about").slice(0, 800), aboutAr: str(f, "aboutAr").slice(0, 800), role: await roleFrom(f, tenantId) }, actor);
   await autoSync(tenantId, actor);
   refreshAll();
   go(f, fallback, "doc=added", "#doctors");
@@ -79,6 +86,7 @@ export async function saveDoctorAction(f: FormData) {
   const color = str(f, "color");
   await store.updateDoctor(tenantId, doc.id, {
     name, specialty: str(f, "specialty").slice(0, 120), about: str(f, "about").slice(0, 800), aboutAr: str(f, "aboutAr").slice(0, 800), color: hex.test(color) ? color : doc.color, active: f.get("active") === "on",
+    ...(f.has("role") ? { role: await roleFrom(f, tenantId) } : {}),
   }, actor);
   if (f.has("calendarId")) {
     const calendarId = str(f, "calendarId").slice(0, 300);
@@ -309,7 +317,21 @@ export async function adminBusinessAction(f: FormData) {
   if (!tenant) redirect("/admin");
   const business = businessFromForm((k) => str(f, k), (k) => f.has(k));
   const before = businessOf(tenant);
+  // a role still given to someone cannot be removed: they would silently become another role
+  if (business.roles) {
+    const kept = new Set(business.roles.map((r) => r.key));
+    const firstBefore = rolesOf(tenant)[0].key;
+    const team = await store.getDoctors(id);
+    const orphan = team.find((d) => !kept.has(d.role ?? firstBefore));
+    if (orphan) go(f, `/admin/clients/${id}/business`, `err=role_in_use&who=${encodeURIComponent(orphan.name.slice(0, 60))}`, "#business");
+    // people saved before they had a role keep the role that was first until now, even if the order changes
+    for (const d of team.filter((x) => !x.role)) await store.updateDoctor(id, d.id, { role: firstBefore }, actor);
+  }
+  const settings = await store.getAgent(id);
+  const prompt = promptForWords(settings, tenant, business);
   await store.setBusiness(id, business, actor, `Business type ${before.type} -> ${business.type}${business.staffScheduling ? "" : " (no staff scheduling)"}`);
+  if (prompt) await store.saveAgent(id, { ...settings, prompt }, actor, "The assistant's untouched sections follow the business words");
+  await autoSync(id, actor); // the assistant's instructions use the client's words and roles
   refreshAll();
   go(f, `/admin/clients/${id}/business`, "saved=business", "#business");
 }

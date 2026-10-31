@@ -2,6 +2,7 @@ import { variablePlaceholders } from "./agent-context";
 import { acceptsTemperature, defaultLlm } from "./agent-catalog";
 import { STUDIO_DEFAULTS, studioOf } from "./agent-studio";
 import { resolveVoiceId } from "./voices";
+import { relabel, roleName, roleOf, rolesOf, vocabOf } from "./business-types";
 import type { AgentSettings, Doctor, KnowledgeItem, Tenant } from "./types";
 
 const REPLY_LENGTH = {
@@ -33,8 +34,10 @@ const ARABIC_STYLE = {
  * 9: in a typed website chat the photo goes inside the reply as a markdown image (ElevenLabs' widget draws it in the chat);
  *    show_image stays for spoken website conversations.
  * 11: find_record searches the business's custom tables (stock, menu, price list) that the admin marked for the assistant.
+ * 12: the built-in instructions use the client's own words and roles (a salon's stylists, a clinic's doctors and nurses), and the
+ *     shared tools describe team members and customers instead of doctors and patients.
  */
-export const AGENT_VERSION = 11;
+export const AGENT_VERSION = 12;
 
 /** How the assistant finds and saves returning customers, which depends on what the clinic chose on its Customers screen. */
 export function customerRules(mode: "phone" | "cpr"): string[] {
@@ -63,7 +66,7 @@ const BOOKING_RULES = [
 const CATALOGUE_RULES = [
   "When a customer asks about a product, treatment or package the clinic offers, call find_item with what they asked, then answer only from the details it returns. If it finds nothing, do not guess; say it is not listed and offer to take a message.",
   "When a customer asks what the clinic offers, or asks for photos or pictures without naming one thing (for example any product photos), call find_item with an empty query to get a short list, then describe those items and show their photos the way the rules below say. Never say you have no photos before you have called find_item.",
-  "When a customer asks for a photo or picture of a doctor, call find_item with the doctor's name. An entry with kind doctor and an image_url is shown like any other photo. If it has no image_url, say there is no photo of that doctor on file and offer to help with an appointment.",
+  "When a customer asks for a photo or picture of a doctor, call find_item with the doctor's name. An entry whose kind is `doctor` and that has an image_url is shown like any other photo. If it has no image_url, say there is no photo of that doctor on file and offer to help with an appointment.",
   "If find_item returns an image_url and the customer is on the website (Channel: website) and typing (Typed chat: true), show the photo inside your reply: after describing the item, put it on a line of its own exactly as ![short caption](image_url), using the image_url exactly as find_item returned it. The chat draws it as a picture inside the conversation. Do not also call show_image, and do not add the page_url link.",
   "If find_item returns an image_url and the customer is on the website but talking (Typed chat: false), never write a markdown image; call show_image with that image_url and a short caption after you describe the item. Only the website chat can use show_image. It answers Shown. when the picture is on the customer's screen. If it answers that the photo is not shown on this screen, put it inside your reply as a markdown image on its own line instead. If it answers anything else, or fails, the chat cannot draw pictures: put the page_url link from find_item in your reply instead, and do not say a photo is shown. Never write a markdown image on any channel other than the website.",
   "In the website chat, the first time in a conversation that a doctor marked [has a photo] in the Doctors list is named (by the customer or by you, for example when offering times), call find_item with the doctor's name and show the doctor's photo the way the two rules above say (inside your reply when typing, show_image when talking), with the doctor's name as caption, once per doctor per conversation and never again for the same doctor.",
@@ -78,18 +81,32 @@ const CLOSING_RULES = [
   "For a medical emergency tell the caller to call 999 immediately and also call handoff_to_staff with urgent set to true.",
 ];
 
-type DoctorLine = Pick<Doctor, "id" | "name" | "specialty" | "active"> & Partial<Pick<Doctor, "photoAt">>;
+type DoctorLine = Pick<Doctor, "id" | "name" | "specialty" | "active"> & Partial<Pick<Doctor, "photoAt" | "role">>;
 
-/** The doctors who take bookings, with the id the tools expect, so the agent can name them and pass the right id. */
-function doctorSection(doctors: DoctorLine[]) {
+/**
+ * The people who take bookings, with the id the tools expect, so the agent can name them and pass the right id. With more than one
+ * role (Doctor and Nurse) each line says the person's role, so "a nurse" is matched to the right people.
+ */
+function doctorSection(doctors: DoctorLine[], tenant?: Pick<Tenant, "business"> | null, ours: (s: string) => string = (x) => x) {
   const active = doctors.filter((d) => d.active !== false);
   if (!active.length) return "";
-  return `# Doctors\n${active.map((d) => `- ${d.name}${d.specialty ? `, ${d.specialty}` : ""} (doctor_id: ${d.id})${d.photoAt ? " [has a photo]" : ""}`).join("\n")}`;
+  const roles = rolesOf(tenant);
+  const many = roles.length > 1;
+  const intro = many
+    ? `${ours("Each person has one role:")} ${roles.map((r) => `${roleName(r, "en")} (in Arabic ${roleName(r, "ar")})`).join(", ")}. When a customer asks for a role, offer only people with that role, and check_availability with each of their doctor_id values.\n`
+    : "";
+  return `${ours("# Doctors")}\n${intro}${active.map((d) => `- ${d.name}${many ? ` [role: ${roleName(roleOf(roles, d.role), "en")}]` : ""}${d.specialty ? `, ${d.specialty}` : ""} (doctor_id: ${d.id})${d.photoAt ? " [has a photo]" : ""}`).join("\n")}`;
 }
 
-/** The agent's instructions: the client's own sections, the style settings, live context, the doctors and the tool rules. */
-export function buildPrompt(settings: AgentSettings, doctors: DoctorLine[] = []): string {
+/**
+ * The agent's instructions: the client's own sections, the style settings, live context, the team and the tool rules. The built-in
+ * parts are written with clinic words (doctor, patient, clinic); with `tenant` they are rewritten in the client's own words and
+ * roles (lib/business-types.ts), so a salon's assistant talks about stylists and customers. The client's own sections stay as written.
+ */
+export function buildPrompt(settings: AgentSettings, doctors: DoctorLine[] = [], tenant?: Pick<Tenant, "business"> | null): string {
   const p = settings.prompt;
+  // `quoted` words are values the tools return (kind `doctor`) and stay as they are
+  const ours = (text: string) => (tenant ? text.split(/(`[^`]*`)/g).map((x) => (x.startsWith("`") ? x : relabel(x, "en", vocabOf(tenant, "en")))).join("") : text);
   return [
     `# Role\n${p.identity}`,
     `# Languages\n${p.languages}\n${ARABIC_STYLE[settings.arabicWrittenStyle]}`,
@@ -98,9 +115,9 @@ export function buildPrompt(settings: AgentSettings, doctors: DoctorLine[] = [])
     `# Emergencies\n${p.emergencies}`,
     `# Handing over\n${p.handoff}`,
     `# Style\n${REPLY_LENGTH[settings.replyLength]} ${FORMALITY[settings.formality]} Answer only from the knowledge base and the facts below; if you do not know, say so and offer to take a message.`,
-    `# Facts for this conversation\nToday is {{today}}. The clinic is open now: {{open_now}}. Opening hours today: {{hours_today}}. If closed, it next opens {{next_opening}}. Channel: {{channel}}. Typed chat: {{system__is_text_only}}. The caller's phone number, if known: {{caller_phone}} (ask them to confirm it before booking).`,
-    doctorSection(doctors),
-    `# Tools\n${[...BOOKING_RULES, ...customerRules(settings.customerLookup === "cpr" ? "cpr" : "phone"), ...CATALOGUE_RULES, ...CLOSING_RULES].map((r) => `- ${r}`).join("\n")}`,
+    ours(`# Facts for this conversation\nToday is {{today}}. The clinic is open now: {{open_now}}. Opening hours today: {{hours_today}}. If closed, it next opens {{next_opening}}. Channel: {{channel}}. Typed chat: {{system__is_text_only}}. The caller's phone number, if known: {{caller_phone}} (ask them to confirm it before booking).`),
+    doctorSection(doctors, tenant, ours),
+    ours(`# Tools\n${[...BOOKING_RULES, ...customerRules(settings.customerLookup === "cpr" ? "cpr" : "phone"), ...CATALOGUE_RULES, ...CLOSING_RULES].map((r) => `- ${r}`).join("\n")}`),
   ].filter(Boolean).join("\n\n");
 }
 
@@ -174,7 +191,7 @@ export function buildAgentConfig(i: AgentConfigInput) {
         language: "en",
         dynamic_variables: { dynamic_variable_placeholders: variablePlaceholders() },
         prompt: {
-          prompt: buildPrompt(settings, i.doctors),
+          prompt: buildPrompt(settings, i.doctors, i.tenant),
           llm,
           temperature: acceptsTemperature(llm) ? settings.temperature : null, // the newest Claude models reject a custom temperature: null leaves it out
           tool_ids: i.toolIds,
@@ -220,7 +237,7 @@ type Prop = { type: "string" | "boolean" | "integer"; description?: string; dyna
 const str = (description: string): Prop => ({ type: "string", description });
 const agentId: Prop = { type: "string", dynamic_variable: "system__agent_id" };
 const conversationId: Prop = { type: "string", dynamic_variable: "system__conversation_id" };
-const CPR_HELP = "Patient's CPR number: the 9 digits on the Bahraini ID card, digits only.";
+const CPR_HELP = "The customer's CPR number: the 9 digits on the Bahraini ID card, digits only.";
 
 /** The booking, customer, catalogue and hand-over tools (docs/agent-tools.md), as ElevenLabs webhook tool configs. One shared set serves every client; `agent_id` tells them apart. */
 export function toolDefinitions(appUrl: string, secret: string): Record<string, Record<string, unknown>> {
@@ -234,27 +251,27 @@ export function toolDefinitions(appUrl: string, secret: string): Record<string, 
   });
   return {
     check_availability: tool("check_availability", "List free appointment slots. Call before offering any time.", {
-      doctor_id: str("Doctor id, if the patient asked for a specific doctor, or to move a booking with the doctor it is with."), from_date: str("First day to look at, YYYY-MM-DD."),
+      doctor_id: str("The doctor_id of a team member from your instructions, if the customer asked for a specific person or role, or to move a booking with the person it is with."), from_date: str("First day to look at, YYYY-MM-DD."),
       days: { type: "integer", description: "How many days to look at, 1 to 30." }, language: str("en or ar, the language the slot labels should be in."),
     }, []),
     book_appointment: tool("book_appointment", "Book an appointment in a slot returned by check_availability.", {
-      doctor_id: str("Doctor id from the slot."), starts_at: str("Slot start (ISO) exactly as returned by check_availability."),
-      patient_name: str("Patient's full name."), patient_phone: str("Patient's phone number."), patient_cpr: str(CPR_HELP),
-      service: str("Reason for the visit."), language: str("en or ar, the language the patient is speaking or writing. Their WhatsApp confirmation is sent in it."), conversation_id: conversationId,
+      doctor_id: str("The doctor_id from the slot."), starts_at: str("Slot start (ISO) exactly as returned by check_availability."),
+      patient_name: str("The customer's full name."), patient_phone: str("The customer's phone number."), patient_cpr: str(CPR_HELP),
+      service: str("What the booking is for."), language: str("en or ar, the language the customer is speaking or writing. Their WhatsApp confirmation is sent in it."), conversation_id: conversationId,
     }, ["doctor_id", "starts_at", "patient_name", "patient_phone", "patient_cpr"]),
-    find_patient_booking: tool("find_patient_booking", "Find a patient's upcoming bookings by their CPR number.", {
+    find_patient_booking: tool("find_patient_booking", "Find a customer's upcoming bookings by their CPR number.", {
       patient_cpr: str(CPR_HELP), patient_phone: str("Only for a booking made before CPR numbers were asked: the phone number it was made with."),
       language: str("en or ar, the language the time labels should be in."),
     }, ["patient_cpr"]),
     cancel_appointment: tool("cancel_appointment", "Cancel a booking found with find_patient_booking.", {
       booking_id: str("booking_id from find_patient_booking."), patient_cpr: str(CPR_HELP), patient_phone: str("Only if find_patient_booking needed the phone number too."),
     }, ["booking_id", "patient_cpr"]),
-    reschedule_appointment: tool("reschedule_appointment", "Move a booking found with find_patient_booking to a new slot returned by check_availability, with the same or another doctor.", {
+    reschedule_appointment: tool("reschedule_appointment", "Move a booking found with find_patient_booking to a new slot returned by check_availability, with the same or another team member.", {
       booking_id: str("booking_id from find_patient_booking."), patient_cpr: str(CPR_HELP), new_starts_at: str("New slot start (ISO), the starts_at of the chosen slot."),
-      doctor_id: str("Only when the patient wants another doctor: the doctor_id of the chosen slot."), patient_phone: str("Only if find_patient_booking needed the phone number too."),
-      language: str("en or ar, the language the patient is speaking or writing. Their WhatsApp confirmation is sent in it."),
+      doctor_id: str("Only when the customer wants another team member: the doctor_id of the chosen slot."), patient_phone: str("Only if find_patient_booking needed the phone number too."),
+      language: str("en or ar, the language the customer is speaking or writing. Their WhatsApp confirmation is sent in it."),
     }, ["booking_id", "patient_cpr", "new_starts_at"]),
-    lookup_customer: tool("lookup_customer", "Look up a returning customer the way this clinic's instructions say: by phone number, or by CPR number.", {
+    lookup_customer: tool("lookup_customer", "Look up a returning customer the way your instructions say: by phone number, or by CPR number.", {
       patient_phone: str("The customer's phone number. Pass it when the instructions say customers are found by phone number."),
       patient_cpr: str("The customer's CPR number, 9 digits. Pass it when the instructions say customers are found by CPR number; otherwise only when the customer gave it, to unlock their notes and recent conversations."),
     }, []),
@@ -263,15 +280,15 @@ export function toolDefinitions(appUrl: string, secret: string): Record<string, 
       email: str("Their email address, if they gave one."), note: str("A short practical note to remember (a preference). No medical details."),
       language: str("en or ar, the language the customer speaks or writes."), conversation_id: conversationId,
     }, []),
-    find_item: tool("find_item", "Look up something the clinic offers (a product, treatment or package) or a doctor, with details, price and a photo address. With no query it lists what the clinic offers.", {
-      query: str("What the customer asked about, or a doctor's name, in a few words, in their own language. Leave empty to list what the clinic offers."), language: str("en or ar, the language to answer in."),
+    find_item: tool("find_item", "Look up something the business offers (a product, service or package) or a team member, with details, price and a photo address. With no query it lists what the business offers.", {
+      query: str("What the customer asked about, or a team member's name, in a few words, in their own language. Leave empty to list what the business offers."), language: str("en or ar, the language to answer in."),
     }, []),
     find_record: tool("find_record", "Search the business's own lists (for example stock, a menu or a price list) and get matching records. With an empty query it names the lists and their columns.", {
       query: str("What the customer asked about, in a few words, in their own language. Leave empty to see the lists."),
       table: str("The list's name, if you know which list to search. Leave empty to search them all."), language: str("en or ar, the language to answer in."),
     }, []),
-    send_item_photo: tool("send_item_photo", "Send the photo of a catalogue item or a doctor to the customer in their WhatsApp chat. Use it only on WhatsApp.", {
-      item_id: str("The item_id from find_item (for a doctor, the doctor's item_id)."), language: str("en or ar, the language of the caption."),
+    send_item_photo: tool("send_item_photo", "Send the photo of a catalogue item or a team member to the customer in their WhatsApp chat. Use it only on WhatsApp.", {
+      item_id: str("The item_id from find_item (for a team member, their item_id)."), language: str("en or ar, the language of the caption."),
       // filled from the chat's own variable, never chosen by the assistant, so a photo can only go to the person in the chat
       caller_phone: { type: "string", dynamic_variable: "caller_phone" },
     }, ["item_id"]),
@@ -284,10 +301,10 @@ export function toolDefinitions(appUrl: string, secret: string): Record<string, 
         properties: { image_url: str("The image_url from find_item, unchanged."), caption: str("A short caption, such as the item's name, in the customer's language.") },
       },
     },
-    take_message: tool("take_message", "Take a message for the clinic staff to answer later.", {
+    take_message: tool("take_message", "Take a message for the staff to answer later.", {
       patient_name: str("Caller's name."), patient_phone: str("Caller's phone number."), message: str("What the caller wants."), language: str("en or ar."), conversation_id: conversationId,
     }, ["patient_name", "patient_phone", "message"]),
-    handoff_to_staff: tool("handoff_to_staff", "Ask staff to take over. There is no live transfer: staff call the patient back.", {
+    handoff_to_staff: tool("handoff_to_staff", "Ask staff to take over. There is no live transfer: staff call the customer back.", {
       patient_name: str("Caller's name."), patient_phone: str("Caller's phone number."), reason: str("Why a person is needed."),
       urgent: { type: "boolean", description: "True when it cannot wait, for example a medical emergency." }, language: str("en or ar."), conversation_id: conversationId,
     }, ["reason"]),

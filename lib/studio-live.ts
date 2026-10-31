@@ -96,7 +96,7 @@ export interface LiveText {
  */
 export function liveTexts(i: {
   settings: AgentSettings;
-  tenant: Pick<Tenant, "name" | "branding">;
+  tenant: Pick<Tenant, "name" | "branding"> & Partial<Pick<Tenant, "business">>;
   doctors: Parameters<typeof buildPrompt>[1];
   live: LiveAgent;
 }): LiveText[] {
@@ -108,7 +108,7 @@ export function liveTexts(i: {
     return { id, here: h, there: t, state: t !== null && h === t ? "same" : "differs" };
   };
   return [
-    text("prompt", buildPrompt(i.settings, i.doctors), i.live.prompt),
+    text("prompt", buildPrompt(i.settings, i.doctors, i.tenant), i.live.prompt),
     text("greetingEn", greeting(i.tenant, "en", style, st.greetingEn), i.live.firstMessage),
     text("greetingAr", greeting(i.tenant, "ar", style, st.greetingAr), i.live.arabicFirstMessage),
   ];

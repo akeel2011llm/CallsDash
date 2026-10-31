@@ -126,6 +126,21 @@ It also checks that every menu link points at a real page, and that every Englis
 - Texts and docs that pointed at the old single client page now name the tab (Business, People) or Platform settings.
 - Kept on purpose: the redirects for old addresses (bookmarks keep working) and every database column.
 
+## Any business: roles and words (step 1 of the 2026-10-31 plan)
+
+- `tenants.business` (jsonb) now also holds `roles` (key, English and Arabic singular and plural; up to 12) and `words`
+  (team, customer, place; English and Arabic) for every type. The type only fills in the defaults. Edited on the client's
+  Business tab (components/BusinessFields.tsx); New client has the same fields.
+- `doctors.role` (migration 0018) is the role key of each team member; empty = the client's first role. A role still given to
+  someone cannot be removed. People and the client's team page get a role filter and a role picker once there are two roles.
+- Screens: `getT(tenant)` rewords texts whenever the client's words differ from the clinic words (not only for non-clinics).
+- Assistant (agent version 12): `buildPrompt(settings, doctors, tenant)` rewrites the built-in parts (facts, team list,
+  tool rules) in the client's words and lists each person's role; values the tools return are written in backticks and
+  never reworded. The client's own sections are untouched, except sections still exactly as created, which follow the
+  words (`lib/business-words.ts`). Shared tool descriptions say team member and customer. Each client needs "Update the
+  assistant" once (saving the Business tab does it when the assistant is connected).
+- Still clinic-only: the CPR rules (next step: the ID rule becomes a per-client setting), and booking words (appointment).
+
 ---
 
 # CallsDash reorganization proposal (Phase 1 audit + Phase 2 blueprint)

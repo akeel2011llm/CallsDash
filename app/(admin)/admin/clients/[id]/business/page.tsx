@@ -12,9 +12,9 @@ import { BusinessFields } from "@/components/BusinessFields";
 import { ContactForm } from "@/components/ContactForm";
 import { businessOf, vocabOf } from "@/lib/business-types";
 
-export default async function ClientBusiness({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ saved?: string; error?: string }> }) {
+export default async function ClientBusiness({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ saved?: string; error?: string; err?: string; who?: string }> }) {
   const { id } = await params;
-  const { saved, error } = await searchParams;
+  const { saved, error, err, who } = await searchParams;
   const tenant = await getTenant(id);
   if (!tenant) notFound();
   const { t, locale } = await getT(tenant);
@@ -27,6 +27,7 @@ export default async function ClientBusiness({ params, searchParams }: { params:
     <>
       {(error === "name" || error === "domain") && <Notice tone="warn">{t(`admin.err.${error}` as "admin.err.name")}</Notice>}
       {saved === "business" && <Notice tone="ok">{plain("biz.saved")}</Notice>}
+      {err === "role_in_use" && <Notice tone="warn">{plain("biz.err.role_in_use").replace("{who}", (who ?? "").slice(0, 60))}</Notice>}
       {saved && saved !== "business" && <Notice tone="ok">{t("agent.saved").split(".")[0]}.</Notice>}
       <PageHead title={t("ws.business")} actions={<Link className="btn ghost" href={`/admin/clients/${id}/business/branding`}>{t("brand.open")}</Link>} />
       <FoldControls openAll={t("fold.openAll")} closeAll={t("fold.closeAll")} />
@@ -52,13 +53,13 @@ export default async function ClientBusiness({ params, searchParams }: { params:
           <SubmitButton className="btn" type="submit">{t("common.save")}</SubmitButton>
         </form>
       </Fold>
-      <Fold id="business" open={saved === "business"} title={plain("biz.title")} hint={plain(`biz.type.${biz.type}`)}>
+      <Fold id="business" open={saved === "business" || err === "role_in_use"} title={plain("biz.title")} hint={plain(`biz.type.${biz.type}`)}>
         <form action={adminBusinessAction} className="stack">
           <input type="hidden" name="tenantId" value={id} /><input type="hidden" name="returnTo" value={returnTo} />
           <small className="muted">{plain("biz.help")}</small>
           <BusinessFields t={plain} business={biz} />
           <Notice>{plain("biz.preview").replace("{staff}", words.staffMany).replace("{customers}", words.customerMany).replace("{place}", words.place)}</Notice>
-          {biz.type !== "clinic" && <small className="muted">{plain("biz.assistantNote")}</small>}
+          <small className="muted">{plain("biz.assistantNote")}</small>
           <SubmitButton className="btn" type="submit">{plain("common.save")}</SubmitButton>
         </form>
       </Fold>
