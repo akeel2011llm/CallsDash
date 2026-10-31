@@ -17,6 +17,7 @@ import { Guide } from "@/components/Guide";
 import { SubmitButton } from "@/components/SubmitButton";
 import { Badge, Notice, PageHead } from "@/components/ui";
 import { text } from "@/components/studio/text";
+import { showValue } from "@/components/studio/show-value";
 
 type Query = {
   done?: string; why?: string; warn?: string; bad?: string; fail?: string; err?: string; need?: string; n?: string; savedAs?: string;
@@ -27,7 +28,6 @@ const FIELD = /^[\w.]{1,40}$/;
 const KEY = /^studio\.err\.\w{1,30}$/;
 const CODE = /^[a-z_]{3,30}$/;
 const GROUP = /^[a-z]{3,20}$/;
-const SECONDS = new Set(["cascadeSeconds", "turnTimeout", "silenceEndSeconds", "maxDurationSeconds", "softTimeoutSeconds"]);
 const ERRORS = new Set(["name", "nameTaken", "full", "missing"]);
 const COUNT = /^\d{1,3}$/;
 
@@ -47,24 +47,7 @@ export default async function ProfilesPage({ params, searchParams }: { params: P
   const base = `/admin/clients/${id}/assistant`;
 
   /* ----- values shown as words ----- */
-  const show = (key: string, v: unknown): string => {
-    if (v === undefined || v === null) return "–";
-    if (typeof v === "boolean") return T(v ? "studio.live.on" : "studio.live.off");
-    if (typeof v === "number") return v === 0 && has(`prof.zero.${key}`) ? T(`prof.zero.${key}`) : SECONDS.has(key) ? `${v} s` : String(v);
-    if (Array.isArray(v)) {
-      if (key === "offeredVoices") return v.length ? T("prof.voices", { n: v.length }) : "–";
-      if (key === "extraKeywords") return v.length ? T("prof.words", { n: v.length }) : "–";
-      if (key === "criteriaOff") return v.length ? v.map((x) => (has(`studio.criteria.${x}`) ? T(`studio.criteria.${x}`) : String(x))).join(", ") : "–";
-      return v.length ? v.join(", ") : "–";
-    }
-    if (typeof v === "string") {
-      if (v === "") return has(`studio.opt.${key}.default`) ? T(`studio.opt.${key}.default`) : key === "llm" || key === "reasoningEffort" ? T("prof.default") : T("prof.blank");
-      const named = [`studio.opt.${key}.${v}`, key === "reasoningEffort" && `studio.effort.${v}`, key === "backupMode" && `studio.model.backup.${v}`, key.startsWith("ttsModel") && `studio.tts.${v}`].find((k): k is string => !!k && has(k));
-      if (named) return T(named);
-      return v.length > 70 ? `${v.slice(0, 70)}…` : v;
-    }
-    return JSON.stringify(v).slice(0, 70);
-  };
+  const show = (key: string, v: unknown) => showValue(key, v, T, has);
   const label = (key: string) => T(`studio.f.${key === "offeredVoices" ? "offered" : key}`);
   const hint = (key: string) => { const h = fieldOf(key)?.hint; return h && has(`prof.h.${h}`) ? T(`prof.h.${h}`) : null; };
 

@@ -511,6 +511,11 @@ pre.diff .diff-only-here { background: color-mix(in srgb, var(--bad) 12%, transp
 pre.diff .diff-only-there { background: color-mix(in srgb, var(--ok) 13%, transparent); }
 pre.diff .diff-skip { color: var(--muted); font-style: italic; }
 .live-text > summary { cursor: pointer; }
+/* the "Recommended" list under each studio section, and the hold audio box */
+.recommend { border: 1px solid var(--line); border-radius: .6rem; padding: .55rem .75rem; }
+.recommend > summary { cursor: pointer; font-weight: 600; }
+.hold-audio { border-block-start: 1px solid var(--line); padding-block-start: .75rem; }
+.hold-audio input[type="file"] { max-inline-size: 100%; }
 .range-value { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--muted); }
 
 /* the AI model picker */

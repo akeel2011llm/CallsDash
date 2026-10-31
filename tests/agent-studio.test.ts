@@ -222,6 +222,8 @@ function legacyExtras(t: Tenant, doctors: { name: string }[]) {
     } } } },
     // the one deliberate change for every client: the widget no longer shows the "Powered by" line
     { name: "branding", body: { platform_settings: { widget: { disable_banner: true } } } },
+    // and, since step 4, labels to find the agent in ElevenLabs' list
+    { name: "tags", body: { tags: ["CallsDash", "clinic"] } },
   ];
 }
 
@@ -259,7 +261,7 @@ describe("an agent whose studio was saved", () => {
   const saved = (section: SectionId, studio: Record<string, unknown>, top: Partial<AgentSettings> = {}): AgentSettings => ({ ...base(), ...top, studio: { touched: [section], ...studio } });
 
   it("sends the newer groups only for the sections that were saved", () => {
-    expect(names(base())).toEqual(["tools", "hardening", "keywords", "guardrails", "analysis", "privacy", "limits", "widget", "branding"]);
+    expect(names(base())).toEqual(["tools", "hardening", "keywords", "guardrails", "analysis", "privacy", "limits", "widget", "branding", "tags"]);
     expect(names(saved("model", {}))).toContain("model");
     expect(names(saved("model", {}))).not.toContain("voice");
     expect(names(saved("voice", {}))).toContain("voice");

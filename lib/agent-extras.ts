@@ -1,5 +1,6 @@
 import { OUTCOME_ITEM } from "./agent-config";
 import { studioOf, type AgentStudio, type SectionId } from "./agent-studio";
+import { businessOf, relabel, vocabOf } from "./business-types";
 import type { AgentSettings, Tenant } from "./types";
 
 type Json = Record<string, unknown>;
@@ -10,7 +11,10 @@ type Json = Record<string, unknown>;
  * admin sees which group was refused and why (lib/agent-sync.ts).
  */
 export type ExtraGroup = { name: ExtraGroupName; body: Json };
-export const EXTRA_GROUPS = ["tools", "hardening", "keywords", "guardrails", "analysis", "privacy", "limits", "widget", "branding", "model", "voice", "turn", "hearing"] as const;
+export const EXTRA_GROUPS = [
+  "tools", "hardening", "keywords", "guardrails", "analysis", "privacy", "limits", "widget", "branding", "model", "voice", "turn", "hearing",
+  "tags", "tier", "effects", "sound", "interrupt", "files", "queue",
+] as const;
 export type ExtraGroupName = (typeof EXTRA_GROUPS)[number];
 
 const system = (name: string, extra: Json = {}) => ({ type: "system", name, description: "", params: { system_tool_type: name, ...extra } });
@@ -22,6 +26,21 @@ export const EVALUATION_CRITERIA = [
   { id: "details_confirmed", name: "Booking details confirmed", conversation_goal_prompt: "If an appointment was booked, changed or cancelled, the agent repeated the doctor, date, time and patient name back to the caller before finishing. Pass if no appointment was involved." },
   { id: "caller_language", name: "Caller's language", conversation_goal_prompt: "The agent answered in the language the caller used (English or Arabic) and switched when the caller switched." },
 ];
+
+type BizTenant = Partial<Pick<Tenant, "business">> | null | undefined;
+
+/**
+ * The criteria for this client, in its own words: a salon's are about customers and staff, not patients and doctors, and only a
+ * clinic is judged on medical advice. A clinic gets exactly EVALUATION_CRITERIA.
+ */
+export function criteriaFor(t: BizTenant) {
+  const b = businessOf(t);
+  if (b.type === "clinic" && !b.words) return EVALUATION_CRITERIA;
+  const v = vocabOf(t, "en");
+  return EVALUATION_CRITERIA.filter((c) => c.id !== "no_medical_advice" || b.type === "clinic").map((c) => ({
+    ...c, conversation_goal_prompt: relabel(b.type === "clinic" ? c.conversation_goal_prompt : c.conversation_goal_prompt.replace("an appointment was booked", "a booking was made").replaceAll("appointment", "booking"), "en", v),
+  }));
+}
 
 /** Read by lib/elevenlabs.ts to flag conversations and to fill the dashboard. */
 export const DATA_COLLECTION = {
@@ -40,12 +59,36 @@ const luminance = (hex: string) => {
   const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 };
+/** The data collection in the client's own words (a clinic gets DATA_COLLECTION). The keys and choices never change, so the dashboard reads every client the same way. */
+export function dataCollectionFor(t: BizTenant): typeof DATA_COLLECTION {
+  const b = businessOf(t);
+  if (b.type === "clinic" && !b.words) return DATA_COLLECTION;
+  const v = vocabOf(t, "en");
+  const say = (s: string) => relabel(s, "en", v);
+  return {
+    ...DATA_COLLECTION,
+    outcome: { ...DATA_COLLECTION.outcome, description: DATA_COLLECTION.outcome.description.replace("an appointment was booked", "a booking was made") },
+    intent: {
+      ...DATA_COLLECTION.intent,
+      description: say(`The main reason for the conversation: booking (make, change or cancel a booking), question (opening hours, location, services or products), complaint (the caller is unhappy), lead (a new ${v.customerOne} asking about prices, services or offers), emergency (an urgent situation that cannot wait), other.`),
+    },
+    urgent: { ...DATA_COLLECTION.urgent, description: "True if the caller described an urgent situation that cannot wait for a normal booking." },
+    follow_up_needed: { ...DATA_COLLECTION.follow_up_needed, description: say(`True if ${v.place} staff must contact the caller afterwards, for example a message was taken, a callback was requested or a complaint was raised.`) },
+  };
+}
+
+/** The labels on the agent in ElevenLabs: CallsDash, the business type, then the admin's own (no repeats, at most 10). */
+export function agentTags(t: BizTenant, own: string[]): string[] {
+  const seen = new Set<string>();
+  return ["CallsDash", businessOf(t).type, ...own].map((x) => x.trim()).filter((x) => x && !seen.has(x.toLowerCase()) && seen.add(x.toLowerCase())).slice(0, 10);
+}
+
 /** Black or white, whichever is easier to read on the colour. */
 export const readableOn = (hex: string) => (luminance(hex) > 0.4 ? "#111111" : "#ffffff");
 const isHex = (s: unknown): s is string => typeof s === "string" && /^#[0-9a-f]{6}$/i.test(s);
 
 export interface ExtrasInput {
-  tenant: Pick<Tenant, "name" | "branding" | "retentionDays" | "allowedDomains">;
+  tenant: Pick<Tenant, "name" | "branding" | "retentionDays" | "allowedDomains"> & Partial<Pick<Tenant, "business">>;
   doctors: { name: string }[];
   /** The client's agent settings. Without them (or without a saved studio) the agent keeps the settings it always had. */
   settings?: Pick<AgentSettings, "studio">;
@@ -96,8 +139,8 @@ export function buildExtras(i: ExtrasInput): ExtraGroup[] {
     g("guardrails", { platform_settings: { guardrails: { version: "1", focus: { is_enabled: st.guardFocus }, prompt_injection: { is_enabled: st.guardInjection } } } }),
     g("analysis", {
       platform_settings: {
-        evaluation: { criteria: EVALUATION_CRITERIA.filter((c) => !st.criteriaOff.includes(c.id)) },
-        data_collection: DATA_COLLECTION,
+        evaluation: { criteria: criteriaFor(i.tenant).filter((c) => !st.criteriaOff.includes(c.id)) },
+        data_collection: dataCollectionFor(i.tenant),
         ...(saved("analysis") ? { summary_language: st.summaryLanguage || null } : {}),
       },
     }),
@@ -106,6 +149,8 @@ export function buildExtras(i: ExtrasInput): ExtraGroup[] {
     g("widget", { platform_settings: { widget: saved("widget") ? studioWidget(st.widget, primary) : legacyWidget(primary) } }),
     // The "Powered by" line has its own group: if ElevenLabs ever refuses it (a plan that does not allow it), the widget's look above is still applied.
     g("branding", { platform_settings: { widget: { disable_banner: st.widget.hideBanner } } }),
+    // Labels to find the agent in ElevenLabs' list. Own group: a refusal must never cost the rest.
+    g("tags", { tags: agentTags(i.tenant, st.tags) }),
   ];
   // The options below were added with the Assistant studio. They are sent only for a section an admin has saved.
   if (saved("model")) {
@@ -144,6 +189,45 @@ export function buildExtras(i: ExtrasInput): ExtraGroup[] {
     }));
   }
   if (saved("hearing")) groups.push(g("hearing", { conversation_config: { asr: { provider: st.asrProvider } } }));
+  // Options added with step 4 of the any-business plan. Each is its own group: they are newer in ElevenLabs, so a refusal
+  // (a model without a fast tier, an effect id ElevenLabs renamed) is only a warning and the rest of the section still applies.
+  if (saved("model")) groups.push(g("tier", { conversation_config: { agent: { prompt: { service_tier: st.serviceTier === "fast" ? "fast" : null } } } }));
+  if (saved("voice")) {
+    const anyEffect = st.effectFilter || st.effectEnvironment || st.effectNoise || st.effectDistance > 0;
+    groups.push(g("effects", {
+      conversation_config: {
+        tts: {
+          suggested_audio_tags: st.audioTags.map((x) => (x.description ? { tag: x.tag, description: x.description } : { tag: x.tag })),
+          audio_effects: anyEffect ? {
+            ...(st.effectFilter ? { filter_preset_id: st.effectFilter } : {}),
+            ...(st.effectEnvironment ? { environment_id: st.effectEnvironment } : {}),
+            ...(st.effectNoise ? { background_noise_id: st.effectNoise } : {}),
+            distance: st.effectDistance,
+          } : null,
+        },
+      },
+    }));
+  }
+  if (saved("conversation")) {
+    groups.push(g("sound", {
+      conversation_config: { conversation: { background_sound: st.backgroundSound ? { source_type: "preset", source_id: st.backgroundSound, volume: st.backgroundVolume, crossfade_loop: true } : null } },
+    }));
+    groups.push(g("interrupt", {
+      conversation_config: {
+        turn: {
+          initial_wait_time: st.initialWaitSeconds || null,
+          interruption_ignore_terms: st.ignoreTerms,
+          interruption_ignore_term_languages: st.ignoreDefaults ? ["en", "ar"] : [],
+          merge_with_default_ignore_terms: st.ignoreDefaults,
+          ...(st.turnModel ? { turn_model: st.turnModel } : {}),
+        },
+      },
+    }));
+    groups.push(g("files", {
+      conversation_config: { conversation: { file_input: st.chatFiles ? { enabled: true, max_files_per_conversation: st.chatFilesMax, max_files_in_memory: Math.min(3, st.chatFilesMax) } : { enabled: false } } },
+    }));
+  }
+  if (saved("safety")) groups.push(g("queue", { platform_settings: { queueing_config: { enabled: st.queueEnabled, wait_timeout_seconds: st.queueWaitSeconds } } }));
   return groups;
 }
 

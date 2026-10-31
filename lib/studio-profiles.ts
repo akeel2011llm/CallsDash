@@ -22,12 +22,14 @@ const f = (section: SectionId, keys: string[], hint?: (k: string) => string): Fi
 
 /** Every setting a profile can hold, in the order the screens list them. */
 export const FIELDS: FieldDef[] = [
-  ...f("model", ["llm", "temperature", "maxTokens", "reasoningEffort", "parallelTools", "backupMode", "backupModels", "cascadeSeconds"]),
-  ...f("voice", ["voiceEn", "voiceAr", "ttsModelEn", "ttsModelAr", "stability", "similarity", "speed", "textNormalisation", "expressive", "offeredVoices"]),
+  ...f("model", ["llm", "temperature", "maxTokens", "reasoningEffort", "parallelTools", "backupMode", "backupModels", "cascadeSeconds", "serviceTier"]),
+  ...f("voice", ["voiceEn", "voiceAr", "ttsModelEn", "ttsModelAr", "stability", "similarity", "speed", "textNormalisation", "expressive", "offeredVoices", "audioTags"]),
+  ...f("voice", ["effectFilter", "effectEnvironment", "effectNoise", "effectDistance"], () => "effects"),
   ...f("conversation", ["turnEagerness", "turnTimeout", "silenceEndSeconds", "spellingPatience", "speculativeTurn", "maxDurationSeconds", "maxDurationMessage", "protectGreeting", "softTimeoutSeconds", "softTimeoutMessageEn", "softTimeoutMessageAr", "greetingEn", "greetingAr"]),
+  ...f("conversation", ["backgroundSound", "backgroundVolume", "initialWaitSeconds", "ignoreTerms", "ignoreDefaults", "turnModel", "chatFiles", "chatFilesMax"]),
   ...f("hearing", ["asrProvider", "extraKeywords"]),
-  ...f("safety", ["guardFocus", "guardInjection", "recordVoice", "dailyLimit", "concurrencyLimit", "bursting"]),
-  ...f("analysis", ["summaryLanguage", "criteriaOff"]),
+  ...f("safety", ["guardFocus", "guardInjection", "recordVoice", "dailyLimit", "concurrencyLimit", "bursting", "queueEnabled", "queueWaitSeconds"]),
+  ...f("analysis", ["summaryLanguage", "criteriaOff", "tags"]),
   ...f("widget", ["w.colors"]),
   ...f("widget", ["w.bgColor", "w.textColor", "w.borderColor", "w.btnColor", "w.btnTextColor"], () => "w.colour"),
   ...f("widget", ["w.variant", "w.placement", "w.expandable", "w.feedback"]),
@@ -102,11 +104,13 @@ export type BuiltinId = (typeof BUILTIN_IDS)[number];
  * widget colours and texts, or the list of voices they may pick from: those belong to the client, not to a tuning.
  */
 const BASE: Record<string, unknown> = {
-  llm: "gemini-2.5-flash", temperature: 0.3, maxTokens: 600, reasoningEffort: "", parallelTools: true, backupMode: "default", backupModels: [], cascadeSeconds: 4,
+  llm: "gemini-2.5-flash", temperature: 0.3, maxTokens: 600, reasoningEffort: "", parallelTools: true, backupMode: "default", backupModels: [], cascadeSeconds: 4, serviceTier: "standard",
   ttsModelEn: "eleven_flash_v2", ttsModelAr: "eleven_flash_v2_5", stability: 0.5, similarity: 0.8, speed: 1, textNormalisation: "system_prompt", expressive: false,
+  effectFilter: "", effectEnvironment: "", effectNoise: "", effectDistance: 0,
   turnEagerness: "normal", turnTimeout: 7, silenceEndSeconds: 30, spellingPatience: "auto", speculativeTurn: false, maxDurationSeconds: 900, protectGreeting: true, softTimeoutSeconds: 3,
+  backgroundSound: "", backgroundVolume: 0.2, initialWaitSeconds: 0, ignoreDefaults: true, turnModel: "", chatFiles: false, chatFilesMax: 5,
   asrProvider: "scribe_realtime",
-  guardFocus: true, guardInjection: true, recordVoice: true, dailyLimit: 500, concurrencyLimit: 0, bursting: true,
+  guardFocus: true, guardInjection: true, recordVoice: true, dailyLimit: 500, concurrencyLimit: 0, bursting: true, queueEnabled: true, queueWaitSeconds: 60,
   summaryLanguage: "", criteriaOff: [],
   "w.variant": "full", "w.placement": "bottom-right", "w.expandable": "never", "w.feedback": "end",
   "w.transcript": true, "w.textInput": true, "w.textOnlyMode": true, "w.languageSelector": true, "w.micMuting": false, "w.defaultExpanded": false,
@@ -131,6 +135,10 @@ export const BUILTIN_VALUES: Record<BuiltinId, Record<string, unknown>> = {
     turnEagerness: "patient", turnTimeout: 10, silenceEndSeconds: 45, maxDurationSeconds: 1200, softTimeoutSeconds: 2.5,
   },
 };
+
+/** The recommended value of each setting in one studio section that has one (the client's own voices, words and texts have none). */
+export const recommendedFor = (section: SectionId): Record<string, unknown> =>
+  Object.fromEntries(Object.entries(BASE).filter(([k]) => BY_KEY.get(k)?.section === section));
 
 /** The keys the built-in profiles leave alone, shown as "kept as it is" in the lists. */
 export const LEFT_ALONE = FIELDS.map((x) => x.key).filter((k) => !(k in BASE));

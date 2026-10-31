@@ -62,7 +62,8 @@ describe("live read-back", () => {
     expect(rows.maxTokens.state).toBe("differs");
     expect(rows.maxTokens.here).toBe(300);
     expect(rows.maxTokens.there).toBeNull(); // -1 means no limit
-    expect(liveSummary(Object.values(rows)).differs).toBe(3);
+    expect(rows.tags).toMatchObject({ here: "CallsDash, clinic", there: null, state: "differs" }); // the labels are sent at every sync
+    expect(liveSummary(Object.values(rows)).differs).toBe(4);
   });
 
   it("compares the hidden \"Powered by\" line: matching once ElevenLabs hides it, a difference while the agent still shows it", () => {

@@ -6,15 +6,17 @@ import { dictionaries, getT } from "@/lib/i18n";
 import { fmtDateTime } from "@/lib/format";
 import { getAgent, getConversations, getDoctors, getSetting, getTenant } from "@/lib/data";
 import { RECORDING_NOTICE, greeting, mentionsRecording } from "@/lib/agent-config";
-import { EVALUATION_CRITERIA } from "@/lib/agent-extras";
+import { agentTags, criteriaFor } from "@/lib/agent-extras";
 import { PROVIDER_LABEL, defaultLlm, rowFor } from "@/lib/agent-catalog";
-import { CHOICES, LIMITS, studioOf, type SectionId, type VoiceNote } from "@/lib/agent-studio";
+import { CHOICES, LIMITS, audioTagLines, studioOf, type SectionId, type VoiceNote } from "@/lib/agent-studio";
 import { EXAMPLE_USAGE, clientRatePerCredit, costLine, fmtBhd, fmtUsd, marginOf, marginTone, toBhd } from "@/lib/pricing";
-import { catalogFromEnv, explainCatalogError, type CatalogVoice } from "@/lib/elevenlabs-catalog";
+import { catalogFromEnv, explainCatalogError, type CatalogVoice, type EffectsCatalog } from "@/lib/elevenlabs-catalog";
 import { liveRows, liveSummary, liveTexts, type LiveRow, type LiveText, type LiveValue } from "@/lib/studio-live";
 import { loadFees, modelBook } from "@/lib/studio-server";
 import { failKey, failToShow } from "@/lib/studio-fail";
-import { refreshModelsAction, resetStudioSectionAction, saveStudioSectionAction } from "@/lib/studio-actions";
+import { deleteHoldAudioAction, refreshModelsAction, resetStudioSectionAction, saveStudioSectionAction, applyRecommendedAction } from "@/lib/studio-actions";
+import { diffValues, fieldOf, recommendedFor } from "@/lib/studio-profiles";
+import { businessOf } from "@/lib/business-types";
 import { VOICES, resolveVoiceId } from "@/lib/voices";
 import type { AgentSettings, Tenant } from "@/lib/types";
 import { ConfirmDelete } from "@/components/Confirm";
@@ -28,12 +30,16 @@ import { RangeField } from "@/components/studio/RangeField";
 import { TextDiff } from "@/components/studio/TextDiff";
 import { VoiceFields, type BuiltinVoice } from "@/components/studio/VoiceFields";
 import { text } from "@/components/studio/text";
+import { showValue } from "@/components/studio/show-value";
 
 type Params = { id: string };
 type Query = {
   section?: string; done?: string; why?: string; warn?: string; fail?: string; bad?: string;
-  refreshed?: string; feesSaved?: string; feesBad?: string; saved?: string; error?: string;
+  refreshed?: string; feesSaved?: string; feesBad?: string; saved?: string; error?: string; hold?: string;
 };
+
+const HOLD_OK = ["uploaded", "removed"];
+const HOLD_ERR = ["missing", "too_big", "not_audio", "no_agent", "no_key", "refused", "confirm"];
 
 const SECTION_ORDER: SectionId[] = ["model", "voice", "conversation", "hearing", "safety", "analysis", "widget"];
 const FIELD = /^[\w.]{1,40}$/;
@@ -56,6 +62,23 @@ async function nameVoices(ids: string[]): Promise<Record<string, VoiceNote>> {
   }
 }
 
+/** A short fingerprint of a text (djb2), to key a form by the values it shows. */
+const hashOf = (s: string) => { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return (h >>> 0).toString(36); };
+
+/** ElevenLabs' audio-effects catalogue for the voice section's lists. Null when it cannot be had quickly (no key, slow, refused). */
+async function loadEffects(): Promise<EffectsCatalog | null> {
+  const api = catalogFromEnv();
+  if (!api) return null;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race<EffectsCatalog>([api.audioEffects(), new Promise<EffectsCatalog>((_, no) => { timer = setTimeout(() => no(new Error("slow")), 3000); })]);
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export default async function AssistantStudioPage({ params, searchParams }: { params: Promise<Params>; searchParams: Promise<Query> }) {
   await requireAdmin();
   const { id } = await params;
@@ -68,7 +91,7 @@ export default async function AssistantStudioPage({ params, searchParams }: { pa
   /** The texts a client component needs, picked by prefix so a page does not ship the whole dictionary. */
   const labelsFor = (...prefixes: string[]) => Object.fromEntries(Object.entries(dict).filter(([k]) => prefixes.some((p) => k.startsWith(p))));
 
-  const [agent, doctors, conversations, fees] = await Promise.all([getAgent(id), getDoctors(id), getConversations(id), loadFees()]);
+  const [agent, doctors, conversations, fees, effects] = await Promise.all([getAgent(id), getDoctors(id), getConversations(id), loadFees(), loadEffects()]);
   const st = studioOf(agent);
   // ElevenLabs' reason for the last refusal is read from here, never from the address, so a link cannot put its own words on this screen
   const failed = sp.fail && SECTION_ORDER.includes(sp.section as SectionId)
@@ -145,6 +168,19 @@ export default async function AssistantStudioPage({ params, searchParams }: { pa
       {help(name)}
     </label>
   );
+  /** A list from ElevenLabs' effects catalogue, with "None" first; a saved id ElevenLabs no longer lists stays selectable. */
+  const effectSelect = (name: string, value: string, options: { id: string; name: string; description?: string }[] | undefined) => {
+    const list = [...(options ?? [])];
+    if (value && !list.some((o) => o.id === value)) list.push({ id: value, name: value });
+    return (
+      <label>{f(name)}
+        <select name={name} defaultValue={value}>
+          <option value="">{T("studio.fx.none")}</option>
+          {list.map((o) => <option key={o.id} value={o.id} title={o.description}>{o.name}</option>)}
+        </select>
+      </label>
+    );
+  };
   const colour = (name: string, value: string) => (
     <label>{f(name)}<input type="color" name={name} defaultValue={value} /></label>
   );
@@ -177,19 +213,63 @@ export default async function AssistantStudioPage({ params, searchParams }: { pa
   };
 
   /** One folded card per section, each with its own form: saving one never touches the others. The one just saved opens by itself. */
-  const section = (key: SectionId, body: React.ReactNode, before?: React.ReactNode) => (
+  const has = (k: string) => k in dict;
+  const formKey = hashOf(JSON.stringify([agent.studio ?? null, agent.temperature, agent.voiceEn, agent.voiceAr]));
+  /** The section's recommended values, what each does, and the button that puts them on. */
+  const recommend = (key: SectionId) => {
+    const values = recommendedFor(key);
+    const keys = Object.keys(values);
+    if (!keys.length) return <small className="muted">{T("studio.rec.none")}</small>;
+    const differ = diffValues(agent, values).changes.length;
+    return (
+      <details className="recommend">
+        <summary>{T("studio.rec.summary", { n: keys.length })} · <span className={differ ? "" : "muted"}>{differ ? T("studio.rec.differs", { n: differ }) : T("studio.rec.same")}</span></summary>
+        <p className="muted" style={{ margin: ".4rem 0" }}>{T("studio.rec.help")}</p>
+        <div className="table-wrap">
+          <table className="live">
+            <thead><tr><th>{T("studio.rec.col.setting")}</th><th>{T("studio.rec.col.value")}</th><th>{T("studio.rec.col.why")}</th></tr></thead>
+            <tbody>
+              {keys.map((k) => {
+                const hint = fieldOf(k)?.hint;
+                return (
+                  <tr key={k}>
+                    <td>{f(k)}</td>
+                    <td dir="auto" data-label={T("studio.rec.col.value")}>{showValue(k, values[k], T, has)}</td>
+                    <td data-label={T("studio.rec.col.why")}><small className="muted">{hint && has(`prof.h.${hint}`) ? T(`prof.h.${hint}`) : ""}</small></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        {differ > 0 && (
+          <form action={applyRecommendedAction} className="stack" style={{ gap: ".5rem", marginBlockStart: ".5rem" }}>
+            <input type="hidden" name="tenantId" value={id} /><input type="hidden" name="section" value={key} />
+            <label className="inline"><input type="checkbox" name="confirm" required />{T("studio.rec.tick")}</label>
+            <div><SubmitButton className="btn small" type="submit">{T("studio.rec.button")}</SubmitButton></div>
+          </form>
+        )}
+      </details>
+    );
+  };
+
+  const section = (key: SectionId, body: React.ReactNode, before?: React.ReactNode, after?: React.ReactNode) => (
     <Fold
       key={key} id={key} open={sp.section === key} title={T(`studio.sec.${key}`)} hint={T(`studio.sec.${key}.help`)}
       badge={<Badge tone={touched(key) ? "info" : "neutral"}>{T(touched(key) ? "studio.state.custom" : "studio.state.default")}</Badge>}
     >
       {outcome(key)}
       {before}
-      <form action={saveStudioSectionAction} className="stack">
+      {/* keyed by what is saved, so after a save, "Use recommended" or a reset the form shows the new values (a select keeps its old choice otherwise) */}
+      <form key={formKey} action={saveStudioSectionAction} className="stack">
         <input type="hidden" name="tenantId" value={id} />
         <input type="hidden" name="section" value={key} />
+        <input type="hidden" name="more" value="1" />
         {body}
         <div className="row"><SubmitButton className="btn" type="submit">{T("studio.save")}</SubmitButton><small className="muted">{T("studio.save.help")}</small></div>
       </form>
+      {after}
+      {recommend(key)}
       <ConfirmDelete action={resetStudioSectionAction} summary={T("studio.reset.summary")} warning={T(key === "voice" ? "studio.reset.warning.voice" : "studio.reset.warning")} tick={T("studio.reset.tick")} button={T("studio.reset.button")} fields={{ tenantId: id, section: key }} />
     </Fold>
   );
@@ -265,13 +345,17 @@ export default async function AssistantStudioPage({ params, searchParams }: { pa
 
       <div className="stack">
         {section("model", (
+          <>
           <ModelFields
             rows={book.rows} defaultLlm={fallbackLlm} fees={fees} rate={rate} usage={usage} today={today} liveInfo={book.source !== "builtin"} labels={modelLabels}
             value={{ llm: st.llm, temperature: agent.temperature, maxTokens: st.maxTokens, reasoningEffort: st.reasoningEffort, parallelTools: st.parallelTools, backupMode: st.backupMode, backupModels: st.backupModels, cascadeSeconds: st.cascadeSeconds }}
           />
+          {select("serviceTier", st.serviceTier, CHOICES.serviceTier)}
+          </>
         ), modelBefore)}
 
         {section("voice", (
+          <>
           <VoiceFields
             builtins={builtins} labels={voiceLabels}
             value={{
@@ -280,6 +364,23 @@ export default async function AssistantStudioPage({ params, searchParams }: { pa
               offered: st.offeredVoices, notes,
             }}
           />
+          <fieldset className="stack">
+            <legend style={{ fontWeight: 600 }}>{T("studio.v3.title")}</legend>
+            <small className="muted">{T("studio.v3.help")}</small>
+            {area("audioTags", audioTagLines(st.audioTags), { max: 3000, rows: 4, placeholder: T("studio.v3.placeholder") })}
+          </fieldset>
+          <fieldset className="stack">
+            <legend style={{ fontWeight: 600 }}>{T("studio.fx.title")}</legend>
+            <small className="muted">{T("studio.fx.help")}</small>
+            {!effects && <small className="muted">{T("studio.fx.noCatalog")}</small>}
+            <div className="grid two">
+              {effectSelect("effectFilter", st.effectFilter, effects?.filters)}
+              {effectSelect("effectEnvironment", st.effectEnvironment, effects?.environments)}
+              {effectSelect("effectNoise", st.effectNoise, effects?.noises)}
+              <RangeField name="effectDistance" label={f("effectDistance")} hint={T("studio.h.effectDistance")} min={0} max={1} step={0.05} defaultValue={st.effectDistance} />
+            </div>
+          </fieldset>
+          </>
         ))}
 
         {section("conversation", (
@@ -309,6 +410,21 @@ export default async function AssistantStudioPage({ params, searchParams }: { pa
             {(["greetingEn", "greetingAr"] as const).filter((k) => st[k].trim() && !mentionsRecording(st[k])).map((k) => (
               <Notice key={k} tone="warn">{T("studio.greeting.noRecording", { field: f(k), example: RECORDING_NOTICE[k === "greetingEn" ? "en" : "ar"] })}</Notice>
             ))}
+            <fieldset className="stack">
+              <legend style={{ fontWeight: 600 }}>{T("studio.conv.more")}</legend>
+              <div className="grid two">
+                {select("backgroundSound", st.backgroundSound, CHOICES.backgroundSound)}
+                <RangeField name="backgroundVolume" label={f("backgroundVolume")} hint={T("studio.h.backgroundVolume")} min={LIMITS.backgroundVolume[0]} max={LIMITS.backgroundVolume[1]} step={0.05} defaultValue={st.backgroundVolume} />
+                {num("initialWaitSeconds", st.initialWaitSeconds, { min: 0, max: LIMITS.initialWaitSeconds[1], step: 0.5 })}
+                {select("turnModel", st.turnModel, CHOICES.turnModel)}
+              </div>
+              {area("ignoreTerms", st.ignoreTerms.join("\n"), { max: 1800, rows: 4, placeholder: "okay\naha\nتمام\nزين" })}
+              {check("ignoreDefaults", st.ignoreDefaults)}
+              <div className="grid two">
+                {check("chatFiles", st.chatFiles)}
+                {num("chatFilesMax", st.chatFilesMax, { min: LIMITS.chatFilesMax[0], max: LIMITS.chatFilesMax[1] })}
+              </div>
+            </fieldset>
           </div>
         ))}
 
@@ -333,9 +449,27 @@ export default async function AssistantStudioPage({ params, searchParams }: { pa
               {check("bursting", st.bursting)}
               {num("dailyLimit", st.dailyLimit, { min: LIMITS.dailyLimit[0], max: LIMITS.dailyLimit[1] })}
               {num("concurrencyLimit", st.concurrencyLimit, { min: 0, max: LIMITS.concurrencyLimit[1] })}
+              {check("queueEnabled", st.queueEnabled)}
+              {num("queueWaitSeconds", st.queueWaitSeconds, { min: LIMITS.queueWaitSeconds[0], max: LIMITS.queueWaitSeconds[1], step: 5 })}
             </div>
             <small className="muted">{T("studio.safety.retention", { days: tenant.retentionDays || 90 })}</small>
           </div>
+        ), undefined, (
+          <section className="stack hold-audio" aria-labelledby="hold-title">
+            <h3 id="hold-title" style={{ margin: 0, fontSize: "1rem" }}>{T("studio.hold.title")}</h3>
+            <small className="muted">{T("studio.hold.help")}</small>
+            {sp.hold && HOLD_OK.includes(sp.hold) && <Notice tone="ok">{T(`studio.hold.done.${sp.hold}`)}</Notice>}
+            {sp.hold && HOLD_ERR.includes(sp.hold) && <Notice tone="warn">{T(`studio.hold.err.${sp.hold}`)}</Notice>}
+            <Suspense fallback={<small className="muted" role="status">{T("studio.live.loading")}</small>}>
+              <HoldAudioNow settings={agent} T={T} />
+            </Suspense>
+            <form action="/api/hold-audio" method="post" encType="multipart/form-data" className="row">
+              <input type="hidden" name="tenantId" value={id} />
+              <label>{T("studio.hold.file")}<input type="file" name="file" accept=".mp3,.wav,audio/mpeg,audio/wav" required /></label>
+              <SubmitButton className="btn small" type="submit">{T("studio.hold.upload")}</SubmitButton>
+            </form>
+            <ConfirmDelete action={deleteHoldAudioAction} summary={T("studio.hold.remove.summary")} warning={T("studio.hold.remove.warning")} tick={T("studio.hold.remove.tick")} button={T("studio.hold.remove.button")} fields={{ tenantId: id }} />
+          </section>
         ))}
 
         {section("analysis", (
@@ -344,13 +478,18 @@ export default async function AssistantStudioPage({ params, searchParams }: { pa
             <fieldset>
               <legend style={{ fontWeight: 600, fontSize: ".88rem" }}>{T("studio.criteria.title")}</legend>
               <small className="muted">{T("studio.criteria.help")}</small>
-              {EVALUATION_CRITERIA.map((c) => (
+              {criteriaFor(tenant).map((c) => (
                 <label key={c.id} className="inline">
                   <input type="checkbox" name="criteriaOff" value={c.id} defaultChecked={st.criteriaOff.includes(c.id)} />
                   <span><strong>{T(`studio.criteria.${c.id}`)}</strong><small className="muted" style={{ display: "block" }}>{T(`studio.criteria.${c.id}.help`)}</small></span>
                 </label>
               ))}
             </fieldset>
+            <div className="stack" style={{ gap: ".35rem" }}>
+              <strong style={{ fontSize: ".88rem" }}>{T("studio.tags.auto")}</strong>
+              <div className="row">{agentTags(tenant, []).map((w) => <span key={w} className="badge neutral">{w}</span>)}</div>
+            </div>
+            {area("tags", st.tags.join("\n"), { max: 600, rows: 3, placeholder: businessOf(tenant).type === "clinic" ? "Bahrain\nPilot" : "Bahrain" })}
           </div>
         ))}
 
@@ -473,5 +612,24 @@ async function LivePanel({ settings, tenant, T }: { settings: AgentSettings; ten
         ))}
       </div>
     </>
+  );
+}
+
+/** The hold audio callers hear now, read from the agent in ElevenLabs. */
+async function HoldAudioNow({ settings, T }: { settings: AgentSettings; T: ReturnType<typeof text> }) {
+  const api = catalogFromEnv();
+  if (!api || !settings.elevenLabsAgentId) return null;
+  let hold: Awaited<ReturnType<typeof api.getAgent>>["holdAudio"];
+  try {
+    hold = (await api.getAgent(settings.elevenLabsAgentId)).holdAudio;
+  } catch {
+    return <small className="muted">{T("studio.hold.unknown")}</small>;
+  }
+  if (!hold) return <small className="muted">{T("studio.hold.default")}</small>;
+  return (
+    <div className="stack" style={{ gap: ".3rem" }}>
+      <span>{T("studio.hold.current", { name: hold.name })}{hold.seconds ? ` · ${Math.round(hold.seconds)} s` : ""}</span>
+      {hold.url && <audio controls preload="none" src={hold.url} style={{ width: "100%", maxWidth: "26rem" }} />}
+    </div>
   );
 }
