@@ -5,7 +5,7 @@ import * as store from "@/lib/data";
 import { authAdmin } from "@/lib/auth-admin-supabase";
 import { checklistFor } from "@/lib/setup-facts";
 import { progress, type ChecklistId } from "@/lib/checklist";
-import { applyScanAction, scanWebsiteAction, setupDetailsAction, toggleChecklistAction } from "@/lib/onboarding-actions";
+import { applyScanAction, scanWebsiteAction, toggleChecklistAction } from "@/lib/onboarding-actions";
 import { listUsers } from "@/lib/users";
 import { userFormText } from "@/lib/user-text";
 import { fmtDateTime } from "@/lib/format";
@@ -26,13 +26,12 @@ export default async function Setup({ params, searchParams }: { params: Promise<
   const scan = tenant.onboarding.scan;
   const base = `/admin/clients/${id}`;
   const where: Record<ChecklistId, string | null> = {
-    details: "#details", branding: `${base}/business/branding`, plan: `${base}/billing`, knowledge: "#website", hours: null, calendar: `${base}/people#doctors`,
+    details: `${base}/business#contact`, branding: `${base}/business/branding`, plan: `${base}/billing`, knowledge: "#website", hours: null, calendar: `${base}/people#doctors`,
     team: "#team", agent: `${base}/channels`, channel: `${base}/channels`, test: `${base}/channels`,
   };
-  const name = locale === "ar" ? tenant.branding.displayNameAr : tenant.name;
   return (
     <>
-      <PageHead title={`${t("setup.title")}: ${name}`} subtitle={t("setup.subtitle")} actions={<Link className="btn ghost" href={base}>{t("common.back")}</Link>} />
+      <PageHead title={t("setup.title")} subtitle={t("setup.subtitle")} />
       {saved && <Notice tone="ok">{t("users.saved")}</Notice>}
       {(error === "name" || error === "domain") && <Notice tone="warn">{t(`admin.err.${error}` as "admin.err.name")}</Notice>}
 
@@ -64,16 +63,13 @@ export default async function Setup({ params, searchParams }: { params: Promise<
       <section className="card stack" id="details">
         <h2>{t("setup.details.title")}</h2>
         <p className="muted">{t("setup.details.help")}</p>
-        <form action={setupDetailsAction} className="stack">
-          <input type="hidden" name="tenantId" value={id} />
-          <div className="grid two" style={{ gap: ".75rem" }}>
-            <label>{t("setup.domain")}<input name="domain" defaultValue={tenant.branding.domain ?? ""} placeholder="clinic.example.bh" dir="ltr" maxLength={200} /></label>
-            <label>{t("setup.phone")}<input name="supportPhone" defaultValue={tenant.branding.supportPhone ?? ""} dir="ltr" maxLength={40} inputMode="tel" /></label>
-            <label>{t("setup.email")}<input name="supportEmail" type="email" defaultValue={tenant.branding.supportEmail ?? ""} dir="ltr" maxLength={120} /></label>
-            <label>{t("setup.whatsapp")}<input name="supportWhatsapp" defaultValue={tenant.branding.supportWhatsapp ?? ""} dir="ltr" maxLength={40} inputMode="tel" /></label>
-          </div>
-          <div><SubmitButton className="btn" type="submit">{t("common.save")}</SubmitButton></div>
-        </form>
+        <div className="cred"><dl>
+          <dt>{t("setup.domain")}</dt><dd dir="ltr">{tenant.branding.domain || "–"}</dd>
+          <dt>{t("setup.phone")}</dt><dd dir="ltr">{tenant.branding.supportPhone || "–"}</dd>
+          <dt>{t("setup.email")}</dt><dd dir="ltr">{tenant.branding.supportEmail || "–"}</dd>
+          <dt>{t("setup.whatsapp")}</dt><dd dir="ltr">{tenant.branding.supportWhatsapp || "–"}</dd>
+        </dl></div>
+        <div><Link className="btn ghost" href={`${base}/business#contact`}>{t("ws.editOnBusiness")}</Link></div>
       </section>
 
       <section className="card stack" id="website">

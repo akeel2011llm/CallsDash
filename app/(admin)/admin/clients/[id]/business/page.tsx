@@ -9,6 +9,7 @@ import { getTenant } from "@/lib/data";
 import { adminTenantSettingsAction } from "@/lib/actions";
 import { adminClientProfileAction, adminBusinessAction } from "@/lib/manage-actions";
 import { BusinessFields } from "@/components/BusinessFields";
+import { ContactForm } from "@/components/ContactForm";
 import { businessOf, vocabOf } from "@/lib/business-types";
 
 export default async function ClientBusiness({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ saved?: string; error?: string }> }) {
@@ -27,7 +28,7 @@ export default async function ClientBusiness({ params, searchParams }: { params:
       {(error === "name" || error === "domain") && <Notice tone="warn">{t(`admin.err.${error}` as "admin.err.name")}</Notice>}
       {saved === "business" && <Notice tone="ok">{plain("biz.saved")}</Notice>}
       {saved && saved !== "business" && <Notice tone="ok">{t("agent.saved").split(".")[0]}.</Notice>}
-      <PageHead title={t("ws.business")} />
+      <PageHead title={t("ws.business")} actions={<Link className="btn ghost" href={`/admin/clients/${id}/business/branding`}>{t("brand.open")}</Link>} />
       <FoldControls openAll={t("fold.openAll")} closeAll={t("fold.closeAll")} />
       <div className="grid two fold-grid">
       <Fold id="profile" open title={t("admin.profile")}>
@@ -61,25 +62,18 @@ export default async function ClientBusiness({ params, searchParams }: { params:
           <SubmitButton className="btn" type="submit">{plain("common.save")}</SubmitButton>
         </form>
       </Fold>
-      <Fold id="settings" title={t("admin.branding")}>
+      <Fold id="contact" open={saved === "details" || error === "domain"} title={t("ws.contact")}>
+        <ContactForm tenant={tenant} t={t} returnTo={returnTo} />
+      </Fold>
+      <Fold id="settings" title={t("ws.domains")}>
         <form action={adminTenantSettingsAction} className="stack">
           <input type="hidden" name="tenantId" value={id} /><input type="hidden" name="returnTo" value={returnTo} />
-          <label>{t("admin.displayName")}<input name="displayName" defaultValue={tenant.branding.displayName} /></label>
-          <label>{t("admin.displayNameAr")}<input name="displayNameAr" defaultValue={tenant.branding.displayNameAr} dir="rtl" /></label>
-          <label>{t("admin.color")}<input type="color" name="primaryColor" defaultValue={tenant.branding.primaryColor} /></label>
-          <small><Link href={`/admin/clients/${id}/business/branding`}>{t("brand.open")}</Link></small>
-          <label>{t("admin.allowedDomains")}<input name="allowedDomains" defaultValue={tenant.allowedDomains.join(", ")} /></label>
-          <label>{t("admin.policy")}
-            <select name="zeroBalancePolicy" defaultValue={tenant.zeroBalancePolicy}>
-              <option value="pause">{t("admin.policy.pause")}</option>
-              <option value="overdraft">{t("admin.policy.overdraft")}</option>
-            </select>
-          </label>
+          <label>{t("admin.allowedDomains")}<input name="allowedDomains" defaultValue={tenant.allowedDomains.join(", ")} dir="ltr" /></label>
+          <small className="muted">{t("ws.domains.help")}</small>
           <SubmitButton className="btn" type="submit">{t("common.save")}</SubmitButton>
         </form>
       </Fold>
       </div>
-      <p><Link className="btn ghost" href={`/admin/clients/${id}/business/branding`}>{t("brand.open")}</Link></p>
     </>
   );
 }

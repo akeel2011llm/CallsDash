@@ -9,7 +9,7 @@ import { addMonths } from "@/lib/credits";
 import { planNames } from "@/lib/plans";
 import { PlanPicker } from "@/components/PlanPicker";
 import { getLedger, getTenant, getTopUpRequests, getWallet, listPackages } from "@/lib/data";
-import { adminRenewAction, adminTopUpAction, adminAddPlanAction, adminEndPlanAction } from "@/lib/actions";
+import { adminTenantSettingsAction, adminRenewAction, adminTopUpAction, adminAddPlanAction, adminEndPlanAction } from "@/lib/actions";
 import { adminAdjustCreditsAction, adminDeclineTopUpAction } from "@/lib/manage-actions";
 
 export default async function ClientBilling({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ saved?: string; error?: string }> }) {
@@ -81,6 +81,18 @@ export default async function ClientBilling({ params, searchParams }: { params: 
           </form>
           <small className="muted">{t("admin.adjust.help")}</small>
         </details>
+      </Fold>
+      <Fold id="policy" title={t("admin.policy")}>
+        <form action={adminTenantSettingsAction} className="stack">
+          <input type="hidden" name="tenantId" value={id} /><input type="hidden" name="returnTo" value={returnTo} />
+          <label>{t("admin.policy")}
+            <select name="zeroBalancePolicy" defaultValue={tenant.zeroBalancePolicy}>
+              <option value="pause">{t("admin.policy.pause")}</option>
+              <option value="overdraft">{t("admin.policy.overdraft")}</option>
+            </select>
+          </label>
+          <div><SubmitButton className="btn" type="submit">{t("common.save")}</SubmitButton></div>
+        </form>
       </Fold>
       <Fold id="plans" open title={t("plans.title")} hint={t("plans.help")}>
         <div className="table-wrap">

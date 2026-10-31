@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getT, type Key } from "@/lib/i18n";
 import * as store from "@/lib/data";
@@ -34,7 +33,6 @@ export default async function Channels({ params, searchParams }: { params: Promi
   const connected = Boolean(agent.elevenLabsAgentId) && el?.managed === false;
   const ig = tenant.integrations.instagram ?? {};
   const ph = tenant.integrations.phone ?? {};
-  const base = `/admin/clients/${id}`;
   const snippet = `<script src="${url}/widget.js" data-tenant="${tenant.slug}" async></script>`;
   const statusSelect = (ch: Channel) => (
     <label>{t("channels.status")}
@@ -46,7 +44,7 @@ export default async function Channels({ params, searchParams }: { params: Promi
   const hidden = <input type="hidden" name="tenantId" value={id} />;
   return (
     <>
-      <PageHead title={`${t("channels.title")}: ${locale === "ar" ? tenant.branding.displayNameAr : tenant.name}`} subtitle={t("channels.subtitle")} actions={<Link className="btn ghost" href={base}>{t("common.back")}</Link>} />
+      <PageHead title={t("channels.title")} subtitle={t("channels.subtitle")} />
       {saved && <Notice tone="ok">{saved === "1" ? t("channels.saved") : t(`channels.saved.${saved}` as Key)}</Notice>}
       {error && <Notice tone="warn">{t(`channels.err.${error}` as Key)}</Notice>}
 

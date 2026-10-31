@@ -83,9 +83,12 @@ export default async function BrandingPage({ params, searchParams }: { params: P
 
           <section className="card stack">
             <h2>{t("brand.support")}</h2>
-            <label>{t("brand.phone")}<input name="supportPhone" defaultValue={b.supportPhone ?? ""} dir="ltr" maxLength={40} /></label>
-            <label>{t("brand.email")}<input name="supportEmail" type="email" defaultValue={b.supportEmail ?? ""} dir="ltr" maxLength={120} /></label>
-            <label>{t("brand.whatsapp")}<input name="supportWhatsapp" defaultValue={b.supportWhatsapp ?? ""} dir="ltr" maxLength={40} /></label>
+            <div className="cred"><dl>
+              <dt>{t("brand.phone")}</dt><dd dir="ltr">{b.supportPhone || "–"}</dd>
+              <dt>{t("brand.email")}</dt><dd dir="ltr">{b.supportEmail || "–"}</dd>
+              <dt>{t("brand.whatsapp")}</dt><dd dir="ltr">{b.supportWhatsapp || "–"}</dd>
+            </dl></div>
+            <small><Link href={`/admin/clients/${id}/business#contact`}>{t("ws.editOnBusiness")}</Link></small>
           </section>
 
           <section className="card stack">

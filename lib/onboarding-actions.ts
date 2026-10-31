@@ -1,5 +1,6 @@
 "use server";
 
+import { safePath } from "./format";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "./auth";
@@ -26,10 +27,12 @@ export async function setupDetailsAction(f: FormData) {
   const oldDomain = t.branding.domain;
   // the widget may load on the client's own website
   const allowed = [...new Set([...t.allowedDomains.filter((d) => d !== oldDomain), ...(domain ? [domain] : [])])];
+  // back to where the form was (Business tab or the setup wizard), with the answer added
+  const to = (extra: string) => { const p = safePath(f.get("returnTo"), setupUrl(id)); return `${p}${p.includes("?") ? "&" : "?"}${extra}#contact`; };
   try { await store.updateTenant(id, { branding, allowedDomains: allowed }, actor); }
-  catch (e) { if (e instanceof DuplicateError) redirect(setupUrl(id, `error=${e.field}`)); throw e; }
+  catch (e) { if (e instanceof DuplicateError) redirect(to(`error=${e.field}`)); throw e; }
   refresh(id);
-  redirect(setupUrl(id, "saved=details"));
+  redirect(to("saved=details"));
 }
 
 /** Step 2: read the client's website. Nothing is applied until the admin accepts it. */
