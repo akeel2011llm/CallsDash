@@ -14,6 +14,7 @@ export const GUIDES = {
   studioProfiles: "prof.guide.title",
   procedures: "proc.guide.title",
   agentTests: "tests.guide.title",
+  workflow: "wf.guide.title",
   data: "data.guide.title",
   tables: "tables.guide.title",
 } as const satisfies Record<string, Key>;

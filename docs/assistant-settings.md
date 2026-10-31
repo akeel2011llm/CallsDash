@@ -76,6 +76,18 @@ Read from ElevenLabs' JavaScript SDK 2.75.0 (`conversation_config.agent.prompt.s
 
 **Agent tests** (page `/admin/clients/[id]/assistant/tests`, card in the studio; code `lib/agent-tests.ts`, `lib/agent-test-actions.ts`): each test is one thing a caller says plus, in plain words, what a good reply does, with an optional good and bad example. It is an ElevenLabs reply test (`type: "llm"`, `POST /v1/convai/agent-testing/create`, `PUT`/`DELETE /v1/convai/agent-testing/{id}`). Tests belong to the whole ElevenLabs account, so CallsDash keeps each client's list with a copy of every test (setting `agentTests.<clientId>`, at most 30) and the id of the last run. *Run all tests* or *Run this test* calls `POST /v1/convai/agents/{agent}/run-tests`; the page reads `GET /v1/convai/test-invocations/{id}` and refreshes itself every 5 seconds (up to 3 minutes) while a test is still running. A failed test opens with the assistant's reply and the judge's reason. *Add the ready-made tests* adds opening hours, booking asks for details, no made-up discounts, asks for a person, answers in Arabic, plus no medical advice for a clinic, in the client's own words (skipping names it already has). Every run uses a little ElevenLabs balance. Shapes from the SDK 2.75.0, not yet tried against the real service.
 
+## Added in step 6 (2026-10-31): workflow
+
+Page `/admin/clients/[id]/assistant/workflow` (card in the studio; code `lib/workflow.ts`, `lib/workflow-actions.ts`). The workflow is the agent's `workflow` (`nodes` and `edges`), kept only in ElevenLabs; a PATCH with `workflow` replaces it whole, and a sync from CallsDash never sends it. CallsDash edits one shape: `start_node` → `main_assistant` (an `override_agent` with no overrides, so it is the studio's assistant) and steps around it. Each step is reached from the main assistant by an LLM condition ("when"):
+
+- *Specialist* (`override_agent` with `additional_prompt`): optional `backward_condition` to come back, optional own `end` node to end the call.
+- *Fixed message* (`say`, literal text): then back to the main assistant (unconditional edge) or its own `end` node.
+- *Another assistant* (`standalone_agent` with `agent_id`, optional transfer message).
+- *Phone number* (`phone_number`, conference transfer; only does something on phone calls).
+- *End the call* (`end`).
+
+Steps can be added (blank or from four templates: complaints, prices, emergency 999, talk to a person), edited, moved up or down, and deleted; at most 12. `readWorkflow` accepts only exactly this shape; anything else (tools, expressions, links between steps, a main assistant with its own settings) is shown read-only, and the only action is *Remove the workflow* (tick box, sends empty `nodes`/`edges`). Shapes from the SDK 2.75.0, not yet tried against the real service.
+
 ## Not in the studio
 
 Left out on purpose: pronunciation dictionaries, thinking budget, monitoring, PII redaction and zero retention (they would break recordings and the CPR lookups), ElevenLabs' own alerting (it needs a webhook, Slack or PagerDuty connection made inside ElevenLabs; CallsDash has its own alerts), per-channel text behaviour, keypad (DTMF) input until a phone number exists. A phone number will also need the audio format `ulaw_8000` for the agent's output and input when it is connected (Twilio).

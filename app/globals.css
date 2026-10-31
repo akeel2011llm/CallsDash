@@ -672,3 +672,11 @@ details.fold[open] > summary { border-block-end: 1px solid var(--line); }
 
 /* setup wizard: Back on one side, Next on the other (milestone 5) */
 .wiz-nav { justify-content: space-between; margin-block-start: .25rem; }
+
+/* Workflow map (assistant studio > Workflow): the main assistant, then each step under it, joined by a line */
+.wf-map { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .75rem; position: relative; }
+.wf-map::before { content: ""; position: absolute; inset-inline-start: 1.1rem; top: 1rem; bottom: 1rem; border-inline-start: 2px dashed var(--line); }
+.wf-node { position: relative; padding-inline-start: 2.2rem; min-width: 0; }
+.wf-node::before { content: ""; position: absolute; inset-inline-start: .75rem; top: 1.15rem; width: .8rem; height: .8rem; border-radius: 50%; background: var(--brand); }
+.wf-main { display: flex; flex-direction: column; gap: .15rem; padding-block: .6rem; }
+.wf-node > details { margin: 0; }
