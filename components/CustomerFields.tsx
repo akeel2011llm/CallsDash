@@ -1,16 +1,20 @@
 import type { Customer } from "@/lib/types";
+import { ID_CPR, asksId, idInputProps, type IdRule } from "@/lib/id-rule";
 
 type T = (k: never) => string;
 
-/** The customer form's fields, for adding and for editing. Phone and CPR read left to right in either language. */
-export function CustomerFields({ t, c }: { t: T; c?: Customer }) {
+/**
+ * The customer form's fields, for adding and for editing. Phone and CPR read left to right in either language. `id` is the
+ * client's ID number (lib/id-rule.ts); a business that asks for none has no ID box.
+ */
+export function CustomerFields({ t, c, id = ID_CPR }: { t: T; c?: Customer; id?: IdRule }) {
   const tr = t as unknown as (k: string) => string;
   return (
     <>
       {c && <input type="hidden" name="id" value={c.id} />}
       <label>{tr("customers.name")}<input name="name" defaultValue={c?.name ?? ""} maxLength={120} autoComplete="off" /></label>
       <label>{tr("customers.phone")}<input name="phone" dir="ltr" inputMode="tel" required defaultValue={c?.phone ?? ""} maxLength={24} autoComplete="off" /><small className="muted">{tr("customers.phone.help")}</small></label>
-      <label>{tr("customers.cpr")}<input name="cpr" dir="ltr" inputMode="numeric" defaultValue={c?.cpr ?? ""} maxLength={20} autoComplete="off" /><small className="muted">{tr("customers.cpr.help")}</small></label>
+      {asksId(id) && <label>{tr("customers.cpr")}<input name="cpr" {...idInputProps(id)} placeholder={undefined} defaultValue={c?.cpr ?? ""} /><small className="muted">{tr("customers.cpr.help")}</small></label>}
       <label>{tr("customers.email")}<input name="email" dir="ltr" type="email" defaultValue={c?.email ?? ""} maxLength={120} autoComplete="off" /></label>
       <label>{tr("customers.language")}
         <select name="language" defaultValue={c?.language ?? ""}>

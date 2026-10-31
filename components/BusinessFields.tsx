@@ -1,5 +1,6 @@
 import { BUSINESS_TYPES, MAX_ROLES, VOCAB, businessOf, rolesOf, type BusinessProfile, type WordKey } from "@/lib/business-types";
 import type { Key } from "@/lib/i18n";
+import { ID_KINDS, idRuleOf } from "@/lib/id-rule";
 
 /**
  * The business inputs, shared by New client and the client's Business tab: the type (a starting point only), the client's own
@@ -11,6 +12,7 @@ export function BusinessFields({ t, business }: { t: (k: Key) => string; busines
   const w = b.words ?? {};
   const base = VOCAB[b.type];
   const roles = business ? rolesOf({ business }) : [];
+  const id = idRuleOf(business ? { business } : null);
   const lines = [...roles, ...Array.from({ length: Math.min(3, MAX_ROLES - roles.length) }, () => null)];
   const word = (k: WordKey, ph: string, ar: boolean) => (
     <label key={k}>{t(`biz.w.${k}` as Key)}<input name={k} defaultValue={w[k] ?? ""} placeholder={ph} maxLength={40} dir={ar ? "rtl" : "ltr"} /></label>
@@ -26,6 +28,34 @@ export function BusinessFields({ t, business }: { t: (k: Key) => string; busines
       <input type="hidden" name="schedulingShown" value="1" />
       <label className="inline"><input type="checkbox" name="staffScheduling" defaultChecked={b.staffScheduling} />{t("biz.scheduling")}</label>
       <small className="muted">{t("biz.scheduling.help")}</small>
+
+      <details className="idbox" open={id.kind !== "cpr"}>
+        <summary>{t("biz.id")}</summary>
+        <div className="stack" style={{ marginBlockStart: ".5rem" }}>
+          <small className="muted">{t("biz.id.help")}</small>
+          <input type="hidden" name="idShown" value="1" />
+          <label>{t("biz.id.kind")}
+            <select name="idKind" defaultValue={id.kind}>
+              {ID_KINDS.map((k) => <option key={k} value={k}>{t(`biz.id.kind.${k}` as Key)}</option>)}
+            </select>
+          </label>
+          <div className="id-custom stack">
+            <div className="form-cols">
+              <label>{t("biz.id.en")}<input name="idEn" defaultValue={id.kind === "custom" ? id.en : ""} maxLength={40} placeholder="Passport number" dir="ltr" /></label>
+              <label>{t("biz.id.ar")}<input name="idAr" defaultValue={id.kind === "custom" ? id.ar : ""} maxLength={40} placeholder="رقم الجواز" dir="rtl" /></label>
+              <label>{t("biz.id.format")}
+                <select name="idFormat" defaultValue={id.format ?? "digits"}>
+                  <option value="digits">{t("biz.id.format.digits")}</option>
+                  <option value="text">{t("biz.id.format.text")}</option>
+                </select>
+              </label>
+              <label>{t("biz.id.length")}<input name="idLength" type="number" min={4} max={20} defaultValue={id.length ?? ""} inputMode="numeric" dir="ltr" /></label>
+            </div>
+            <small className="muted">{t("biz.id.length.help")}</small>
+          </div>
+          <small className="muted">{t("biz.id.note")}</small>
+        </div>
+      </details>
 
       <details open={Boolean(business?.roles?.length)}>
         <summary>{t("biz.roles")}</summary>

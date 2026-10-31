@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { asksId, idInputProps, idRuleOf } from "@/lib/id-rule";
 import { notFound } from "next/navigation";
 import { getT } from "@/lib/i18n";
 import { dayKey, fill, fmtDateTime, fmtTime } from "@/lib/format";
@@ -36,6 +37,7 @@ export async function BookingDetailView({ base, tenant, doctorId, id, sp, canDel
   );
   const phoneDigits = booking.patientPhone.replace(/\D/g, "");
   const wa = confirmationOptions(tenant);
+  const idRule = idRuleOf(tenant);
   const msg = booking.message;
   // a note that says "sending" for more than ten minutes means the sending was cut short: nobody knows if it arrived
   const stuck = msg?.status === "sending" && Date.now() - Date.parse(msg.at) > 10 * 60_000;
@@ -64,7 +66,7 @@ export async function BookingDetailView({ base, tenant, doctorId, id, sp, canDel
         <div>{t("bookings.ref")}: <strong dir="ltr">{bookingRef(booking.id)}</strong></div>
         <div>{t("common.service")}: {booking.service}</div>
         <div>{t("common.phone")}: <a href={`tel:+${phoneDigits}`} dir="ltr">{booking.patientPhone}</a> · <a href={`https://wa.me/${phoneDigits}`} target="_blank" rel="noreferrer">WhatsApp</a></div>
-        <div>{t("bookings.patientCpr")}: {booking.patientCpr ? <span dir="ltr">{booking.patientCpr}</span> : <span className="muted">{t("bookings.noCpr")}</span>}</div>
+        {(asksId(idRule) || booking.patientCpr) && <div>{t("bookings.patientCpr")}: {booking.patientCpr ? <span dir="ltr">{booking.patientCpr}</span> : <span className="muted">{t("bookings.noCpr")}</span>}</div>}
         <small className="muted">{t("bookings.remindersNote")}</small>
         <div className="row">
           {active && status("completed", t("bookings.complete"), "btn small")}
@@ -107,7 +109,7 @@ export async function BookingDetailView({ base, tenant, doctorId, id, sp, canDel
           <div className="row">
             <label style={{ flex: 2, minWidth: 180 }}>{t("bookings.patient")}<input name="patientName" required maxLength={120} defaultValue={booking.patientName} /></label>
             <label style={{ flex: 1, minWidth: 150 }}>{t("common.phone")}<input name="patientPhone" required maxLength={30} defaultValue={booking.patientPhone} dir="ltr" inputMode="tel" /></label>
-            <label style={{ flex: 1, minWidth: 130 }}>{t("bookings.patientCpr")}<input name="patientCpr" maxLength={12} defaultValue={booking.patientCpr ?? ""} dir="ltr" inputMode="numeric" autoComplete="off" required={Boolean(booking.patientCpr)} /></label>
+            {asksId(idRule) && <label style={{ flex: 1, minWidth: 130 }}>{t("bookings.patientCpr")}<input name="patientCpr" {...idInputProps(idRule)} placeholder={undefined} defaultValue={booking.patientCpr ?? ""} required={Boolean(booking.patientCpr)} /></label>}
           </div>
           <label>{t("common.service")}<input name="service" maxLength={120} defaultValue={booking.service} /></label>
           {wa.languages.length > 1 && (

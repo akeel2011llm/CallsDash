@@ -6,6 +6,7 @@ import { requireAdmin, requireClient } from "./auth";
 import { autoSync } from "./auto-sync";
 import { getData } from "./data";
 import { CustomerError, saveCustomerByStaff } from "./customers";
+import { idRuleOf } from "./id-rule";
 import { MAX_IMPORT_BYTES, importCustomers, importItems, importKnowledge, isImportKind, type SheetInput } from "./data-hub";
 import { sheetFromFile } from "./sheet";
 import { XlsxError } from "./xlsx";
@@ -133,7 +134,7 @@ export async function dataRowAction(f: FormData) {
       await saveCustomerByStaff(d, s.tenant.id, {
         id: id || undefined, name: str(f, "name"), phone: str(f, "phone"), cpr: str(f, "cpr"), email: str(f, "email"),
         language: lang === "ar" || lang === "en" ? (lang as Locale) : undefined, notes: str(f, "notes"),
-      }, s.actor);
+      }, s.actor, idRuleOf(s.tenant));
     } catch (e) {
       if (e instanceof CustomerError) return back(`err=${e.code}`);
       throw e;
@@ -164,7 +165,7 @@ export async function dataImportAction(f: FormData) {
   catch (e) { if (e instanceof XlsxError) return done(s, "err=badfile", "transfer"); throw e; }
   const d = await getData();
   const r = kind === "catalogue" ? await importItems(d, s.tenant.id, text, s.actor)
-    : kind === "customers" ? await importCustomers(d, s.tenant.id, text, s.actor)
+    : kind === "customers" ? await importCustomers(d, s.tenant.id, text, s.actor, idRuleOf(s.tenant))
       : await importKnowledge(d, s.tenant.id, text, s.actor);
   if (r.missingColumn) return done(s, `err=column&col=${r.missingColumn}`, "transfer");
   if (kind === "knowledge" && (r.added || r.updated)) await autoSync(s.tenant.id, s.actor);

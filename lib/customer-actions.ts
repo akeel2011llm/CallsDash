@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireClient } from "./auth";
 import { CustomerError, saveCustomerByStaff } from "./customers";
+import { asksId, idRuleOf } from "./id-rule";
 import { getData } from "./data";
 import { autoSync } from "./auto-sync";
 import { lookupModeOf } from "./customers";
@@ -22,7 +23,7 @@ export async function saveCustomerAction(f: FormData) {
     saved = await saveCustomerByStaff(await getData(), tenant.id, {
       id: id || undefined, name: str(f, "name"), phone: str(f, "phone"), cpr: str(f, "cpr"), email: str(f, "email"),
       language: lang === "ar" || lang === "en" ? (lang as Locale) : undefined, notes: str(f, "notes"),
-    }, actor);
+    }, actor, idRuleOf(tenant));
   } catch (e) {
     if (e instanceof CustomerError) redirect(`${back}?err=${e.code}`);
     throw e;
@@ -46,7 +47,7 @@ export async function deleteCustomerAction(f: FormData) {
 export async function saveLookupModeAction(f: FormData) {
   const { tenant, actor, staffRole } = await requireClient();
   if (staffRole !== "manager") redirect("/app/customers");
-  const mode = str(f, "mode") === "cpr" ? "cpr" : "phone";
+  const mode = str(f, "mode") === "cpr" && asksId(idRuleOf(tenant)) ? "cpr" : "phone";
   const data = await getData();
   const cur = await data.getAgent(tenant.id);
   if (lookupModeOf(cur) !== mode) {

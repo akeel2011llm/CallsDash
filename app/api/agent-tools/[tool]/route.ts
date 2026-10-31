@@ -6,6 +6,7 @@ import { getData } from "@/lib/data";
 import { sharedCalendar } from "@/lib/booking-service";
 import { elevenLabsFromEnv } from "@/lib/elevenlabs-api";
 import { asciiDigits } from "@/lib/cpr";
+import { asksId, idRuleOf, idify, type IdRule } from "@/lib/id-rule";
 import { appUrl } from "@/lib/app-url";
 import { ensureSharedTools } from "@/lib/agent-sync";
 import { badHeaderSetting } from "@/lib/header-safe";
@@ -80,7 +81,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ tool: string }
     log(undefined, { ok: false, error: "unknown_agent", message: `No client has agent "${str(body.agent_id).slice(0, 60)}". Press Sync for the client.` });
     return NextResponse.json({ error: "unknown agent" }, { status: 404 });
   }
-  if (CPR_TOOLS.has(tool) && !("patient_cpr" in body)) {
+  const rule = idRuleOf(tenant);
+  // a business that asks for no ID number never sends one, so only a client that asks for one can have outdated tools
+  if (CPR_TOOLS.has(tool) && asksId(rule) && !("patient_cpr" in body)) {
     await refreshSharedTools(data);
     const res = {
       ok: false, error: "tools_outdated",
@@ -89,7 +92,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ tool: string }
     log(tenant.id, res);
     return NextResponse.json(res);
   }
-  const res = await run(tool, body, data, tenant.id);
+  const res = await run(tool, body, data, tenant.id, rule);
   if (!res) return NextResponse.json({ error: "unknown tool" }, { status: 404 });
   log(tenant.id, res);
   const { detail: _internal, ...answer } = res; // the log keeps the internal error; the caller never hears it
@@ -97,7 +100,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ tool: string }
 }
 
 /** The tool's answer for the agent, or null for a tool that does not exist. */
-async function run(tool: string, body: Record<string, unknown>, data: Awaited<ReturnType<typeof getData>>, tenantId: string): Promise<Record<string, unknown> | null> {
+async function run(tool: string, body: Record<string, unknown>, data: Awaited<ReturnType<typeof getData>>, tenantId: string, rule: IdRule): Promise<Record<string, unknown> | null> {
   const tenant = { id: tenantId };
   // A booking or a move also sends the patient their WhatsApp confirmation, after the assistant has its answer (lib/booking-notify.ts).
   const svc = createBookingService(data, sharedCalendar(), undefined, { notify: bookingNotifier({ data }) });
@@ -128,9 +131,11 @@ async function run(tool: string, body: Record<string, unknown>, data: Awaited<Re
         // Field names match cancel_appointment and reschedule_appointment's inputs, so the model copies booking_id and doctor_id across unchanged.
         return ok({
           bookings: bookings.map((b) => ({ booking_id: b.bookingId, doctor_id: b.doctorId, doctor: b.doctor, starts_at: b.start, label: b.label, service: b.service })),
-          ...(bookings.length ? {} : { message: str(body.patient_phone)
-            ? "No upcoming booking was found for this CPR number and phone number. Read the CPR number back to the patient to check it, then offer to book a new appointment or take a message."
-            : "No upcoming booking was found for this CPR number. Read the number back to the patient to check it. If they are sure they have a booking, ask for the phone number it was made with and call find_patient_booking again with both. Otherwise offer to book a new appointment or take a message." }),
+          ...(bookings.length ? {} : { message: !asksId(rule)
+            ? "No upcoming booking was found for this phone number. Read the number back to the customer to check it, then offer to book a new appointment or take a message."
+            : idify(str(body.patient_phone)
+              ? "No upcoming booking was found for this CPR number and phone number. Read the CPR number back to the patient to check it, then offer to book a new appointment or take a message."
+              : "No upcoming booking was found for this CPR number. Read the number back to the patient to check it. If they are sure they have a booking, ask for the phone number it was made with and call find_patient_booking again with both. Otherwise offer to book a new appointment or take a message.", rule) }),
         });
       }
       case "cancel_appointment":
@@ -141,15 +146,15 @@ async function run(tool: string, body: Record<string, unknown>, data: Awaited<Re
           newStartsAt: str(body.new_starts_at), doctorId: str(body.doctor_id) || undefined, language: lang(body.language),
         }));
       case "lookup_customer":
-        return ok(await lookupCustomer(data, tenant.id, { phone: str(body.patient_phone), cpr: str(body.patient_cpr) || undefined }, lookupModeOf(await data.getAgent(tenant.id))));
+        return ok(await lookupCustomer(data, tenant.id, { phone: str(body.patient_phone), cpr: str(body.patient_cpr) || undefined }, lookupModeOf(await data.getAgent(tenant.id), rule), rule));
       case "save_customer": {
         const r = await saveCustomerFromAssistant(data, tenant.id, {
           phone: str(body.patient_phone), name: str(body.patient_name) || undefined, cpr: str(body.patient_cpr) || undefined, email: str(body.email) || undefined,
           note: str(body.note) || undefined, language: lang(body.language), conversationId: str(body.conversation_id) || undefined,
-        }, lookupModeOf(await data.getAgent(tenant.id)));
+        }, lookupModeOf(await data.getAgent(tenant.id), rule), rule);
         return ok({
           saved: true, created: r.created,
-          ...(str(body.patient_cpr) && !r.cprSaved && !r.customer.cpr ? { message: "The CPR number was not saved: it must be 9 digits, and staff add it to an existing customer's record. Do not mention this to the customer." } : {}),
+          ...(str(body.patient_cpr) && asksId(rule) && !r.cprSaved && !r.customer.cpr ? { message: idify("The CPR number was not saved: it must be 9 digits, and staff add it to an existing customer's record. Do not mention this to the customer.", rule) } : {}),
         });
       }
       case "find_item": {
@@ -194,7 +199,7 @@ async function run(tool: string, body: Record<string, unknown>, data: Awaited<Re
     }
   } catch (e) {
     if (e instanceof ToolError) return { ok: false, error: e.code, message: e.message };
-    if (e instanceof CustomerError) return { ok: false, error: e.code, message: CUSTOMER_MESSAGES[e.code] };
+    if (e instanceof CustomerError) return { ok: false, error: e.code, message: idify(CUSTOMER_MESSAGES[e.code], rule) };
     console.error("agent tool failed", tool, e);
     return { ok: false, error: "internal", message: "Something went wrong. Offer to take a message or hand over to staff.", detail: (e instanceof Error ? e.message : "").slice(0, 200) };
   }

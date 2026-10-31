@@ -594,6 +594,8 @@ details.fold[open] > summary { border-block-end: 1px solid var(--line); }
 /* Custom tables (milestone 6c): designer column cards and the values under each row's name */
 .form-cols { display: grid; gap: .75rem; grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr)); }
 .col-line { border: 1px solid var(--line); border-radius: calc(var(--radius) - 2px); padding: .75rem; }
+/* the business form's ID box: the name, format and length only matter for "Another ID number" */
+.idbox:not(:has(select[name="idKind"] option[value="custom"]:checked)) .id-custom { display: none; }
 .row-values { display: flex; flex-wrap: wrap; gap: .15rem 1rem; margin: .25rem 0 0; }
 .row-values > div { display: flex; gap: .35rem; min-inline-size: 0; }
 .row-values dt { color: var(--muted); }

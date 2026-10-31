@@ -49,6 +49,12 @@ Bookings made before CPR was asked have none; for those the phone number they we
 call again with both. The CPR number is kept in CallsDash only: it is not written into the Google Calendar event, and the
 tool log keeps its last 3 digits.
 
+**Another ID, or none.** Each client chooses on its Business tab which ID number customers give (lib/id-rule.ts): the CPR
+number (the default), another ID the admin names (a passport or membership number), or none. `patient_cpr` then carries
+that ID; its checks, the assistant's rules and the tool answers name it. With none, `patient_cpr` is passed empty, and
+`find_patient_booking`, `cancel_appointment` and `reschedule_appointment` need `patient_phone`, the number the booking was
+made with.
+
 **Tools out of date.** The booking tools live in ElevenLabs and are only rewritten on a Sync. If a call for `book_appointment`,
 `find_patient_booking`, `cancel_appointment` or `reschedule_appointment` arrives without the `patient_cpr` field, ElevenLabs
 still holds an older definition. The route then answers `tools_outdated` (the agent is told to take a message), and updates

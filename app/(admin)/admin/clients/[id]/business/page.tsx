@@ -28,6 +28,7 @@ export default async function ClientBusiness({ params, searchParams }: { params:
       {(error === "name" || error === "domain") && <Notice tone="warn">{t(`admin.err.${error}` as "admin.err.name")}</Notice>}
       {saved === "business" && <Notice tone="ok">{plain("biz.saved")}</Notice>}
       {err === "role_in_use" && <Notice tone="warn">{plain("biz.err.role_in_use").replace("{who}", (who ?? "").slice(0, 60))}</Notice>}
+      {err === "id_name" && <Notice tone="warn">{plain("biz.err.id_name")}</Notice>}
       {saved && saved !== "business" && <Notice tone="ok">{t("agent.saved").split(".")[0]}.</Notice>}
       <PageHead title={t("ws.business")} actions={<Link className="btn ghost" href={`/admin/clients/${id}/business/branding`}>{t("brand.open")}</Link>} />
       <FoldControls openAll={t("fold.openAll")} closeAll={t("fold.closeAll")} />
@@ -53,7 +54,7 @@ export default async function ClientBusiness({ params, searchParams }: { params:
           <SubmitButton className="btn" type="submit">{t("common.save")}</SubmitButton>
         </form>
       </Fold>
-      <Fold id="business" open={saved === "business" || err === "role_in_use"} title={plain("biz.title")} hint={plain(`biz.type.${biz.type}`)}>
+      <Fold id="business" open={saved === "business" || err === "role_in_use" || err === "id_name"} title={plain("biz.title")} hint={plain(`biz.type.${biz.type}`)}>
         <form action={adminBusinessAction} className="stack">
           <input type="hidden" name="tenantId" value={id} /><input type="hidden" name="returnTo" value={returnTo} />
           <small className="muted">{plain("biz.help")}</small>
