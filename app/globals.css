@@ -653,3 +653,6 @@ details.fold[open] > summary { border-block-end: 1px solid var(--line); }
 [dir="rtl"] .ws-back::before { content: "› "; }
 .ws-name { font-family: var(--font-head); font-size: 1.5rem; line-height: 1.2; overflow-wrap: anywhere; }
 @media (max-width: 640px) { .ws-name { font-size: 1.2rem; } .ws-head form { inline-size: 100%; } .ws-head form .btn { inline-size: 100%; justify-content: center; } }
+
+/* setup wizard: Back on one side, Next on the other (milestone 5) */
+.wiz-nav { justify-content: space-between; margin-block-start: .25rem; }

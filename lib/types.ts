@@ -306,6 +306,8 @@ export interface Onboarding {
   done: string[];
   /** The last website scan, kept so the admin can review it before anything is applied. */
   scan?: SiteScan;
+  /** When the admin pressed Go live at the end of the setup wizard (only allowed once every required step is done). */
+  liveAt?: string;
 }
 
 /** What a website scan found. Nothing here is applied to the client until the admin accepts it. */

@@ -109,6 +109,9 @@ function relabelEn(s: string, v: Vocab, base: Vocab): string {
     [base.placeMany, v.placeMany], [base.place, v.place],
   ];
   let out = s;
+  // plural possessive: "doctors' calendars" -> "stylists' calendars", but "staff calendars" (no apostrophe after "staff")
+  if (base.staffMany !== v.staffMany && !v.staffMany.endsWith("s"))
+    out = out.replace(new RegExp(`\\b(${base.staffMany}|${cap(base.staffMany)})'`, "g"), (m) => (m[0] === m[0].toUpperCase() ? cap(v.staffMany) : v.staffMany));
   for (const [from, to] of pairs) {
     if (from === to) continue;
     out = out.replace(new RegExp(`\\b(${from}|${cap(from)})\\b`, "g"), (m) => (m[0] === m[0].toUpperCase() ? cap(to) : to));
