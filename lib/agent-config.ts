@@ -4,6 +4,7 @@ import { STUDIO_DEFAULTS, studioOf } from "./agent-studio";
 import { resolveVoiceId } from "./voices";
 import { relabel, roleName, roleOf, rolesOf, vocabOf } from "./business-types";
 import { ID_CPR, asksId, idRuleOf, idify, type IdRule } from "./id-rule";
+import { describeField, extraFieldsOf, extraLines } from "./extra-fields";
 import type { AgentSettings, Doctor, KnowledgeItem, Tenant } from "./types";
 
 const REPLY_LENGTH = {
@@ -39,8 +40,10 @@ const ARABIC_STYLE = {
  *     shared tools describe team members and customers instead of doctors and patients.
  * 13: each client chooses the ID number customers give (the CPR number, another ID, or none: the phone number finds a booking),
  *     and the shared tools describe patient_cpr as that ID.
+ * 14: the client's own fields: booking and customer details the assistant asks for (book_appointment and save_customer take
+ *     `details`), and team member details it may tell customers.
  */
-export const AGENT_VERSION = 13;
+export const AGENT_VERSION = 14;
 
 /**
  * How the assistant finds and saves returning customers, which depends on what the clinic chose on its Customers screen, and on
@@ -59,6 +62,19 @@ export function customerRules(mode: "phone" | "cpr", rule: IdRule = ID_CPR): str
     "When the caller's phone number is known (a phone call or WhatsApp chat), call lookup_customer with it as patient_phone before you greet them. On the website, call it once the customer has given their number. If the customer is found, greet them by their first name. Share nothing else about them unless lookup_customer returns verified:true; it only does so when you also pass their CPR number as patient_cpr, which you ask for only when they need their own notes or earlier conversations.",
     `Once you know a customer's name, or learn something worth remembering (their language, email, a preference), call save_customer with their phone number as patient_phone, their patient_name, the language and the conversation_id. ${keep}`,
   ]).map((r) => idify(r, rule));
+}
+
+/**
+ * The client's own fields the assistant asks for (lib/extra-fields.ts): booking fields before book_appointment, customer
+ * fields for save_customer. Nothing when there are none.
+ */
+export function extraRules(tenant?: Pick<Tenant, "business"> | null): string[] {
+  const booking = extraFieldsOf(tenant, "booking").filter((f) => f.ask);
+  const customer = extraFieldsOf(tenant, "customer").filter((f) => f.ask);
+  return [
+    ...(booking.length ? [`Before calling book_appointment, also ask for these details, one question at a time: ${booking.map(describeField).join("; ")}. Pass the answers in details as a JSON object by key. A detail that is not required may be skipped if the customer does not know it.`] : []),
+    ...(customer.length ? [`When you save a customer with save_customer, also ask for these details if you do not have them yet, one question at a time, and pass them in details as a JSON object by key: ${customer.map(describeField).join("; ")}.`] : []),
+  ];
 }
 
 /** The booking rules for the client's ID number: as written for the CPR number, reworded for another ID, or by phone number with none. */
@@ -104,7 +120,7 @@ const CLOSING_RULES = [
   "For a medical emergency tell the caller to call 999 immediately and also call handoff_to_staff with urgent set to true.",
 ];
 
-type DoctorLine = Pick<Doctor, "id" | "name" | "specialty" | "active"> & Partial<Pick<Doctor, "photoAt" | "role">>;
+type DoctorLine = Pick<Doctor, "id" | "name" | "specialty" | "active"> & Partial<Pick<Doctor, "photoAt" | "role" | "extra">>;
 
 /**
  * The people who take bookings, with the id the tools expect, so the agent can name them and pass the right id. With more than one
@@ -118,7 +134,10 @@ function doctorSection(doctors: DoctorLine[], tenant?: Pick<Tenant, "business"> 
   const intro = many
     ? `${ours("Each person has one role:")} ${roles.map((r) => `${roleName(r, "en")} (in Arabic ${roleName(r, "ar")})`).join(", ")}. When a customer asks for a role, offer only people with that role, and check_availability with each of their doctor_id values.\n`
     : "";
-  return `${ours("# Doctors")}\n${intro}${active.map((d) => `- ${d.name}${many ? ` [role: ${roleName(roleOf(roles, d.role), "en")}]` : ""}${d.specialty ? `, ${d.specialty}` : ""} (doctor_id: ${d.id})${d.photoAt ? " [has a photo]" : ""}`).join("\n")}`;
+  // the client's own team fields marked "the assistant may tell customers" (languages spoken, gender)
+  const told = extraFieldsOf(tenant, "team").filter((f) => f.ask);
+  const details = (d: DoctorLine) => extraLines(told, d.extra, "en", { yes: "yes", no: "no" }).map((l) => `; ${l.label}: ${l.value}`).join("");
+  return `${ours("# Doctors")}\n${intro}${active.map((d) => `- ${d.name}${many ? ` [role: ${roleName(roleOf(roles, d.role), "en")}]` : ""}${d.specialty ? `, ${d.specialty}` : ""}${details(d)} (doctor_id: ${d.id})${d.photoAt ? " [has a photo]" : ""}`).join("\n")}`;
 }
 
 /**
@@ -141,7 +160,8 @@ export function buildPrompt(settings: AgentSettings, doctors: DoctorLine[] = [],
     `# Style\n${REPLY_LENGTH[settings.replyLength]} ${FORMALITY[settings.formality]} Answer only from the knowledge base and the facts below; if you do not know, say so and offer to take a message.`,
     ours(`# Facts for this conversation\nToday is {{today}}. The clinic is open now: {{open_now}}. Opening hours today: {{hours_today}}. If closed, it next opens {{next_opening}}. Channel: {{channel}}. Typed chat: {{system__is_text_only}}. The caller's phone number, if known: {{caller_phone}} (ask them to confirm it before booking).`),
     doctorSection(doctors, tenant, ours),
-    ours(`# Tools\n${[...bookingRules(id), ...customerRules(settings.customerLookup === "cpr" ? "cpr" : "phone", id), ...CATALOGUE_RULES, ...CLOSING_RULES].map((r) => `- ${r}`).join("\n")}`),
+    ours(`# Tools\n${[...bookingRules(id), ...customerRules(settings.customerLookup === "cpr" ? "cpr" : "phone", id), ...CATALOGUE_RULES, ...CLOSING_RULES].map((r) => `- ${r}`).join("\n")}`)
+      + extraRules(tenant).map((r) => `\n- ${r}`).join(""),
   ].filter(Boolean).join("\n\n");
 }
 
@@ -261,6 +281,7 @@ type Prop = { type: "string" | "boolean" | "integer"; description?: string; dyna
 const str = (description: string): Prop => ({ type: "string", description });
 const agentId: Prop = { type: "string", dynamic_variable: "system__agent_id" };
 const conversationId: Prop = { type: "string", dynamic_variable: "system__conversation_id" };
+const DETAILS_HELP = "Only when your instructions list extra details to ask for: the answers as a JSON object by the keys your instructions give, for example {\"insurance\":\"Bupa\"}. Leave empty otherwise.";
 const CPR_HELP = "The customer's ID number, the one your instructions name (for example the CPR number), exactly as they gave it. If your instructions say the business asks for no ID number, pass an empty string.";
 
 /** The booking, customer, catalogue and hand-over tools (docs/agent-tools.md), as ElevenLabs webhook tool configs. One shared set serves every client; `agent_id` tells them apart. */
@@ -282,6 +303,7 @@ export function toolDefinitions(appUrl: string, secret: string): Record<string, 
       doctor_id: str("The doctor_id from the slot."), starts_at: str("Slot start (ISO) exactly as returned by check_availability."),
       patient_name: str("The customer's full name."), patient_phone: str("The customer's phone number."), patient_cpr: str(CPR_HELP),
       service: str("What the booking is for."), language: str("en or ar, the language the customer is speaking or writing. Their WhatsApp confirmation is sent in it."), conversation_id: conversationId,
+      details: str(DETAILS_HELP),
     }, ["doctor_id", "starts_at", "patient_name", "patient_phone", "patient_cpr"]),
     find_patient_booking: tool("find_patient_booking", "Find a customer's upcoming bookings by their ID number, or by phone number when your instructions say so.", {
       patient_cpr: str(CPR_HELP), patient_phone: str("The phone number the booking was made with, when your instructions say to pass it (a booking made before ID numbers were asked, or a business that asks for none)."),
@@ -303,6 +325,7 @@ export function toolDefinitions(appUrl: string, secret: string): Record<string, 
       patient_phone: str("The customer's phone number."), patient_name: str("The customer's name."), patient_cpr: str("Their ID number (the one your instructions name) if they gave it. Never guess it."),
       email: str("Their email address, if they gave one."), note: str("A short practical note to remember (a preference). No medical details."),
       language: str("en or ar, the language the customer speaks or writes."), conversation_id: conversationId,
+      details: str(DETAILS_HELP),
     }, []),
     find_item: tool("find_item", "Look up something the business offers (a product, service or package) or a team member, with details, price and a photo address. With no query it lists what the business offers.", {
       query: str("What the customer asked about, or a team member's name, in a few words, in their own language. Leave empty to list what the business offers."), language: str("en or ar, the language to answer in."),

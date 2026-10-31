@@ -7,12 +7,12 @@ Create one **server tool** per row in the ElevenLabs agent (Agents > Tools > Add
 | Tool | Body fields (besides `agent_id`) | Returns |
 | --- | --- | --- |
 | `check_availability` | `doctor_id` (optional), `from_date` (YYYY-MM-DD, optional), `days` (1-30, default 7), `language` (`en`/`ar`) | `slots[]` with `doctor_id`, `doctor`, `starts_at` (ISO, pass to `book_appointment` as is), `label`; `message` when there are none |
-| `book_appointment` | `doctor_id`, `starts_at` (ISO, from a slot), `patient_name`, `patient_phone`, `patient_cpr` (9 digits), `service`, `language` (`en`/`ar`, the language the patient uses; optional), `conversation_id` (`system__conversation_id`) | `bookingId`, `label`, `whatsappConfirmation` |
+| `book_appointment` | `doctor_id`, `starts_at` (ISO, from a slot), `patient_name`, `patient_phone`, `patient_cpr` (the client's ID number; empty when it asks for none), `service`, `language` (`en`/`ar`, the language the patient uses; optional), `conversation_id` (`system__conversation_id`), `details` (the client's own fields, optional) | `bookingId`, `label`, `whatsappConfirmation` |
 | `find_patient_booking` | `patient_cpr`; `patient_phone` only for bookings made before CPR was asked; `language` | upcoming `bookings[]` with `booking_id`, `doctor_id`, `doctor`, `starts_at`, `label`; `message` when there are none |
 | `cancel_appointment` | `booking_id`, `patient_cpr` (`patient_phone` for an old booking) | `cancelled` |
 | `reschedule_appointment` | `booking_id`, `patient_cpr`, `new_starts_at`, `doctor_id` (only to change doctor; `patient_phone` for an old booking), `language` (optional) | `bookingId`, `doctor`, `label`, `whatsappConfirmation` |
 | `lookup_customer` | `patient_phone`, `patient_cpr` (optional) | `found`; a returning customer gives `first_name` and `language`; with the CPR number on file repeated, `verified: true` and `name`, `email`, `notes`, `last_contact`, `recent_conversations` |
-| `save_customer` | `patient_phone`, `patient_name`, `patient_cpr`, `email`, `note`, `language`, `conversation_id` | `saved`, `created` |
+| `save_customer` | `patient_phone`, `patient_name`, `patient_cpr`, `email`, `note`, `language`, `conversation_id`, `details` (optional) | `saved`, `created` |
 | `take_message` | `patient_name`, `patient_phone`, `message`, `language`, `conversation_id` | `requestId`, `message` (what to tell the caller) |
 | `handoff_to_staff` | `patient_name`, `patient_phone`, `reason`, `urgent` (true when it cannot wait, e.g. a medical emergency), `language`, `conversation_id` | `requestId`, `open` (clinic open now), `transferred` (always false for now), `message` |
 
@@ -54,6 +54,12 @@ number (the default), another ID the admin names (a passport or membership numbe
 that ID; its checks, the assistant's rules and the tool answers name it. With none, `patient_cpr` is passed empty, and
 `find_patient_booking`, `cancel_appointment` and `reschedule_appointment` need `patient_phone`, the number the booking was
 made with.
+
+**The client's own fields.** A client can have its own booking and customer fields (lib/extra-fields.ts). The ones marked
+"the assistant asks" are listed in the instructions with their key, and `book_appointment` and `save_customer` take them in
+`details`: a JSON object by key (field names in English or Arabic also work). A required asked booking field that is missing
+or does not fit answers `bad_extra`, naming the fields and the answers they take. `save_customer` saves the answers that fit
+and lists the others in `details_not_saved`.
 
 **Tools out of date.** The booking tools live in ElevenLabs and are only rewritten on a Sync. If a call for `book_appointment`,
 `find_patient_booking`, `cancel_appointment` or `reschedule_appointment` arrives without the `patient_cpr` field, ElevenLabs

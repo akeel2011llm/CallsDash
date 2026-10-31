@@ -99,6 +99,8 @@ export interface Customer {
   conversationIds: string[];
   /** Newest first, at most 50. */
   history: CustomerVisit[];
+  /** Answers to the client's own customer fields (lib/extra-fields.ts), by field key. */
+  extra?: Record<string, string>;
 }
 
 /** Kinds of column a custom table can have (lib/custom-tables.ts checks and tidies each value). */
@@ -393,6 +395,8 @@ export interface Doctor {
   specialty: string;
   /** The key of the client's role this person has (lib/business-types.ts rolesOf). Missing = the client's first role. */
   role?: string;
+  /** Answers to the client's own team member fields (lib/extra-fields.ts), by field key. */
+  extra?: Record<string, string>;
   /** What the assistant tells customers about the doctor (experience, languages, what they treat), in English and Arabic. */
   about?: string;
   aboutAr?: string;
@@ -429,6 +433,8 @@ export interface Booking {
   language?: Locale;
   /** The last attempt to send the patient their booking confirmation on WhatsApp. Missing = none was made. */
   message?: BookingMessage;
+  /** Answers to the client's own booking fields (lib/extra-fields.ts), by field key. */
+  extra?: Record<string, string>;
 }
 
 /** The booking confirmation sent on WhatsApp. "sent" means ElevenLabs accepted it; Meta can still decline it afterwards. */

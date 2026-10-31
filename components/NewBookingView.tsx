@@ -10,6 +10,8 @@ import { SubmitButton } from "@/components/SubmitButton";
 import { confirmationOptions } from "@/lib/whatsapp";
 import type { BookingScope } from "@/components/BookingList";
 import { asksId, idInputProps, idRuleOf } from "@/lib/id-rule";
+import { ExtraInputs } from "@/components/ExtraFields";
+import { extraFieldsOf } from "@/lib/extra-fields";
 
 export type NewBookingParams = { doctor?: string; date?: string; err?: string; name?: string; phone?: string; service?: string };
 
@@ -56,6 +58,7 @@ export async function NewBookingView({ base, tenant, doctorId, sp }: BookingScop
               <small className="muted">{t("bookings.cprHelp")}</small>
             </>}
             <label>{t("common.service")}<input name="service" maxLength={120} placeholder={t("bookings.servicePlaceholder")} defaultValue={sp.service ?? ""} /></label>
+            <ExtraInputs fields={extraFieldsOf(tenant, "booking")} t={t} locale={locale} />
             <label>{t("bookings.notes")}<textarea name="notes" rows={3} maxLength={1000} /></label>
             <small className="muted">{t("bookings.remindersNote")}</small>
             {wa.active && (

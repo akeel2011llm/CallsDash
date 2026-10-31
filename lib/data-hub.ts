@@ -1,6 +1,7 @@
 import type { Data } from "./data/demo";
 import { CustomerError, cleanPhone, phoneKey, saveCustomerByStaff } from "./customers";
 import { ID_CPR, type IdRule } from "./id-rule";
+import type { ExtraField } from "./extra-fields";
 import { ItemError, foldText, saveItemByStaff } from "./items";
 import { toCsv } from "./stats";
 import type { Customer, Doctor, Item, KnowledgeItem, Locale } from "./types";
@@ -155,12 +156,25 @@ export async function importItems(d: ItemDeps, tenantId: string, text: SheetInpu
 
 export const CUSTOMER_COLUMNS = ["name", "phone", "cpr", "email", "language", "notes"] as const;
 
-export const customersTemplateRows = (): string[][] => [[...CUSTOMER_COLUMNS], ["Sara Ahmed", "+973 3600 1122", "", "sara@example.com", "ar", "Prefers morning appointments"]];
+/**
+ * The column of one of the client's own fields in a sheet: its key, or extra_<key> when the key is already one of the fixed
+ * columns. An import also accepts the field's English or Arabic name as the header.
+ */
+export const extraHeader = (f: ExtraField, fixed: readonly string[]) => (fixed.map(headerKey).includes(headerKey(f.key)) ? `extra_${f.key}` : f.key);
+const extraOfRow = (fields: ExtraField[], fixed: readonly string[], r: Record<string, string>) => Object.fromEntries(fields.flatMap((f) => {
+  const h = [extraHeader(f, fixed), f.label, f.labelAr ?? ""].filter(Boolean).map(headerKey).find((k) => k in r);
+  return h && r[h] ? [[f.key, r[h]]] : [];
+}));
+
+export const customersTemplateRows = (fields: ExtraField[] = []): string[][] => [
+  [...CUSTOMER_COLUMNS, ...fields.map((f) => extraHeader(f, CUSTOMER_COLUMNS))],
+  ["Sara Ahmed", "+973 3600 1122", "", "sara@example.com", "ar", "Prefers morning appointments", ...fields.map(() => "")],
+];
 
 type CustomerDeps = Pick<Data, "getCustomer" | "findCustomer" | "putCustomer" | "deleteCustomer">;
 
 /** Adds the customers in a CSV; one whose phone number is already there is updated, and a blank cell keeps what is stored. */
-export async function importCustomers(d: CustomerDeps, tenantId: string, text: SheetInput, actor: string, rule: IdRule = ID_CPR): Promise<ImportResult> {
+export async function importCustomers(d: CustomerDeps, tenantId: string, text: SheetInput, actor: string, rule: IdRule = ID_CPR, fields: ExtraField[] = []): Promise<ImportResult> {
   const { headers, rows, tooMany } = readRecords(text);
   const res = empty();
   res.tooMany = tooMany;
@@ -170,13 +184,15 @@ export async function importCustomers(d: CustomerDeps, tenantId: string, text: S
     const phone = cleanPhone(r.phone);
     if (!phone) { res.skipped++; res.errors.push({ line, code: "bad_phone" }); continue; }
     const cur: Customer | undefined = await d.findCustomer(tenantId, { phoneKey: phoneKey(phone) });
-    const lang = r.language.trim().toLowerCase();
+    const lang = (r.language ?? "").trim().toLowerCase(); // the column may be missing
     const language: Locale | undefined = lang === "ar" || lang === "en" ? lang : cur?.language;
     try {
       await saveCustomerByStaff(d, tenantId, {
         id: cur?.id, name: r.name || (cur?.name ?? ""), phone, cpr: r.cpr || (cur?.cpr ?? ""), email: r.email || (cur?.email ?? ""),
         language, notes: r.notes || (cur?.notes ?? ""),
-      }, actor, rule);
+        // a blank cell keeps what is stored, like the other columns
+        ...(fields.length ? { extra: extraOfRow(fields, CUSTOMER_COLUMNS, r) } : {}),
+      }, actor, rule, fields, "none");
       if (cur) res.updated++; else res.added++;
     } catch (e) {
       if (!(e instanceof CustomerError)) throw e;
@@ -186,8 +202,9 @@ export async function importCustomers(d: CustomerDeps, tenantId: string, text: S
   return res;
 }
 
-export const customersRows = (list: Customer[]): (string | number)[][] =>
-  [[...CUSTOMER_COLUMNS, "created_at", "last_contact_at", "conversations"], ...list.map((c) => [c.name, c.phone, c.cpr ?? "", c.email ?? "", c.language ?? "", c.notes, c.createdAt, c.lastContactAt ?? "", c.history.length])];
+export const customersRows = (list: Customer[], fields: ExtraField[] = []): (string | number)[][] =>
+  [[...CUSTOMER_COLUMNS, ...fields.map((f) => extraHeader(f, CUSTOMER_COLUMNS)), "created_at", "last_contact_at", "conversations"],
+    ...list.map((c) => [c.name, c.phone, c.cpr ?? "", c.email ?? "", c.language ?? "", c.notes, ...fields.map((f) => c.extra?.[f.key] ?? ""), c.createdAt, c.lastContactAt ?? "", c.history.length])];
 export const customersCsv = (list: Customer[]) => toCsv(customersRows(list));
 
 /* ---------- knowledge ---------- */
@@ -212,7 +229,7 @@ export async function importKnowledge(d: KnowledgeDeps, tenantId: string, text: 
     const line = n + 2;
     const question = r.question.slice(0, 500), answer = r.answer.slice(0, 2000);
     if (!question || !answer) { res.skipped++; res.errors.push({ line, code: "no_text" }); continue; }
-    const lang = r.language.trim().toLowerCase();
+    const lang = (r.language ?? "").trim().toLowerCase(); // the column may be missing
     const language: Locale = lang === "ar" || (!lang && /[؀-ۿ]/.test(question)) ? "ar" : "en";
     const cur = existing.get(key(question, language));
     if (cur) { await d.updateKnowledge(tenantId, cur.id, { question, answer, language }, actor); res.updated++; } else { await d.addKnowledge(tenantId, question, answer, language, actor); res.added++; }
@@ -223,8 +240,10 @@ export async function importKnowledge(d: KnowledgeDeps, tenantId: string, text: 
 
 /* ---------- doctors, full export ---------- */
 
-export const doctorsRows = (list: Doctor[]): string[][] =>
-  [["name", "specialty", "active", "has_photo"], ...list.map((x) => [x.name, x.specialty, x.active === false ? "no" : "yes", x.photoAt ? "yes" : "no"])];
+const DOCTOR_COLUMNS = ["name", "specialty", "active", "has_photo"] as const;
+export const doctorsRows = (list: Doctor[], fields: ExtraField[] = []): string[][] =>
+  [[...DOCTOR_COLUMNS, ...fields.map((f) => extraHeader(f, DOCTOR_COLUMNS))],
+    ...list.map((x) => [x.name, x.specialty, x.active === false ? "no" : "yes", x.photoAt ? "yes" : "no", ...fields.map((f) => x.extra?.[f.key] ?? "")])];
 
 export const EXPORT_KINDS = ["catalogue", "customers", "knowledge", "doctors"] as const;
 export type ExportKind = (typeof EXPORT_KINDS)[number];

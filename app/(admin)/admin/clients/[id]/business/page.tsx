@@ -11,10 +11,13 @@ import { adminClientProfileAction, adminBusinessAction } from "@/lib/manage-acti
 import { BusinessFields } from "@/components/BusinessFields";
 import { ContactForm } from "@/components/ContactForm";
 import { businessOf, vocabOf } from "@/lib/business-types";
+import { EXTRA_TARGETS, extraFieldsOf } from "@/lib/extra-fields";
+import { ExtraFieldsDesigner } from "@/components/ExtraFields";
+import { dictionaries, type Key } from "@/lib/i18n";
 
-export default async function ClientBusiness({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ saved?: string; error?: string; err?: string; who?: string }> }) {
+export default async function ClientBusiness({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ saved?: string; error?: string; err?: string; who?: string; target?: string }> }) {
   const { id } = await params;
-  const { saved, error, err, who } = await searchParams;
+  const { saved, error, err, who, target } = await searchParams;
   const tenant = await getTenant(id);
   if (!tenant) notFound();
   const { t, locale } = await getT(tenant);
@@ -29,6 +32,8 @@ export default async function ClientBusiness({ params, searchParams }: { params:
       {saved === "business" && <Notice tone="ok">{plain("biz.saved")}</Notice>}
       {err === "role_in_use" && <Notice tone="warn">{plain("biz.err.role_in_use").replace("{who}", (who ?? "").slice(0, 60))}</Notice>}
       {err === "id_name" && <Notice tone="warn">{plain("biz.err.id_name")}</Notice>}
+      {saved === "fields" && <Notice tone="ok">{t("fields.saved")}</Notice>}
+      {err?.startsWith("fields_") && `${err.replace("fields_", "fields.err.")}` in dictionaries.en && <Notice tone="warn">{t(err.replace("fields_", "fields.err.") as Key).replace("{who}", (who ?? "").slice(0, 60))}</Notice>}
       {saved && saved !== "business" && <Notice tone="ok">{t("agent.saved").split(".")[0]}.</Notice>}
       <PageHead title={t("ws.business")} actions={<Link className="btn ghost" href={`/admin/clients/${id}/business/branding`}>{t("brand.open")}</Link>} />
       <FoldControls openAll={t("fold.openAll")} closeAll={t("fold.closeAll")} />
@@ -64,6 +69,9 @@ export default async function ClientBusiness({ params, searchParams }: { params:
           <SubmitButton className="btn" type="submit">{plain("common.save")}</SubmitButton>
         </form>
       </Fold>
+      {EXTRA_TARGETS.map((x) => (
+        <ExtraFieldsDesigner key={x} tenantId={id} target={x} fields={extraFieldsOf(tenant, x)} t={t} open={target === x} />
+      ))}
       <Fold id="contact" open={saved === "details" || error === "domain"} title={t("ws.contact")}>
         <ContactForm tenant={tenant} t={t} returnTo={returnTo} />
       </Fold>

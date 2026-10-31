@@ -19,6 +19,7 @@ import { autoSync } from "./auto-sync";
 import type { Booking, DateRange } from "./types";
 import { businessFromForm, businessOf, rolesOf } from "./business-types";
 import { promptForWords } from "./business-words";
+import { ExtraError, cleanExtra, extraFieldsOf, extraFromForm, extraFromLines, isExtraTarget, mergeExtra } from "./extra-fields";
 
 const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 const confirmed = (f: FormData) => f.get("confirm") === "on";
@@ -59,6 +60,17 @@ async function roleFrom(f: FormData, tenantId: string): Promise<string | undefin
   return key && rolesOf(await store.getTenant(tenantId)).some((r) => r.key === key) ? key : undefined;
 }
 
+/**
+ * The client's own team member fields from a team form (lib/extra-fields.ts): the answers merged into what was stored,
+ * undefined when the form has none, null when a required one is blank or an answer does not fit.
+ */
+async function teamExtra(f: FormData, tenantId: string, before?: Record<string, string>): Promise<Record<string, string> | undefined | null> {
+  if (!f.has("extraShown")) return undefined;
+  const fields = extraFieldsOf(await store.getTenant(tenantId), "team");
+  const { values, errors } = cleanExtra(fields, extraFromForm(fields, (k) => str(f, k)));
+  return errors.length ? null : mergeExtra(before, fields, values);
+}
+
 async function doctorOf(tenantId: string, doctorId: string) {
   const d = (await store.getDoctors(tenantId)).find((x) => x.id === doctorId);
   if (!d) redirect("/app");
@@ -70,7 +82,9 @@ export async function addDoctorAction(f: FormData) {
   const name = str(f, "name").replace(/\s+/g, " ").slice(0, 120);
   if (!name) go(f, fallback, "doc=name_missing", "#doctors");
   if ((await store.getDoctors(tenantId)).some((d) => d.name.toLowerCase() === name.toLowerCase())) go(f, fallback, "doc=name_taken", "#doctors");
-  await store.addDoctor(tenantId, { name, specialty: str(f, "specialty").slice(0, 120), about: str(f, "about").slice(0, 800), aboutAr: str(f, "aboutAr").slice(0, 800), role: await roleFrom(f, tenantId) }, actor);
+  const extra = await teamExtra(f, tenantId);
+  if (extra === null) go(f, fallback, "doc=bad_extra", "#doctors");
+  await store.addDoctor(tenantId, { name, specialty: str(f, "specialty").slice(0, 120), about: str(f, "about").slice(0, 800), aboutAr: str(f, "aboutAr").slice(0, 800), role: await roleFrom(f, tenantId), ...(extra ? { extra } : {}) }, actor);
   await autoSync(tenantId, actor);
   refreshAll();
   go(f, fallback, "doc=added", "#doctors");
@@ -84,7 +98,10 @@ export async function saveDoctorAction(f: FormData) {
   if (!name) go(f, fallback, "doc=name_missing", `#doctor-${doc.id}`);
   if ((await store.getDoctors(tenantId)).some((d) => d.id !== doc.id && d.name.toLowerCase() === name.toLowerCase())) go(f, fallback, "doc=name_taken", `#doctor-${doc.id}`);
   const color = str(f, "color");
+  const extra = await teamExtra(f, tenantId, doc.extra);
+  if (extra === null) go(f, fallback, "doc=bad_extra", `#doctor-${doc.id}`);
   await store.updateDoctor(tenantId, doc.id, {
+    ...(extra ? { extra } : {}),
     name, specialty: str(f, "specialty").slice(0, 120), about: str(f, "about").slice(0, 800), aboutAr: str(f, "aboutAr").slice(0, 800), color: hex.test(color) ? color : doc.color, active: f.get("active") === "on",
     ...(f.has("role") ? { role: await roleFrom(f, tenantId) } : {}),
   }, actor);
@@ -205,6 +222,7 @@ export async function updateBookingDetailsAction(f: FormData) {
     await (await bookingService()).staffUpdateDetails(tenant.id, id, {
       patientName: str(f, "patientName"), patientPhone: str(f, "patientPhone"), patientCpr: str(f, "patientCpr"), service: str(f, "service"),
       doctorId: doctorId ? undefined : str(f, "doctorId") || undefined, language: str(f, "language") || undefined,
+      ...(f.has("extraShown") ? { extra: extraFromForm(extraFieldsOf(tenant, "booking"), (k) => str(f, k)) } : {}),
     }, actor, doctorId, { notify: f.get("whatsapp") === "on" });
   } catch (e) { if (e instanceof ToolError) err = e.code; else throw e; }
   revalidatePath(base, "layout");
@@ -320,6 +338,8 @@ export async function adminBusinessAction(f: FormData) {
   if (str(f, "idKind") === "custom" && !str(f, "idEn")) go(f, `/admin/clients/${id}/business`, "err=id_name", "#business");
   // a form without the ID box (none today) keeps the rule the client has
   if (!f.has("idShown") && before.id) business.id = before.id;
+  // the client's own fields have their own form below this one
+  if (before.fields) business.fields = before.fields;
   // a role still given to someone cannot be removed: they would silently become another role
   if (business.roles) {
     const kept = new Set(business.roles.map((r) => r.key));
@@ -337,6 +357,38 @@ export async function adminBusinessAction(f: FormData) {
   await autoSync(id, actor); // the assistant's instructions use the client's words and roles
   refreshAll();
   go(f, `/admin/clients/${id}/business`, "saved=business", "#business");
+}
+
+/**
+ * Saves the client's own fields for bookings, customers or team members (lib/extra-fields.ts). Removing a field keeps its
+ * answers stored; it only stops being shown and asked. The assistant is updated, since it asks for or tells these.
+ */
+export async function adminExtraFieldsAction(f: FormData) {
+  const { actor } = await requireAdmin();
+  const id = str(f, "tenantId");
+  const target = str(f, "target");
+  const tenant = await store.getTenant(id);
+  if (!tenant || !isExtraTarget(target)) redirect("/admin");
+  const n = Math.min(Number(str(f, "n")) || 0, 40);
+  const lines = Array.from({ length: n }, (_, i) => ({
+    key: str(f, `f${i}_key`), label: str(f, `f${i}_label`), labelAr: str(f, `f${i}_labelAr`), type: str(f, `f${i}_type`),
+    options: String(f.get(`f${i}_options`) ?? ""), required: f.get(`f${i}_required`) === "on", remove: f.get(`f${i}_remove`) === "on",
+    order: Number(str(f, `f${i}_order`)) || 0, ask: f.get(`f${i}_ask`) === "on",
+  }));
+  let fields;
+  try {
+    fields = extraFromLines(lines);
+  } catch (e) {
+    if (e instanceof ExtraError) go(f, `/admin/clients/${id}/business`, `err=fields_${e.code}&who=${encodeURIComponent(e.label.slice(0, 60))}&target=${target}`, `#fields-${target}`);
+    throw e;
+  }
+  const business = businessOf(tenant);
+  const before = extraFieldsOf(tenant, target);
+  await store.setBusiness(id, { ...business, fields: { ...(business.fields ?? {}), [target]: fields } }, actor,
+    `Own ${target} fields: ${fields.map((x) => x.label).join(", ") || "none"}${before.length > fields.length ? " (some removed; their answers are kept)" : ""}`);
+  await autoSync(id, actor); // the assistant asks for, or tells, these fields
+  refreshAll();
+  go(f, `/admin/clients/${id}/business`, `saved=fields&target=${target}`, `#fields-${target}`);
 }
 
 /** A correction with a reason: plus adds credits, minus takes them away (never below zero). Both show in the history. */

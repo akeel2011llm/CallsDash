@@ -98,7 +98,7 @@ export async function duplicateClient(d: CopyDeps, sourceId: string, input: Copy
     }
     if (input.copyDoctors) {
       for (const doc of doctors) {
-        const nd = await d.addDoctor(id, { name: doc.name, specialty: doc.specialty, about: doc.about, aboutAr: doc.aboutAr, role: doc.role }, actor);
+        const nd = await d.addDoctor(id, { name: doc.name, specialty: doc.specialty, about: doc.about, aboutAr: doc.aboutAr, role: doc.role, extra: doc.extra }, actor);
         await d.updateDoctor(id, nd.id, { color: doc.color, ...(doc.active === false ? { active: false } : {}), ...(doc.hours ? { hours: structuredClone(doc.hours) } : {}) }, actor);
         doctorCount++;
       }

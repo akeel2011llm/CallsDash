@@ -21,6 +21,7 @@ import { FLAG_KINDS, normalizeRules } from "./flags";
 import { voiceAllowed } from "./voices";
 import { FONT_STYLES, PATTERN_STYLES, RADIUS_STYLES, SIDEBAR_STYLES, coverDataUrl, isCoverUrl, isHex, isLogoUrl, logoDataUrl } from "./theme";
 import type { AgentSettings, Branding, BookingStatus, Locale, Permissions } from "./types";
+import { extraFieldsOf, extraFromForm } from "./extra-fields";
 
 const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 const num = (f: FormData, k: string) => Number(f.get(k));
@@ -181,6 +182,7 @@ export async function createBookingAction(f: FormData) {
       doctorId: chosen, startsAt: str(f, "startsAt"), patientName: str(f, "patientName"), patientPhone: str(f, "patientPhone"),
       patientCpr: str(f, "patientCpr"), service: str(f, "service") || undefined, notes: str(f, "notes") || undefined, source: doctorId ? "doctor" : "staff", actor,
       language: str(f, "language") === "ar" ? "ar" : str(f, "language") === "en" ? "en" : undefined, notify: f.get("whatsapp") === "on",
+      extra: extraFromForm(extraFieldsOf(tenant, "booking"), (k) => str(f, k)),
     });
   });
   revalidatePath(base, "layout");

@@ -10,6 +10,7 @@ import { ConfirmDelete } from "@/components/Confirm";
 import { CustomerFields } from "@/components/CustomerFields";
 import { Badge, Notice, PageHead } from "@/components/ui";
 import { SubmitButton } from "@/components/SubmitButton";
+import { extraFieldsOf } from "@/lib/extra-fields";
 
 export default async function CustomerPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ saved?: string; err?: string }> }) {
   const { tenant, staffRole } = await requireClient();
@@ -27,7 +28,7 @@ export default async function CustomerPage({ params, searchParams }: { params: P
       <div className="grid two">
         <section className="card stack">
           <form action={saveCustomerAction} className="stack">
-            <CustomerFields t={t} c={c} id={idRuleOf(tenant)} />
+            <CustomerFields t={t} c={c} id={idRuleOf(tenant)} fields={extraFieldsOf(tenant, "customer")} locale={locale} />
             <div><SubmitButton className="btn" type="submit">{t("customers.save")}</SubmitButton></div>
           </form>
           <small className="muted">{t("customers.since")} {fmtDateTime(c.createdAt, locale)}</small>

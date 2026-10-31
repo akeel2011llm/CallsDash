@@ -17,6 +17,7 @@ import { CustomerFields } from "./CustomerFields";
 import { ItemPhotoInput } from "./ItemPhotoInput";
 import { SelectAll } from "./SelectAll";
 import { Guide } from "./Guide";
+import { extraFieldsOf } from "@/lib/extra-fields";
 
 export interface DataSearch {
   q?: string; open?: string; photo?: string; saved?: string; bulk?: string; err?: string; col?: string; pl?: string;
@@ -221,7 +222,7 @@ export async function DataView({ tenant, scope, sp, t, locale, base }: {
           <summary><strong>{t("data.cust.add")}</strong></summary>
           <form action={dataRowAction} className="stack" style={{ marginBlockStart: ".75rem" }}>
             {hidden}<input type="hidden" name="kind" value="customers" />
-            <CustomerFields t={t as unknown as (k: never) => string} id={idRuleOf(tenant)} />
+            <CustomerFields t={t as unknown as (k: never) => string} id={idRuleOf(tenant)} fields={extraFieldsOf(tenant, "customer")} locale={locale} />
             <div><SubmitButton className="btn" type="submit">{t("data.rows.add")}</SubmitButton></div>
           </form>
         </details>
@@ -231,7 +232,7 @@ export async function DataView({ tenant, scope, sp, t, locale, base }: {
             <SelectAll form="bulk-customers" label={t("data.rows.selectAll")} />
             {custRows.slice(0, SHOWN).map((c: Customer) => rowShell("customers", c.id, (
               <span><strong dir="auto">{c.name || "-"}</strong> <small className="muted" dir="ltr">{c.phone}</small>{c.lastContactAt && <small className="muted"> · {fmtDate(c.lastContactAt, locale)}</small>}</span>
-            ), <CustomerFields t={t as unknown as (k: never) => string} c={c} id={idRuleOf(tenant)} />, false))}
+            ), <CustomerFields t={t as unknown as (k: never) => string} c={c} id={idRuleOf(tenant)} fields={extraFieldsOf(tenant, "customer")} locale={locale} />, false))}
           </>
         )}
         {listFoot(Math.min(SHOWN, custRows.length), custRows.length)}
