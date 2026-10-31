@@ -10,6 +10,7 @@ import { appUrl } from "@/lib/app-url";
 import { ensureSharedTools } from "@/lib/agent-sync";
 import { badHeaderSetting } from "@/lib/header-safe";
 import { findItems, itemPageUrl } from "@/lib/items";
+import { findRecords } from "@/lib/custom-tables";
 import { sendItemPhoto } from "@/lib/whatsapp-photo";
 import { CustomerError, lookupCustomer, lookupModeOf, saveCustomerFromAssistant } from "@/lib/customers";
 
@@ -156,6 +157,8 @@ async function run(tool: string, body: Record<string, unknown>, data: Awaited<Re
         if (!t) return null;
         return ok(await findItems(data, { id: t.id, slug: t.slug }, { query: str(body.query), language: body.language === "ar" ? "ar" : "en" }, await appUrl()));
       }
+      case "find_record":
+        return ok(await findRecords(data, tenant.id, { query: str(body.query), table: str(body.table), language: body.language === "ar" ? "ar" : "en" }));
       case "send_item_photo": {
         const t = await data.getTenant(tenant.id);
         if (!t) return null;
@@ -210,7 +213,7 @@ const CUSTOMER_MESSAGES: Record<CustomerError["code"], string> = {
 
 /** What the agent asked, for the log: the fields that decide a booking, with only the last 3 digits of a phone or CPR number. */
 function summarize(body: Record<string, unknown>) {
-  const keys = ["doctor_id", "from_date", "days", "starts_at", "new_starts_at", "booking_id", "patient_name", "patient_phone", "patient_cpr", "service", "urgent", "query", "item_id"];
+  const keys = ["doctor_id", "from_date", "days", "starts_at", "new_starts_at", "booking_id", "patient_name", "patient_phone", "patient_cpr", "service", "urgent", "query", "table", "item_id"];
   return keys.filter((k) => body[k] !== undefined && body[k] !== "").map((k) => {
     const v = String(body[k]).slice(0, 60);
     return `${k}=${k === "patient_phone" || k === "patient_cpr" ? `…${asciiDigits(v).replace(/\D/g, "").slice(-3)}` : v}`;
@@ -226,6 +229,8 @@ function outcome(res: Record<string, unknown>) {
   if (res.requestId) return "saved for staff";
   if ("sent" in res) return res.sent ? "photo sent on WhatsApp" : `photo not sent (${String(res.detail ?? "")})`;
   if (Array.isArray(res.items)) return `${res.items.length} catalogue items found`;
+  if (Array.isArray(res.results)) return `${(res.results as { records: unknown[] }[]).reduce((n, r) => n + r.records.length, 0)} table records found${res.more ? ` (${String(res.more)} more)` : ""}`;
+  if (Array.isArray(res.tables)) return res.found ? `${res.tables.length} tables listed` : res.tables.length ? "no table records found" : "no tables for the assistant";
   if (res.saved) return res.created ? "customer added" : "customer updated";
   if ("found" in res) return res.found ? (res.verified ? "customer found, verified by CPR" : "customer found") : "no customer";
   return "ok";

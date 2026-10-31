@@ -12,7 +12,7 @@ import { USD_TO_BHD } from "./pricing";
 import type {
   AgentToolCall,
   NewConversation,
-  AgentSettings, Booking, BookingMessage, BookingStatus, Channel, Conversation, ChatSession, Customer, Doctor, Item, Locale, Permissions, Profile, StaffRequest, Tenant, TenantSecrets,
+  AgentSettings, Booking, BookingMessage, BookingStatus, Channel, Conversation, ChatSession, Customer, DataRow, DataTable, Doctor, Item, Locale, Permissions, Profile, StaffRequest, Tenant, TenantSecrets,
 } from "./types";
 
 /**
@@ -181,6 +181,59 @@ export function deleteItem(tenantId: string, itemId: string, actor: string) {
   d.items = list.filter((x) => x !== gone);
   delete (d.itemImages ??= {})[itemId];
   audit(actor, `Catalogue item deleted: ${gone.name}`, tenantId);
+}
+
+/* ---------- custom tables (lib/custom-tables.ts checks everything before it gets here) ---------- */
+
+export const getDataTables = (tenantId: string) =>
+  (db().dataTables ??= []).filter((t) => t.tenantId === tenantId).sort((a, b) => a.name.localeCompare(b.name));
+export const getDataTable = (tenantId: string, tableId: string) => (db().dataTables ??= []).find((t) => t.tenantId === tenantId && t.id === tableId);
+/** Adds the table (no id) or replaces its settings and columns. Values of a removed column are dropped from every row. */
+export function putDataTable(tenantId: string, t: Omit<DataTable, "id" | "tenantId" | "createdAt"> & { id?: string }, actor: string): DataTable {
+  const d = db();
+  const list = (d.dataTables ??= []);
+  const at = list.findIndex((x) => x.tenantId === tenantId && x.id === t.id);
+  if (t.id && at < 0) throw new Error("table not found");
+  const saved: DataTable = { ...structuredClone(t), id: at >= 0 ? list[at].id : id("tb"), tenantId, createdAt: at >= 0 ? list[at].createdAt : now().toISOString() };
+  if (at >= 0) list[at] = saved; else list.push(saved);
+  const keep = new Set(saved.fields.map((f) => f.key));
+  for (const r of (d.dataRows ??= []).filter((x) => x.tableId === saved.id)) for (const k of Object.keys(r.values)) if (!keep.has(k)) delete r.values[k];
+  audit(actor, `${at >= 0 ? "Table updated" : "Table added"}: ${saved.name}`, tenantId);
+  return saved;
+}
+export function deleteDataTable(tenantId: string, tableId: string, actor: string) {
+  const d = db();
+  const gone = getDataTable(tenantId, tableId);
+  if (!gone) return;
+  d.dataTables = (d.dataTables ??= []).filter((x) => x !== gone);
+  d.dataRows = (d.dataRows ??= []).filter((x) => x.tableId !== tableId);
+  audit(actor, `Table deleted with its rows: ${gone.name}`, tenantId);
+}
+export const getDataRows = (tenantId: string, tableId: string) =>
+  (db().dataRows ??= []).filter((r) => r.tenantId === tenantId && r.tableId === tableId);
+/** Adds (no id) or replaces rows of one table; returns how many were saved. A row id from another table is ignored. */
+export function putDataRows(tenantId: string, tableId: string, rows: { id?: string; values: Record<string, string> }[], actor: string): number {
+  if (!getDataTable(tenantId, tableId)) throw new Error("table not found");
+  const list = (db().dataRows ??= []);
+  let n = 0;
+  for (const r of rows) {
+    const at = r.id ? list.findIndex((x) => x.id === r.id && x.tableId === tableId && x.tenantId === tenantId) : -1;
+    if (r.id && at < 0) continue;
+    const saved: DataRow = { id: at >= 0 ? list[at].id : id("rw"), tableId, tenantId, values: { ...r.values }, updatedAt: now().toISOString() };
+    if (at >= 0) list[at] = saved; else list.push(saved);
+    n++;
+  }
+  if (n) audit(actor, `${n} table row${n === 1 ? "" : "s"} saved: ${getDataTable(tenantId, tableId)!.name}`, tenantId);
+  return n;
+}
+export function deleteDataRows(tenantId: string, tableId: string, rowIds: string[], actor: string): number {
+  const d = db();
+  const ids = new Set(rowIds);
+  const before = (d.dataRows ??= []).length;
+  d.dataRows = d.dataRows.filter((x) => !(x.tenantId === tenantId && x.tableId === tableId && ids.has(x.id)));
+  const n = before - d.dataRows.length;
+  if (n) audit(actor, `${n} table row${n === 1 ? "" : "s"} deleted: ${getDataTable(tenantId, tableId)?.name ?? tableId}`, tenantId);
+  return n;
 }
 
 export function addStaffRequest(tenantId: string, r: Pick<StaffRequest, "kind" | "name" | "phone" | "text" | "urgent" | "language"> & { conversationId?: string }) {
@@ -530,6 +583,8 @@ export function deleteTenant(tenantId: string, actor: string) {
     lists[k] = lists[k].filter((x) => x.tenantId !== tenantId);
   for (const i of (d.items ??= []).filter((x) => x.tenantId === tenantId)) delete (d.itemImages ??= {})[i.id];
   d.items = d.items.filter((x) => x.tenantId !== tenantId);
+  d.dataTables = (d.dataTables ??= []).filter((x) => x.tenantId !== tenantId);
+  d.dataRows = (d.dataRows ??= []).filter((x) => x.tenantId !== tenantId);
   audit(actor, `Deleted client "${t.name}"`);
 }
 

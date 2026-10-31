@@ -1,7 +1,7 @@
 import { requireClient } from "@/lib/auth";
 import { businessOf } from "@/lib/business-types";
 import { getT, type Key } from "@/lib/i18n";
-import { getConversations, getStaffRequests } from "@/lib/data";
+import { getConversations, getDataTables, getStaffRequests } from "@/lib/data";
 import { needsAttention } from "@/lib/flags";
 import { Tabs, type TabItem as TabLink } from "./Tabs";
 
@@ -34,7 +34,12 @@ export async function ClientTabs({ group }: { group: ClientGroup }) {
       ...(manager && businessOf(tenant).staffScheduling ? [tab("/app/doctors", "nav.doctors")] : []),
     ];
   } else if (group === "catalog") {
-    items = [tab("/app/catalogue", "nav.catalogue"), ...(manager && tenant.permissions.dataManager ? [tab("/app/data", "nav.dataPhotos")] : [])];
+    const tables = await getDataTables(tenant.id);
+    items = [
+      tab("/app/catalogue", "nav.catalogue"),
+      ...(tables.length ? [tab("/app/tables", "nav.tables")] : []),
+      ...(manager && tenant.permissions.dataManager ? [tab("/app/data", "nav.dataPhotos")] : []),
+    ];
   } else if (group === "assistant") {
     items = [tab("/app/knowledge", "nav.knowledge"), tab("/app/agent", "nav.agent"), tab("/app/voice", "nav.voice"), tab("/app/website", "nav.website")];
   } else {

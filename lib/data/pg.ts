@@ -5,7 +5,7 @@ import { FLAT_RATES, USD_TO_BHD, agent as defaultAgent } from "../seed";
 import { conversationCostUsd } from "../costing";
 import type {
   AgentSettings, AgentToolCall, AgentVersion, Alert, AuditEntry, Booking, BookingMessage, BookingStatus, Conversation, CreditBatch, Doctor,
-  CatalogPackage, KnowledgeItem, LedgerEntry, ChatSession, Channel, Customer, Item, Locale, Permissions, Profile, StaffRequest, Tenant, TenantSecrets, UnansweredQuestion,
+  CatalogPackage, DataRow, DataTable, KnowledgeItem, LedgerEntry, ChatSession, Channel, Customer, Item, Locale, Permissions, Profile, StaffRequest, Tenant, TenantSecrets, UnansweredQuestion,
 } from "../types";
 import type { Data } from "./demo";
 import { DuplicateError, SlotTakenError } from "../errors";
@@ -73,6 +73,12 @@ const itemOf = (r: Row): Item => ({
   id: r.id, tenantId: r.tenant_id, name: r.name, nameAr: r.name_ar ?? undefined, details: r.details, detailsAr: r.details_ar ?? undefined,
   price: r.price ?? undefined, keywords: r.keywords, active: r.active, hasImage: Boolean(r.has_image), createdAt: iso(r.created_at), updatedAt: iso(r.updated_at),
 });
+const dataTableOf = (r: Row): DataTable => ({
+  id: r.id, tenantId: r.tenant_id, name: r.name, nameAr: r.name_ar ?? undefined, fields: jsonish(r.fields) ?? [],
+  clientEdit: Boolean(r.client_edit), assistant: Boolean(r.assistant), createdAt: iso(r.created_at),
+});
+const dataRowOf = (r: Row): DataRow => ({ id: r.id, tableId: r.table_id, tenantId: r.tenant_id, values: jsonish(r.cells) ?? {}, updatedAt: iso(r.updated_at) });
+const isUuid = (v: string) => /^[0-9a-f-]{36}$/i.test(v);
 const ITEM_COLUMNS = `id, tenant_id, name, name_ar, details, details_ar, price, keywords, active, (image is not null) as has_image, created_at, updated_at`;
 const convOf = (r: Row): Conversation => ({
   id: r.id, tenantId: r.tenant_id, channel: r.channel, mode: r.mode, language: r.language, startedAt: iso(r.started_at),
@@ -214,6 +220,26 @@ export const SCHEMA_ADDITIONS = [
      updated_at timestamptz not null default now())`,
   `create index if not exists items_tenant on items (tenant_id, name)`,
   `alter table items enable row level security`,
+  // custom tables a client's admin designs (milestone 6c); each row holds its cells as jsonb keyed by column key
+  `create table if not exists data_tables (
+     id uuid primary key default gen_random_uuid(),
+     tenant_id uuid not null references tenants on delete cascade,
+     name text not null,
+     name_ar text,
+     fields jsonb not null default '[]',
+     client_edit boolean not null default true,
+     assistant boolean not null default false,
+     created_at timestamptz not null default now())`,
+  `create index if not exists data_tables_tenant on data_tables (tenant_id)`,
+  `alter table data_tables enable row level security`,
+  `create table if not exists data_rows (
+     id uuid primary key default gen_random_uuid(),
+     table_id uuid not null references data_tables on delete cascade,
+     tenant_id uuid not null references tenants on delete cascade,
+     cells jsonb not null default '{}',
+     updated_at timestamptz not null default now())`,
+  `create index if not exists data_rows_table on data_rows (tenant_id, table_id)`,
+  `alter table data_rows enable row level security`,
   // a doctor's photo (a small data: URL) lives apart from the doctors table so every doctor list stays light
   `create table if not exists doctor_photos (
      doctor_id uuid primary key references doctors on delete cascade,
@@ -622,6 +648,67 @@ export function createPgData(db: Db): Data {
       if (!/^[0-9a-f-]{36}$/i.test(itemId)) return;
       const r = await run<Row>(`delete from items where tenant_id = $1 and id = $2 returning name`, [tenantId, itemId]);
       if (r[0]) await audit(run, actor, `Catalogue item deleted: ${r[0].name}`, tenantId);
+    }),
+
+    getDataTables: async (tenantId) => {
+      await ensureSchema();
+      return (await q<Row>(`select * from data_tables where tenant_id = $1 order by lower(name)`, [tenantId])).map(dataTableOf);
+    },
+    getDataTable: async (tenantId, tableId) => {
+      await ensureSchema();
+      if (!isUuid(tableId)) return undefined;
+      const rows = await q<Row>(`select * from data_tables where tenant_id = $1 and id = $2`, [tenantId, tableId]);
+      return rows[0] ? dataTableOf(rows[0]) : undefined;
+    },
+    putDataTable: async (tenantId, t, actor) => tx(async (run) => {
+      const values = [tenantId, t.name, t.nameAr ?? null, JSON.stringify(t.fields), t.clientEdit, t.assistant];
+      let rows: Row[];
+      if (t.id) {
+        if (!isUuid(t.id)) throw new Error("table not found");
+        rows = await run<Row>(`update data_tables set name = $2, name_ar = $3, fields = $4, client_edit = $5, assistant = $6 where tenant_id = $1 and id = $7 returning *`, [...values, t.id]);
+        if (!rows[0]) throw new Error("table not found");
+        // a removed column's values go with it
+        await run(`update data_rows set cells = (select coalesce(jsonb_object_agg(k, v), '{}') from jsonb_each(cells) as e(k, v) where k = any($3::text[]))
+                   where tenant_id = $1 and table_id = $2`, [tenantId, t.id, t.fields.map((f) => f.key)]);
+      } else {
+        rows = await run<Row>(`insert into data_tables (tenant_id, name, name_ar, fields, client_edit, assistant) values ($1,$2,$3,$4,$5,$6) returning *`, values);
+      }
+      await audit(run, actor, `${t.id ? "Table updated" : "Table added"}: ${t.name}`, tenantId);
+      return dataTableOf(rows[0]);
+    }),
+    deleteDataTable: async (tenantId, tableId, actor) => tx(async (run) => {
+      if (!isUuid(tableId)) return;
+      const r = await run<Row>(`delete from data_tables where tenant_id = $1 and id = $2 returning name`, [tenantId, tableId]);
+      if (r[0]) await audit(run, actor, `Table deleted with its rows: ${r[0].name}`, tenantId);
+    }),
+    getDataRows: async (tenantId, tableId) => {
+      await ensureSchema();
+      if (!isUuid(tableId)) return [];
+      return (await q<Row>(`select * from data_rows where tenant_id = $1 and table_id = $2 order by updated_at, id limit 5000`, [tenantId, tableId])).map(dataRowOf);
+    },
+    putDataRows: async (tenantId, tableId, rows, actor) => tx(async (run) => {
+      if (!isUuid(tableId)) throw new Error("table not found");
+      const t = await run<Row>(`select name from data_tables where tenant_id = $1 and id = $2`, [tenantId, tableId]);
+      if (!t[0]) throw new Error("table not found");
+      let n = 0;
+      for (const r of rows) {
+        if (r.id) {
+          if (!isUuid(r.id)) continue;
+          n += (await run<Row>(`update data_rows set cells = $4, updated_at = now() where tenant_id = $1 and table_id = $2 and id = $3 returning id`, [tenantId, tableId, r.id, JSON.stringify(r.values)])).length;
+        } else {
+          await run(`insert into data_rows (tenant_id, table_id, cells) values ($1, $2, $3)`, [tenantId, tableId, JSON.stringify(r.values)]);
+          n++;
+        }
+      }
+      if (n) await audit(run, actor, `${n} table row${n === 1 ? "" : "s"} saved: ${t[0].name}`, tenantId);
+      return n;
+    }),
+    deleteDataRows: async (tenantId, tableId, rowIds, actor) => tx(async (run) => {
+      const ids = rowIds.filter(isUuid);
+      if (!isUuid(tableId) || !ids.length) return 0;
+      const r = await run<Row>(`delete from data_rows where tenant_id = $1 and table_id = $2 and id = any($3::uuid[]) returning id`, [tenantId, tableId, ids]);
+      if (r.length) await audit(run, actor, `${r.length} table row${r.length === 1 ? "" : "s"} deleted`, tenantId);
+      return r.length;
     }),
 
     getDoctorImage: async (tenantId, doctorId) => {

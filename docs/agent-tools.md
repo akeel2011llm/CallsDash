@@ -60,6 +60,8 @@ The tools forgive what models commonly get wrong: `doctor_id` may be the doctor'
 matches; a time without a zone ("2026-10-23T16:00") is read as Bahrain time; a `from_date` that is already over means today.
 The agent prompt lists the active doctors with their ids (lib/agent-config.ts).
 
+**Custom tables (agent version 11).** `find_record` (`query`, `table`, `language`) searches the client's custom tables that the admin marked "Assistant reads it" (admin: client > Data > Custom tables; client: Catalog > Custom tables). Every word of the query must appear in a row; rows whose first column holds the words come first. It returns at most 10 records, each as column label (Arabic label when `language` is `ar` and one was given) to value, with stock shown as "N in stock", plus `more` when further rows match. An empty `query` with no `table` lists the tables and their columns. Tables the admin keeps private are never searched. Rows are read live, so a row change needs no "Update the assistant"; the new rule and tool need it once per client.
+
 ## When a booking fails
 
 If a Sync says a secret "contains a character that cannot be sent", or the Channels page shows

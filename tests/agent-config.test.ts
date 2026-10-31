@@ -108,7 +108,7 @@ describe("agent config", () => {
   });
   it("defines all twelve tools with the secret and the agent id variable", () => {
     const d = toolDefinitions("https://app.example", "sec");
-    expect(Object.keys(d).sort()).toEqual(["book_appointment", "cancel_appointment", "check_availability", "find_item", "find_patient_booking", "handoff_to_staff", "lookup_customer", "reschedule_appointment", "save_customer", "send_item_photo", "show_image", "take_message"]);
+    expect(Object.keys(d).sort()).toEqual(["book_appointment", "cancel_appointment", "check_availability", "find_item", "find_patient_booking", "find_record", "handoff_to_staff", "lookup_customer", "reschedule_appointment", "save_customer", "send_item_photo", "show_image", "take_message"]);
     const t = d.book_appointment as { api_schema: { url: string; request_headers: Record<string, string>; request_body_schema: { required: string[]; properties: Record<string, { dynamic_variable?: string }> } } };
     expect(t.api_schema.url).toBe("https://app.example/api/agent-tools/book_appointment");
     expect(t.api_schema.request_headers.Authorization).toBe("Bearer sec");

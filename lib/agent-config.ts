@@ -32,8 +32,9 @@ const ARABIC_STYLE = {
  *    the first time they are named in a website chat.
  * 9: in a typed website chat the photo goes inside the reply as a markdown image (ElevenLabs' widget draws it in the chat);
  *    show_image stays for spoken website conversations.
+ * 11: find_record searches the business's custom tables (stock, menu, price list) that the admin marked for the assistant.
  */
-export const AGENT_VERSION = 10;
+export const AGENT_VERSION = 11;
 
 /** How the assistant finds and saves returning customers, which depends on what the clinic chose on its Customers screen. */
 export function customerRules(mode: "phone" | "cpr"): string[] {
@@ -66,6 +67,7 @@ const CATALOGUE_RULES = [
   "If find_item returns an image_url and the customer is on the website (Channel: website) and typing (Typed chat: true), show the photo inside your reply: after describing the item, put it on a line of its own exactly as ![short caption](image_url), using the image_url exactly as find_item returned it. The chat draws it as a picture inside the conversation. Do not also call show_image, and do not add the page_url link.",
   "If find_item returns an image_url and the customer is on the website but talking (Typed chat: false), never write a markdown image; call show_image with that image_url and a short caption after you describe the item. Only the website chat can use show_image. It answers Shown. when the picture is on the customer's screen. If it answers that the photo is not shown on this screen, put it inside your reply as a markdown image on its own line instead. If it answers anything else, or fails, the chat cannot draw pictures: put the page_url link from find_item in your reply instead, and do not say a photo is shown. Never write a markdown image on any channel other than the website.",
   "In the website chat, the first time in a conversation that a doctor marked [has a photo] in the Doctors list is named (by the customer or by you, for example when offering times), call find_item with the doctor's name and show the doctor's photo the way the two rules above say (inside your reply when typing, show_image when talking), with the doctor's name as caption, once per doctor per conversation and never again for the same doctor.",
+  "When a customer asks about stock or availability, a menu, prices, or anything else that may be in the business's own lists, or when find_item finds nothing, call find_record with what they asked (and the list's name in table, if you know it). Answer only from the records it returns; a record showing 0 in stock is not available now. If it finds nothing, do not guess; say it is not listed and offer to take a message. Call find_record with an empty query to see which lists exist.",
   "If find_item returns an image_url and the customer is on WhatsApp (Channel: whatsapp), describe the item, then call send_item_photo with its item_id. If it returns sent:true, say the photo is being sent; do not add a link. If it returns sent:false, put the link it gives in your reply instead.",
   "On Instagram, if find_item returns a page_url, put it in your reply after describing the item (the app shows a picture preview for it). On a phone call, describe the item in words and never read out a link.",
 ];
@@ -265,6 +267,10 @@ export function toolDefinitions(appUrl: string, secret: string): Record<string, 
     }, []),
     find_item: tool("find_item", "Look up something the clinic offers (a product, treatment or package) or a doctor, with details, price and a photo address. With no query it lists what the clinic offers.", {
       query: str("What the customer asked about, or a doctor's name, in a few words, in their own language. Leave empty to list what the clinic offers."), language: str("en or ar, the language to answer in."),
+    }, []),
+    find_record: tool("find_record", "Search the business's own lists (for example stock, a menu or a price list) and get matching records. With an empty query it names the lists and their columns.", {
+      query: str("What the customer asked about, in a few words, in their own language. Leave empty to see the lists."),
+      table: str("The list's name, if you know which list to search. Leave empty to search them all."), language: str("en or ar, the language to answer in."),
     }, []),
     send_item_photo: tool("send_item_photo", "Send the photo of a catalogue item or a doctor to the customer in their WhatsApp chat. Use it only on WhatsApp.", {
       item_id: str("The item_id from find_item (for a doctor, the doctor's item_id)."), language: str("en or ar, the language of the caption."),

@@ -100,6 +100,23 @@ It also checks that every menu link points at a real page, and that every Englis
   knowledge, doctors, reports, and the new bookings export (`/app/bookings/export`).
 - Not yet: importing bookings (they create calendar events; planned with orders), and custom tables (milestone 6c).
 
+## Custom tables (milestone 6c)
+
+- Storage: `data_tables` (columns as jsonb, `client_edit`, `assistant`) and `data_rows` (values in jsonb `cells`), migration
+  0017, added on start like the others. Demo store keeps `dataTables` / `dataRows`. Deleting a client deletes its tables.
+- Rules in `lib/custom-tables.ts` (pure, tested): 9 column types (text, long text, number, price, stock, yes/no, choice, date,
+  link), Arabic digits and Excel dates understood, the first column names a row (required, no repeats), limits 20 tables,
+  30 columns, 5,000 rows. Renaming or reordering a column keeps its values; removing one deletes them.
+- Admin: client > Catalog and data > Custom tables (`/admin/clients/[id]/data/tables`): ready-made lists (stock, menu,
+  price list) or blank, column designer, "Assistant reads it", "Client can edit rows", delete with typed name.
+- Client: Catalog > Custom tables (`/app/tables`, tab shown once a table exists). Everyone reads; managers change rows
+  only when the table allows it; the admin viewing as the client always can.
+- Rows: add, edit, search, bulk delete with confirm, Excel/CSV download, templates and import (`/api/tables/[id]`,
+  `lib/table-actions.ts`). Import matches by the first column, a blank cell keeps the stored value, a repeated row in one
+  file keeps the later line.
+- Assistant: `find_record` tool (agent version 11, docs/agent-tools.md) searches only "Assistant reads it" tables, at most
+  10 records. Rows are read live; each client needs "Update the assistant" once for the new tool.
+
 ---
 
 # CallsDash reorganization proposal (Phase 1 audit + Phase 2 blueprint)
