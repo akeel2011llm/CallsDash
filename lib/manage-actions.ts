@@ -338,8 +338,8 @@ export async function adminDeclineTopUpAction(f: FormData) {
 /** Only a package no client was ever given; one in use can only be archived. */
 export async function adminDeletePackageAction(f: FormData) {
   const { actor } = await requireAdmin();
-  if (!confirmed(f)) redirect("/admin/packages?error=confirm");
+  if (!confirmed(f)) redirect("/admin/billing/packages?error=confirm");
   const ok = await store.deletePackage(str(f, "id"), actor);
   revalidatePath("/admin", "layout");
-  redirect(ok ? "/admin/packages?deleted=1" : "/admin/packages?error=inUse");
+  redirect(ok ? "/admin/billing/packages?deleted=1" : "/admin/billing/packages?error=inUse");
 }

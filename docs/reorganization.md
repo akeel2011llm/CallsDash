@@ -55,6 +55,16 @@ It also checks that every menu link points at a real page, and that every Englis
 - The tabs no longer repeat the client name and a Back button (the workspace header has them).
 - Retired fields are listed with their reason in tests/parity/moves.json.
 
+## Admin menu, Billing hub and Platform settings (milestone 4)
+
+- Admin menu: Clients, People (`/admin/users`), Billing, Alerts, Platform settings.
+- Billing (`/admin/billing`, opens Packages) has three tabs: Packages (`/admin/billing/packages`), Usage and margin
+  (`/admin/billing/usage`) and Top-up requests (`/admin/billing/requests`, every client's waiting requests with approve and
+  decline). The menu item and the tab show how many requests are waiting. `/admin/packages` and `/admin/usage` redirect.
+- Platform settings (`/admin/settings`): the admin's own password and guides, the provider fees (one platform-wide setting,
+  saved with `saveFeesAction` without a client) and the server keys check (`components/ServerKeys.tsx`).
+- The fees are shown read-only in each client's Assistant > pricing with a link; Channels links to the server keys.
+
 ---
 
 # CallsDash reorganization proposal (Phase 1 audit + Phase 2 blueprint)
