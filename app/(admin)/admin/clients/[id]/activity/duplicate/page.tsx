@@ -19,7 +19,7 @@ export default async function DuplicateClient({ params, searchParams }: { params
     <>
       <PageHead
         title={`${t("dup.title")}: ${locale === "ar" ? tenant.branding.displayNameAr || tenant.name : tenant.name}`}
-        actions={<Link className="btn ghost" href={`/admin/clients/${id}`}>{t("common.back")}</Link>}
+        actions={<Link className="btn ghost" href={`/admin/clients/${id}/activity`}>{t("common.back")}</Link>}
       />
       {(error === "name" || error === "domain" || error === "plan") && <Notice tone="warn">{t(`admin.err.${error}` as "admin.err.name")}</Notice>}
       <form action={adminDuplicateTenantAction} className="card stack" style={{ maxWidth: 560 }}>

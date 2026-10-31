@@ -260,10 +260,10 @@ export async function adminTopUpAction(f: FormData) {
   const { actor } = await requireAdmin();
   const id = str(f, "tenantId");
   const credits = Math.round(num(f, "credits") * 100) / 100;
-  if (!await store.getTenant(id) || !(credits > 0) || credits > 1_000_000) redirect(`/admin/clients/${id}`);
+  if (!await store.getTenant(id) || !(credits > 0) || credits > 1_000_000) redirect(`/admin/clients/${id}/billing`);
   await store.topUp(id, credits, actor, str(f, "note") || "Top-up");
   revalidatePath("/admin", "layout");
-  back(f, `/admin/clients/${id}`);
+  back(f, `/admin/clients/${id}/billing`);
 }
 
 export async function adminRenewAction(f: FormData) {
@@ -273,7 +273,7 @@ export async function adminRenewAction(f: FormData) {
   const planId = str(f, "planId");
   if (tenant?.plans.some((p) => p.active && p.type === "package" && (!planId || p.id === planId))) await store.renewTenantPackage(id, actor, planId || undefined);
   revalidatePath("/admin", "layout");
-  back(f, `/admin/clients/${id}`);
+  back(f, `/admin/clients/${id}/billing`);
 }
 
 /**
@@ -296,10 +296,10 @@ export async function adminAddPlanAction(f: FormData) {
   const { actor } = await requireAdmin();
   const id = str(f, "tenantId");
   const plan = await planFromForm(f);
-  if (!plan || !(await store.getTenant(id))) redirect(`/admin/clients/${id}?error=plan`);
+  if (!plan || !(await store.getTenant(id))) redirect(`/admin/clients/${id}/billing?error=plan`);
   await store.addPlan(id, plan, actor);
   revalidatePath("/admin", "layout");
-  back(f, `/admin/clients/${id}`);
+  back(f, `/admin/clients/${id}/billing`);
 }
 
 export async function adminEndPlanAction(f: FormData) {
@@ -307,8 +307,8 @@ export async function adminEndPlanAction(f: FormData) {
   const id = str(f, "tenantId");
   const ended = await store.endPlan(id, str(f, "planId"), actor);
   revalidatePath("/admin", "layout");
-  if (!ended) redirect(`/admin/clients/${id}?error=lastPlan`);
-  back(f, `/admin/clients/${id}`);
+  if (!ended) redirect(`/admin/clients/${id}/billing?error=lastPlan`);
+  back(f, `/admin/clients/${id}/billing`);
 }
 
 export async function adminSavePackageAction(f: FormData) {
@@ -349,7 +349,7 @@ export async function adminPermissionsAction(f: FormData) {
   };
   await store.setPermissions(id, p, actor);
   revalidatePath("/admin", "layout");
-  back(f, `/admin/clients/${id}`);
+  back(f, `/admin/clients/${id}/people`);
 }
 
 const hex = /^#[0-9a-fA-F]{6}$/;
@@ -368,12 +368,12 @@ export async function adminTenantSettingsAction(f: FormData) {
       branding,
     }, actor);
   } catch (e) {
-    if (e instanceof DuplicateError) redirect(`/admin/clients/${id}?error=${e.field}`);
+    if (e instanceof DuplicateError) redirect(`/admin/clients/${id}/business?error=${e.field}`);
     throw e;
   }
   await autoSync(id, actor);
   revalidatePath("/admin", "layout");
-  back(f, `/admin/clients/${id}`);
+  back(f, `/admin/clients/${id}/business`);
 }
 
 const text = (f: FormData, k: string, max: number) => str(f, k).slice(0, max);
@@ -418,7 +418,7 @@ export async function adminBrandingAction(f: FormData) {
   await store.updateTenant(id, { branding: b }, actor);
   revalidatePath("/admin", "layout");
   revalidatePath("/app", "layout");
-  redirect(`/admin/clients/${id}/branding?${logoError ? "logo=bad" : "saved=1"}`);
+  redirect(`/admin/clients/${id}/business/branding?${logoError ? "logo=bad" : "saved=1"}`);
 }
 
 export async function adminRollbackAction(f: FormData) {
@@ -426,7 +426,7 @@ export async function adminRollbackAction(f: FormData) {
   const id = str(f, "tenantId");
   await store.rollbackAgent(id, str(f, "versionId"), actor);
   revalidatePath("/admin", "layout");
-  back(f, `/admin/clients/${id}`);
+  back(f, `/admin/clients/${id}/activity`);
 }
 
 export async function adminCreateTenantAction(f: FormData) {
@@ -455,7 +455,7 @@ export async function adminCreateTenantAction(f: FormData) {
 export async function adminDuplicateTenantAction(f: FormData) {
   const { actor } = await requireAdmin();
   const sourceId = str(f, "sourceId");
-  const fail = (q: string) => `/admin/clients/${sourceId}/duplicate?${q}`;
+  const fail = (q: string) => `/admin/clients/${sourceId}/activity/duplicate?${q}`;
   if (!(await store.getTenant(sourceId))) redirect("/admin");
   const name = str(f, "name").replace(/\s+/g, " ");
   if (!name) redirect(fail("error=name"));
@@ -485,7 +485,7 @@ export async function adminDeleteTenantAction(f: FormData) {
   const id = str(f, "tenantId");
   const tenant = await store.getTenant(id);
   if (!tenant) redirect("/admin");
-  if (nameKey(str(f, "confirmName")) !== nameKey(tenant.name)) redirect(`/admin/clients/${id}?error=confirm`);
+  if (nameKey(str(f, "confirmName")) !== nameKey(tenant.name)) redirect(`/admin/clients/${id}/activity?error=confirm`);
   await store.deleteTenant(id, actor);
   // If the admin was previewing this client, drop the preview so they land back on the admin side cleanly.
   const jar = await cookies();

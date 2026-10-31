@@ -41,7 +41,7 @@ async function clinicManager(f: FormData): Promise<{ tenantId: string; actor: st
     const { actor } = await requireAdmin();
     const tenantId = str(f, "tenantId");
     if (!(await store.getTenant(tenantId))) redirect("/admin");
-    return { tenantId, actor, fallback: `/admin/clients/${tenantId}` };
+    return { tenantId, actor, fallback: `/admin/clients/${tenantId}/people` };
   }
   const c = await requireClient();
   if (c.staffRole !== "manager") redirect("/app");
@@ -281,7 +281,7 @@ export async function adminClientProfileAction(f: FormData) {
   const tenant = await store.getTenant(id);
   if (!tenant) redirect("/admin");
   const name = str(f, "name").replace(/\s+/g, " ").slice(0, 120);
-  if (!name) go(f, `/admin/clients/${id}`, "error=name", "#profile");
+  if (!name) go(f, `/admin/clients/${id}/business`, "error=name", "#profile");
   const retention = Number(str(f, "retentionDays"));
   const low = Number(str(f, "lowBalancePercent"));
   const status = str(f, "status");
@@ -293,12 +293,12 @@ export async function adminClientProfileAction(f: FormData) {
       lowBalanceThreshold: Number.isFinite(low) && low >= 0 && low <= 90 ? Math.round(low) / 100 : tenant.lowBalanceThreshold,
     }, actor);
   } catch (e) {
-    if (e instanceof DuplicateError) go(f, `/admin/clients/${id}`, `error=${e.field}`, "#profile");
+    if (e instanceof DuplicateError) go(f, `/admin/clients/${id}/business`, `error=${e.field}`, "#profile");
     throw e;
   }
   await autoSync(id, actor);
   refreshAll();
-  go(f, `/admin/clients/${id}`, "saved=1", "#profile");
+  go(f, `/admin/clients/${id}/business`, "saved=1", "#profile");
 }
 
 /** Business type and its words (lib/business-types.ts). Only the words on screen follow it; no stored data changes. */
@@ -311,7 +311,7 @@ export async function adminBusinessAction(f: FormData) {
   const before = businessOf(tenant);
   await store.setBusiness(id, business, actor, `Business type ${before.type} -> ${business.type}${business.staffScheduling ? "" : " (no staff scheduling)"}`);
   refreshAll();
-  go(f, `/admin/clients/${id}`, "saved=business", "#business");
+  go(f, `/admin/clients/${id}/business`, "saved=business", "#business");
 }
 
 /** A correction with a reason: plus adds credits, minus takes them away (never below zero). Both show in the history. */
@@ -321,11 +321,11 @@ export async function adminAdjustCreditsAction(f: FormData) {
   if (!(await store.getTenant(id))) redirect("/admin");
   const credits = Math.round(Number(str(f, "credits")) * 100) / 100;
   const note = str(f, "note").slice(0, 120);
-  if (!Number.isFinite(credits) || credits === 0 || Math.abs(credits) > 1_000_000 || !note) go(f, `/admin/clients/${id}`, "error=adjust", "#wallet");
-  if (credits < 0 && -credits > (await store.getWallet(id)).balance) go(f, `/admin/clients/${id}`, "error=adjustTooMuch", "#wallet");
+  if (!Number.isFinite(credits) || credits === 0 || Math.abs(credits) > 1_000_000 || !note) go(f, `/admin/clients/${id}/billing`, "error=adjust", "#wallet");
+  if (credits < 0 && -credits > (await store.getWallet(id)).balance) go(f, `/admin/clients/${id}/billing`, "error=adjustTooMuch", "#wallet");
   await store.adjustCredits(id, credits, note, actor);
   refreshAll();
-  go(f, `/admin/clients/${id}`, "saved=1", "#wallet");
+  go(f, `/admin/clients/${id}/billing`, "saved=1", "#wallet");
 }
 
 export async function adminDeclineTopUpAction(f: FormData) {

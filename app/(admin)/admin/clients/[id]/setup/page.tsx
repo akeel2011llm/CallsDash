@@ -26,7 +26,7 @@ export default async function Setup({ params, searchParams }: { params: Promise<
   const scan = tenant.onboarding.scan;
   const base = `/admin/clients/${id}`;
   const where: Record<ChecklistId, string | null> = {
-    details: "#details", branding: `${base}/branding`, plan: base, knowledge: "#website", hours: null, calendar: `${base}#doctors`,
+    details: "#details", branding: `${base}/business/branding`, plan: `${base}/billing`, knowledge: "#website", hours: null, calendar: `${base}/people#doctors`,
     team: "#team", agent: `${base}/channels`, channel: `${base}/channels`, test: `${base}/channels`,
   };
   const name = locale === "ar" ? tenant.branding.displayNameAr : tenant.name;
