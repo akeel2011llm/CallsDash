@@ -343,6 +343,13 @@ export default async function AssistantStudioPage({ params, searchParams }: { pa
         </div>
         <Link className="btn" href={`/admin/clients/${id}/assistant/procedures`}>{T("proc.card.button")}</Link>
       </section>
+      <section className="card row" style={{ justifyContent: "space-between" }}>
+        <div>
+          <strong>{T("tests.card.title")}</strong>
+          <p className="muted" style={{ margin: 0 }}>{T("tests.card.help")}</p>
+        </div>
+        <Link className="btn" href={`/admin/clients/${id}/assistant/tests`}>{T("tests.card.button")}</Link>
+      </section>
 
       <FoldControls openAll={T("fold.openAll")} closeAll={T("fold.closeAll")} />
 
