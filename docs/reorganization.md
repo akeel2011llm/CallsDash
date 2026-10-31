@@ -117,11 +117,20 @@ It also checks that every menu link points at a real page, and that every Englis
 - Assistant: `find_record` tool (agent version 11, docs/agent-tools.md) searches only "Assistant reads it" tables, at most
   10 records. Rows are read live; each client needs "Update the assistant" once for the new tool.
 
+## Cleanup (milestone 7)
+
+- Removed the dead `/admin/billing` page (next.config.ts already sends that address to `/admin/billing/packages`; recorded in
+  tests/parity/moves.json).
+- Removed 36 interface texts no screen used any more (both languages), and unused helpers (`customersTemplate`,
+  `knowledgeTemplate`, `doctorsCsv`, `CHANNEL_LABEL`, `ENGLISH_TTS_MODEL`, `ARABIC_TTS_MODEL`).
+- Texts and docs that pointed at the old single client page now name the tab (Business, People) or Platform settings.
+- Kept on purpose: the redirects for old addresses (bookmarks keep working) and every database column.
+
 ---
 
 # CallsDash reorganization proposal (Phase 1 audit + Phase 2 blueprint)
 
-Status: APPROVED 2026-10-31 with the answers and 4 adjustments in Part 3. Milestones 0 and 1 in progress.
+Status: APPROVED 2026-10-31 with the answers and 4 adjustments in Part 3. Milestones 0 to 6c merged (PRs #47 to #55); milestone 7 (cleanup) below.
 Based on the code at main (commit 6b85510), 2026-10-31. No open pull requests at the moment.
 
 ---------------------------------------------------------------------

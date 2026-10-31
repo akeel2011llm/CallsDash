@@ -153,8 +153,6 @@ export function widgetHostnames(t: Pick<Tenant, "allowedDomains">, appUrl?: stri
 }
 
 // ElevenLabs requires the English-only v2 model for an agent whose main language is English; Arabic needs the multilingual v2.5 model, set on the Arabic preset.
-export const ENGLISH_TTS_MODEL = STUDIO_DEFAULTS.ttsModelEn; // "eleven_flash_v2"
-export const ARABIC_TTS_MODEL = STUDIO_DEFAULTS.ttsModelAr; // "eleven_flash_v2_5"
 
 export const OUTCOME_ITEM = {
   type: "string", enum: ["booked", "answered", "handed_off", "abandoned"],

@@ -23,7 +23,6 @@
     "page /account",
     "page /admin",
     "page /admin/alerts",
-    "page /admin/billing",
     "page /admin/billing/packages",
     "page /admin/billing/requests",
     "page /admin/billing/usage",
