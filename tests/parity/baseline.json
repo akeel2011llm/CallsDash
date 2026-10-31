@@ -8,6 +8,7 @@
     "GET /api/items/[slug]/[id]/image",
     "GET /api/webhooks/instagram",
     "GET /api/widget/config",
+    "GET /app/bookings/export",
     "GET /app/customers/csv",
     "GET /app/reports/csv",
     "GET /auth/callback",

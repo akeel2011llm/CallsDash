@@ -44,7 +44,7 @@ export async function BookingList({ base, tenant, doctorId, sp }: BookingScope &
   const returnTo = keep({});
   return (
     <>
-      <PageHead title={t("bookings.title")} actions={<><Link className="btn" href={`${base}/bookings/new`}>{t("bookings.new")}</Link>{base === "/app" && <Link className="btn ghost" href="/app/calendar">{t("nav.calendar")}</Link>}</>} />
+      <PageHead title={t("bookings.title")} actions={<><Link className="btn" href={`${base}/bookings/new`}>{t("bookings.new")}</Link>{base === "/app" && <><a className="btn ghost" href="/app/bookings/export">{t("sheet.csv")}</a><a className="btn ghost" href="/app/bookings/export?format=xlsx">{t("sheet.xlsx")}</a></>}</>} />
       {isBookingError(sp.err) && <Notice tone="warn">{t(`bookings.err.${sp.err}` as "bookings.err.slot_taken")}</Notice>}
       {sp.deleted && <Notice tone="ok">{t("bookings.deleted")}</Notice>}
       <div className="grid">

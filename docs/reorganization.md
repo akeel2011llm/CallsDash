@@ -88,6 +88,18 @@ It also checks that every menu link points at a real page, and that every Englis
 - A menu item stays lit on its group's pages (`also` on the nav item, `lib/nav.ts`). The phone bar: Home, Inbox, Bookings,
   Customers, More. Inbox's badge adds needs-attention and open messages.
 
+## Excel and CSV (milestone 6b)
+
+- `lib/xlsx.ts` writes and reads .xlsx without a library (a ZIP of XML, built on node:zlib): bold frozen header with a filter,
+  sized columns, values as text or numbers only (never formulas). Reading takes the first sheet (shared or inline strings,
+  numbers, true/false), caps the unpacked size, and rejects anything that is not a workbook (`XlsxError`).
+- `lib/sheet.ts`: `sheetResponse(rows, name, format)` for every download (`?format=xlsx`, CSV otherwise) and `sheetFromFile`
+  for every upload (decided by the file's bytes). The CSV rules stay: 500 rows, 1 MB, match by name / phone / question, a
+  blank cell keeps the stored value.
+- Import (Excel or CSV) and both templates: catalogue, customers, knowledge. Download in both: catalogue, customers,
+  knowledge, doctors, reports, and the new bookings export (`/app/bookings/export`).
+- Not yet: importing bookings (they create calendar events; planned with orders), and custom tables (milestone 6c).
+
 ---
 
 # CallsDash reorganization proposal (Phase 1 audit + Phase 2 blueprint)

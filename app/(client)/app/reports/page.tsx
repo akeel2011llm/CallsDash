@@ -37,6 +37,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
               {RANGES.map((d) => <Link key={d} href={`/app/reports?days=${d}`} className={d === days ? "on" : ""}>{t(`reports.range.${d}` as "reports.range.7")}</Link>)}
             </nav>
             <a className="btn ghost no-print" href={`/app/reports/csv?days=${days}`}><Icon name="download" size={18} />{t("reports.csv")}</a>
+            <a className="btn ghost no-print" href={`/app/reports/csv?days=${days}&format=xlsx`}><Icon name="download" size={18} />{t("sheet.xlsx")}</a>
             <PrintButton><Icon name="print" size={18} />{t("reports.print")}</PrintButton>
           </>
         }

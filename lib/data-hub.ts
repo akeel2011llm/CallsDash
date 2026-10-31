@@ -77,9 +77,12 @@ const headerKey = (h: string) => {
   return ALIASES[k] ?? k.replace(/[\s_-]+/g, "");
 };
 
+/** A table to import: CSV text, or rows already read from an Excel file (lib/xlsx.ts). */
+export type SheetInput = string | string[][];
+
 /** The first row names the columns; the rest become records keyed by those names (spaces, case and underscores ignored). */
-export function readRecords(text: string): Records {
-  const all = parseCsv(text);
+export function readRecords(input: SheetInput): Records {
+  const all = typeof input === "string" ? parseCsv(input) : input.map((r) => r.map((c) => String(c ?? "")));
   if (!all.length) return { headers: [], rows: [], tooMany: false };
   const headers = all[0].map(headerKey);
   const body = all.slice(1);
@@ -111,16 +114,18 @@ const empty = (): ImportResult => ({ added: 0, updated: 0, skipped: 0, errors: [
 
 export const ITEM_COLUMNS = ["name", "name_ar", "details", "details_ar", "price", "keywords", "active"] as const;
 
-export const itemsCsv = (items: Item[]) =>
-  toCsv([[...ITEM_COLUMNS], ...items.map((i) => [i.name, i.nameAr ?? "", i.details, i.detailsAr ?? "", i.price ?? "", i.keywords, i.active ? "yes" : "no"])]);
+export const itemsRows = (items: Item[]): string[][] =>
+  [[...ITEM_COLUMNS], ...items.map((i) => [i.name, i.nameAr ?? "", i.details, i.detailsAr ?? "", i.price ?? "", i.keywords, i.active ? "yes" : "no"])];
+export const itemsCsv = (items: Item[]) => toCsv(itemsRows(items));
 
 /** One example row so the template shows what each column holds. */
-export const itemsTemplate = () => toCsv([[...ITEM_COLUMNS], ["Teeth whitening", "تبييض الأسنان", "One-hour session in the clinic.", "جلسة لمدة ساعة في العيادة.", "BHD 45", "whitening, bleaching", "yes"]]);
+export const itemsTemplateRows = (): string[][] => [[...ITEM_COLUMNS], ["Teeth whitening", "تبييض الأسنان", "One-hour session in the clinic.", "جلسة لمدة ساعة في العيادة.", "BHD 45", "whitening, bleaching", "yes"]];
+export const itemsTemplate = () => toCsv(itemsTemplateRows());
 
 type ItemDeps = Pick<Data, "getItems" | "getItem" | "getItemImage" | "putItem" | "deleteItem">;
 
 /** Adds the catalogue items in a CSV; an item whose name already exists is updated and keeps its photo. */
-export async function importItems(d: ItemDeps, tenantId: string, text: string, actor: string): Promise<ImportResult> {
+export async function importItems(d: ItemDeps, tenantId: string, text: SheetInput, actor: string): Promise<ImportResult> {
   const { headers, rows, tooMany } = readRecords(text);
   const res = empty();
   res.tooMany = tooMany;
@@ -149,12 +154,13 @@ export async function importItems(d: ItemDeps, tenantId: string, text: string, a
 
 export const CUSTOMER_COLUMNS = ["name", "phone", "cpr", "email", "language", "notes"] as const;
 
-export const customersTemplate = () => toCsv([[...CUSTOMER_COLUMNS], ["Sara Ahmed", "+973 3600 1122", "", "sara@example.com", "ar", "Prefers morning appointments"]]);
+export const customersTemplateRows = (): string[][] => [[...CUSTOMER_COLUMNS], ["Sara Ahmed", "+973 3600 1122", "", "sara@example.com", "ar", "Prefers morning appointments"]];
+export const customersTemplate = () => toCsv(customersTemplateRows());
 
 type CustomerDeps = Pick<Data, "getCustomer" | "findCustomer" | "putCustomer" | "deleteCustomer">;
 
 /** Adds the customers in a CSV; one whose phone number is already there is updated, and a blank cell keeps what is stored. */
-export async function importCustomers(d: CustomerDeps, tenantId: string, text: string, actor: string): Promise<ImportResult> {
+export async function importCustomers(d: CustomerDeps, tenantId: string, text: SheetInput, actor: string): Promise<ImportResult> {
   const { headers, rows, tooMany } = readRecords(text);
   const res = empty();
   res.tooMany = tooMany;
@@ -180,20 +186,23 @@ export async function importCustomers(d: CustomerDeps, tenantId: string, text: s
   return res;
 }
 
-export const customersCsv = (list: Customer[]) =>
-  toCsv([[...CUSTOMER_COLUMNS, "created_at", "last_contact_at", "conversations"], ...list.map((c) => [c.name, c.phone, c.cpr ?? "", c.email ?? "", c.language ?? "", c.notes, c.createdAt, c.lastContactAt ?? "", c.history.length])]);
+export const customersRows = (list: Customer[]): (string | number)[][] =>
+  [[...CUSTOMER_COLUMNS, "created_at", "last_contact_at", "conversations"], ...list.map((c) => [c.name, c.phone, c.cpr ?? "", c.email ?? "", c.language ?? "", c.notes, c.createdAt, c.lastContactAt ?? "", c.history.length])];
+export const customersCsv = (list: Customer[]) => toCsv(customersRows(list));
 
 /* ---------- knowledge ---------- */
 
 export const KNOWLEDGE_COLUMNS = ["question", "answer", "language"] as const;
 
-export const knowledgeTemplate = () => toCsv([[...KNOWLEDGE_COLUMNS], ["What are your opening hours?", "We are open Saturday to Thursday 8 am to 9 pm and Friday 4 pm to 9 pm.", "en"]]);
-export const knowledgeCsv = (list: KnowledgeItem[]) => toCsv([[...KNOWLEDGE_COLUMNS], ...list.map((k) => [k.question, k.answer, k.language])]);
+export const knowledgeTemplateRows = (): string[][] => [[...KNOWLEDGE_COLUMNS], ["What are your opening hours?", "We are open Saturday to Thursday 8 am to 9 pm and Friday 4 pm to 9 pm.", "en"]];
+export const knowledgeTemplate = () => toCsv(knowledgeTemplateRows());
+export const knowledgeRows = (list: KnowledgeItem[]): string[][] => [[...KNOWLEDGE_COLUMNS], ...list.map((k) => [k.question, k.answer, k.language])];
+export const knowledgeCsv = (list: KnowledgeItem[]) => toCsv(knowledgeRows(list));
 
 type KnowledgeDeps = Pick<Data, "getKnowledge" | "addKnowledge" | "updateKnowledge">;
 
 /** Adds the questions and answers in a CSV; the same question in the same language is updated instead of added twice. */
-export async function importKnowledge(d: KnowledgeDeps, tenantId: string, text: string, actor: string): Promise<ImportResult> {
+export async function importKnowledge(d: KnowledgeDeps, tenantId: string, text: SheetInput, actor: string): Promise<ImportResult> {
   const { headers, rows, tooMany } = readRecords(text);
   const res = empty();
   res.tooMany = tooMany;
@@ -215,8 +224,9 @@ export async function importKnowledge(d: KnowledgeDeps, tenantId: string, text: 
 
 /* ---------- doctors, full export ---------- */
 
-export const doctorsCsv = (list: Doctor[]) =>
-  toCsv([["name", "specialty", "active", "has_photo"], ...list.map((x) => [x.name, x.specialty, x.active === false ? "no" : "yes", x.photoAt ? "yes" : "no"])]);
+export const doctorsRows = (list: Doctor[]): string[][] =>
+  [["name", "specialty", "active", "has_photo"], ...list.map((x) => [x.name, x.specialty, x.active === false ? "no" : "yes", x.photoAt ? "yes" : "no"])];
+export const doctorsCsv = (list: Doctor[]) => toCsv(doctorsRows(list));
 
 export const EXPORT_KINDS = ["catalogue", "customers", "knowledge", "doctors"] as const;
 export type ExportKind = (typeof EXPORT_KINDS)[number];
