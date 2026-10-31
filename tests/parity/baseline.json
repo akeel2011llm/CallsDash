@@ -472,6 +472,7 @@
     "saveTableAction:n",
     "saveTableAction:name",
     "saveTableAction:nameAr",
+    "saveTableAction:preset",
     "saveWhatsappAction:address",
     "saveWhatsappAction:addressAr",
     "saveWhatsappAction:confirmTemplate",
