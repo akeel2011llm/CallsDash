@@ -41,7 +41,7 @@ export async function DataView({ tenant, scope, sp, t, locale, base }: {
   const hidden = <><input type="hidden" name="scope" value={scope} /><input type="hidden" name="tenantId" value={tenant.id} /></>;
   const q = foldText((sp.q ?? "").trim());
   const open = sp.open && /^[a-z]+(-[\w-]*)?$/.test(sp.open) ? sp.open : "";
-  const openSection = open ? SECTION_OF(open) : sp.photo ? "photos" : sp.imp || ["nofile", "toobig", "column"].includes(sp.err ?? "") ? "transfer" : "";
+  const openSection = open ? SECTION_OF(open) : sp.photo ? "photos" : sp.imp || ["nofile", "toobig", "column", "badfile"].includes(sp.err ?? "") ? "transfer" : "";
   const err = sp.err && /^[a-z_]+$/.test(sp.err) ? sp.err : "";
   const errText = (code: string, vars: Record<string, string> = {}) => {
     const key = `data.err.${code}`;
@@ -261,10 +261,16 @@ export async function DataView({ tenant, scope, sp, t, locale, base }: {
 
       <Fold id="transfer" title={t("data.transfer.title")} hint={t("data.transfer.hint")} open={openSection === "transfer"}>
         <h3>{t("data.export.title")}</h3>
-        <div className="row">
+        <div className="stack" style={{ gap: ".4rem" }}>
           {(["catalogue", "customers", "knowledge", "doctors"] as const).map((k) => (
-            <a key={k} className="btn small ghost" href={`/api/data/export/${k}${tq ? `?${tq.slice(1)}` : ""}`}>{t(`data.export.${k}` as Key)}</a>
+            <div key={k} className="row">
+              <strong style={{ minInlineSize: "7rem" }}>{t(`data.export.${k}` as Key)}</strong>
+              <a className="btn small ghost" href={`/api/data/export/${k}${tq ? `?${tq.slice(1)}` : ""}`} aria-label={`${t(`data.export.${k}` as Key)}: ${t("sheet.csv")}`}>{t("sheet.csv")}</a>
+              <a className="btn small ghost" href={`/api/data/export/${k}?format=xlsx${tq}`} aria-label={`${t(`data.export.${k}` as Key)}: ${t("sheet.xlsx")}`}>{t("sheet.xlsx")}</a>
+            </div>
           ))}
+        </div>
+        <div className="row">
           <a className="btn small ghost" href={`/api/data/export/all${tq ? `?${tq.slice(1)}` : ""}`}>{t("data.export.all")}</a>
           <a className="btn small ghost" href={`/api/data/export/all?photos=1${tq}`}>{t("data.export.allPhotos")}</a>
         </div>
@@ -276,9 +282,10 @@ export async function DataView({ tenant, scope, sp, t, locale, base }: {
             {hidden}<input type="hidden" name="kind" value={k} />
             <fieldset disabled={k !== "customers" && knowledgeLocked} className="row" style={{ border: 0, padding: 0, margin: 0 }}>
               <strong style={{ minInlineSize: "7rem" }}>{t(`data.import.${k}` as Key)}</strong>
-              <input type="file" name="file" accept=".csv,text/csv" aria-label={`${t(`data.import.${k}` as Key)}: ${t("data.import.file")}`} />
+              <input type="file" name="file" accept=".csv,text/csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" aria-label={`${t(`data.import.${k}` as Key)}: ${t("data.import.file")}`} />
               <SubmitButton className="btn small" type="submit">{t("data.import.go")}</SubmitButton>
-              <a className="btn small ghost" href={`/api/data/export/${k}?template=1${tq}`}>{t("data.import.template")}</a>
+              <a className="btn small ghost" href={`/api/data/export/${k}?template=1${tq}`}>{t("data.import.template")} ({t("sheet.csv")})</a>
+              <a className="btn small ghost" href={`/api/data/export/${k}?template=1&format=xlsx${tq}`}>{t("data.import.template")} ({t("sheet.xlsx")})</a>
             </fieldset>
           </form>
         ))}

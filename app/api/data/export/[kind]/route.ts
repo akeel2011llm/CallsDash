@@ -1,19 +1,16 @@
 import { dataTenant } from "@/lib/data-access";
 import { getData } from "@/lib/data";
 import {
-  buildFullExport, customersCsv, customersTemplate, doctorsCsv, isExportKind, isImportKind, itemsCsv, itemsTemplate, knowledgeCsv, knowledgeTemplate, safeName,
+  buildFullExport, customersRows, customersTemplateRows, doctorsRows, isExportKind, isImportKind, itemsRows, itemsTemplateRows, knowledgeRows, knowledgeTemplateRows, safeName,
 } from "@/lib/data-hub";
+import { formatOf, sheetResponse } from "@/lib/sheet";
 
 export const dynamic = "force-dynamic";
 
-const csv = (body: string, name: string) =>
-  new Response("﻿" + body, {
-    headers: { "content-type": "text/csv; charset=utf-8", "content-disposition": `attachment; filename="${name}.csv"`, "cache-control": "no-store" },
-  });
-
 /**
  * Downloads for the Data screen: `catalogue`, `customers`, `knowledge` or `doctors` as a spreadsheet, `all` as one JSON file
- * (`photos=1` adds every photo), and `template=1` for an empty file to fill in and import. Same access as the screen itself.
+ * (`photos=1` adds every photo), and `template=1` for an empty file to fill in and import. `format=xlsx` gives an Excel file
+ * instead of CSV. Same access as the screen itself.
  */
 export async function GET(req: Request, { params }: { params: Promise<{ kind: string }> }) {
   const { kind } = await params;
@@ -22,9 +19,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ kind: st
   if (!tenant) return new Response("Not found", { status: 404 });
   const d = await getData();
   const slug = safeName(tenant.slug);
+  const format = formatOf(req.url);
   if (url.searchParams.get("template") === "1") {
     if (!isImportKind(kind)) return new Response("Not found", { status: 404 });
-    return csv(kind === "catalogue" ? itemsTemplate() : kind === "customers" ? customersTemplate() : knowledgeTemplate(), `${kind}-template`);
+    return sheetResponse(kind === "catalogue" ? itemsTemplateRows() : kind === "customers" ? customersTemplateRows() : knowledgeTemplateRows(), `${kind}-template`, format, { sheet: kind });
   }
   if (kind === "all") {
     const full = await buildFullExport(d, tenant, url.searchParams.get("photos") === "1", new Date().toISOString());
@@ -33,9 +31,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ kind: st
     });
   }
   if (!isExportKind(kind)) return new Response("Not found", { status: 404 });
-  const body = kind === "catalogue" ? itemsCsv(await d.getItems(tenant.id))
-    : kind === "customers" ? customersCsv(await d.getCustomers(tenant.id))
-      : kind === "knowledge" ? knowledgeCsv(await d.getKnowledge(tenant.id))
-        : doctorsCsv(await d.getDoctors(tenant.id));
-  return csv(body, `${slug}-${kind}`);
+  const rows = kind === "catalogue" ? itemsRows(await d.getItems(tenant.id))
+    : kind === "customers" ? customersRows(await d.getCustomers(tenant.id))
+      : kind === "knowledge" ? knowledgeRows(await d.getKnowledge(tenant.id))
+        : doctorsRows(await d.getDoctors(tenant.id));
+  return sheetResponse(rows, `${slug}-${kind}`, format, { sheet: kind });
 }

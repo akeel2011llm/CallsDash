@@ -6,7 +6,9 @@ import { requireAdmin, requireClient } from "./auth";
 import { autoSync } from "./auto-sync";
 import { getData } from "./data";
 import { CustomerError, saveCustomerByStaff } from "./customers";
-import { MAX_IMPORT_BYTES, importCustomers, importItems, importKnowledge, isImportKind } from "./data-hub";
+import { MAX_IMPORT_BYTES, importCustomers, importItems, importKnowledge, isImportKind, type SheetInput } from "./data-hub";
+import { sheetFromFile } from "./sheet";
+import { XlsxError } from "./xlsx";
 import { ItemError, itemImageDataUrl, saveItemByStaff } from "./items";
 import type { Locale, Tenant } from "./types";
 
@@ -148,7 +150,7 @@ export async function dataRowAction(f: FormData) {
   return done(s, `saved=1&open=${kind}`, hashOf(kind));
 }
 
-/** Reads a CSV file into the catalogue, the customers or the knowledge base. Rows that cannot be used are listed, never silently dropped. */
+/** Reads a CSV or Excel file into the catalogue, the customers or the knowledge base. Rows that cannot be used are listed, never silently dropped. */
 export async function dataImportAction(f: FormData) {
   const s = await scopeOf(f);
   const kind = str(f, "kind");
@@ -157,7 +159,9 @@ export async function dataImportAction(f: FormData) {
   const file = f.get("file");
   if (!(file instanceof File) || file.size === 0) return done(s, "err=nofile", "transfer");
   if (file.size > MAX_IMPORT_BYTES) return done(s, "err=toobig", "transfer");
-  const text = await file.text();
+  let text: SheetInput;
+  try { text = await sheetFromFile(file); }
+  catch (e) { if (e instanceof XlsxError) return done(s, "err=badfile", "transfer"); throw e; }
   const d = await getData();
   const r = kind === "catalogue" ? await importItems(d, s.tenant.id, text, s.actor)
     : kind === "customers" ? await importCustomers(d, s.tenant.id, text, s.actor)

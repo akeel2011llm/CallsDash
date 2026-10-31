@@ -23,7 +23,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
   const err = sp.err && /^[a-z_]+$/.test(sp.err) ? `customers.err.${sp.err}` : "";
   return (
     <>
-      <PageHead title={t("customers.title")} actions={all.length > 0 ? <a className="btn small ghost" href="/app/customers/csv">{t("customers.export")}</a> : undefined} />
+      <PageHead title={t("customers.title")} actions={all.length > 0 ? <><a className="btn small ghost" href="/app/customers/csv">{t("customers.export")}</a><a className="btn small ghost" href="/app/customers/csv?format=xlsx">{t("sheet.xlsx")}</a></> : undefined} />
       <p className="muted">{t("customers.help")}</p>
       {sp.deleted && <Notice tone="ok">{t("customers.deleted")}</Notice>}
       {sp.mode && <Notice tone="ok">{t("customers.lookup.saved")}</Notice>}

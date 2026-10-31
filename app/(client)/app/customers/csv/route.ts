@@ -1,19 +1,12 @@
 import { requireClient } from "@/lib/auth";
 import { getCustomers } from "@/lib/data";
-import { toCsv } from "@/lib/stats";
+import { customersRows } from "@/lib/data-hub";
+import { formatOf, sheetResponse } from "@/lib/sheet";
 
 export const dynamic = "force-dynamic";
 
-/** The clinic's customers as a spreadsheet, for its own records. */
-export async function GET() {
+/** The clinic's customers as a spreadsheet (CSV, or Excel with ?format=xlsx), for its own records. */
+export async function GET(req: Request) {
   const { tenant } = await requireClient();
-  const rows = (await getCustomers(tenant.id)).map((c) => [c.name, c.phone, c.cpr ?? "", c.email ?? "", c.language ?? "", c.notes, c.createdAt, c.lastContactAt ?? "", c.history.length]);
-  const csv = toCsv([["name", "phone", "cpr", "email", "language", "notes", "created_at", "last_contact_at", "conversations"], ...rows]);
-  return new Response("﻿" + csv, {
-    headers: {
-      "content-type": "text/csv; charset=utf-8",
-      "content-disposition": `attachment; filename="${tenant.slug}-customers.csv"`,
-      "cache-control": "no-store",
-    },
-  });
+  return sheetResponse(customersRows(await getCustomers(tenant.id)), `${tenant.slug}-customers`, formatOf(req.url), { sheet: "customers" });
 }
