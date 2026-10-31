@@ -661,6 +661,15 @@ export function deleteStaffRequest(tenantId: string, requestId: string, actor: s
   if (d.staffRequests.length < before) audit(actor, "Message deleted", tenantId);
 }
 
+/** Marks recordings as deleted (their copy at ElevenLabs is gone); the transcript and summary stay. Returns how many changed. */
+export function markRecordingsDeleted(tenantId: string, conversationIds: string[], actor: string): number {
+  const at = new Date().toISOString();
+  const hit = db().conversations.filter((x) => x.tenantId === tenantId && conversationIds.includes(x.id) && !x.recordingDeletedAt);
+  for (const c of hit) c.recordingDeletedAt = at;
+  if (hit.length) audit(actor, `${hit.length} recording(s) deleted`, tenantId);
+  return hit.length;
+}
+
 /** Removes the transcript and summary (a patient's deletion request). The credits it used stay in the ledger. */
 export function deleteConversation(tenantId: string, conversationId: string, actor: string) {
   const d = db();

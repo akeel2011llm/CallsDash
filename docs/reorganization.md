@@ -168,6 +168,17 @@ It also checks that every menu link points at a real page, and that every Englis
   and `save_customer` take `details` (JSON by key, or "name: value" lines). The service refuses a booking missing a
   required asked field and names it; staff must fill every required field. Told team fields appear in the team list.
 
+## Recordings (step 3)
+
+- Client portal: Inbox > Recordings (`/app/recordings`): every voice conversation ElevenLabs knows, with search, state
+  (available, deleted, removed after the retention period) and channel filters, a player, Download, and a bulk delete for
+  managers (tick box). The conversation page plays it too. Admins use "view as client".
+- Audio is never stored in CallsDash: `/api/recordings/<id>` fetches `GET /v1/convai/conversations/:id/audio` with the
+  server key (lib/recordings.ts). Deleting calls `DELETE /v1/convai/conversations/:id` (404 counts as done) and sets
+  `conversations.recording_deleted_at` (migration 0020); the transcript and summary stay.
+- How long recordings are kept is the client's retention (Business tab), already sent to the agent as
+  `platform_settings.privacy.retention_days`.
+
 ---
 
 # CallsDash reorganization proposal (Phase 1 audit + Phase 2 blueprint)

@@ -250,7 +250,8 @@ export function seed(): DB {
         id: `c_${t}_${i}`, tenantId: t, channel, mode, language: lang, startedAt: iso(startedMs), durationSec, messages,
         outcome, summary: pick(summaries[outcome][lang]), sentiment: outcome === "handed_off" ? "negative" : pick(["positive", "positive", "neutral"] as const),
         transcript: outcome === "abandoned" ? [] : tr,
-        recordingUrl: mode === "voice" ? undefined : undefined, // real URLs come from ElevenLabs via the webhook
+        // a voice conversation's recording is played from ElevenLabs by this id (lib/recordings.ts)
+        ...(mode === "voice" ? { elevenLabsConversationId: `conv_demo_${t}_${i}` } : {}),
         creditsCharged: credits, flags: [], reviewed: false,
         costUsd: round2(mode === "voice" ? (durationSec / 60) * ELEVENLABS_USD_PER_MIN : messages * ELEVENLABS_USD_PER_MSG),
       });

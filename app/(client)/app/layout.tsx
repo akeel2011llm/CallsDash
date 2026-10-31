@@ -22,7 +22,7 @@ export default async function ClientLayout({ children }: { children: React.React
       // 9 menu items; grouped pages keep their own addresses and show tabs (route groups (inbox), (bookings), ... in this folder)
       nav={[
         { href: "/app", label: t("nav.home"), icon: "home", exact: true, tab: true },
-        { href: "/app/conversations", label: t("nav.inbox"), icon: "chat", tab: true, also: ["/app/attention", "/app/messages"], badge: attention + openRequests || undefined, group: t("nav.g.work") },
+        { href: "/app/conversations", label: t("nav.inbox"), icon: "chat", tab: true, also: ["/app/attention", "/app/messages", "/app/recordings"], badge: attention + openRequests || undefined, group: t("nav.g.work") },
         { href: "/app/bookings", label: t("nav.bookings"), icon: "check", tab: true, also: ["/app/calendar", "/app/doctors"] },
         { href: "/app/customers", label: t("nav.customers"), icon: "contact", tab: true },
         { href: "/app/reports", label: t("nav.reports"), icon: "chart" },

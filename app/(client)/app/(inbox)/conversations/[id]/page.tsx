@@ -4,6 +4,7 @@ import { requireClient } from "@/lib/auth";
 import { getT } from "@/lib/i18n";
 import { fmtDate, fmtDateTime, fmtDuration, fmtNum } from "@/lib/format";
 import { getConversation } from "@/lib/data";
+import { recordingState } from "@/lib/recordings";
 import { reviewConversationAction } from "@/lib/actions";
 import { deleteConversationAction } from "@/lib/manage-actions";
 import { ConfirmDelete } from "@/components/Confirm";
@@ -18,6 +19,7 @@ export default async function ConversationPage({ params, searchParams }: { param
   if (!c) notFound();
   const { t, locale } = await getT(tenant);
   const deleteOn = new Date(new Date(c.startedAt).getTime() + tenant.retentionDays * 86_400_000).toISOString();
+  const rec = recordingState(c, tenant.retentionDays);
   return (
     <>
       <PageHead title={t("conversations.title")} actions={<Link className="btn ghost" href="/app/conversations">{t("common.back")}</Link>} />
@@ -51,8 +53,11 @@ export default async function ConversationPage({ params, searchParams }: { param
       </section>
       <section className="card stack">
         <h2>{t("conversations.recording")}</h2>
-        {c.recordingUrl ? <audio controls preload="none" src={c.recordingUrl} style={{ width: "100%" }} /> : <Notice>{t("conversations.noRecording")}</Notice>}
-        <small className="muted">{t("conversations.deleteOn")} {fmtDate(deleteOn, locale)}</small>
+        {rec === "available" && process.env.ELEVENLABS_API_KEY ? <>
+          <audio controls preload="none" src={`/api/recordings/${c.id}`} style={{ width: "100%" }} />
+          <a href={`/api/recordings/${c.id}?download=1`}>{t("rec.download")}</a>
+        </> : <Notice>{rec === "deleted" ? t("rec.state.deleted") : rec === "available" ? t("rec.noKey") : t("conversations.noRecording")}</Notice>}
+        <small className="muted">{t("conversations.deleteOn")} {fmtDate(deleteOn, locale)} · <Link href="/app/recordings">{t("nav.recordings")}</Link></small>
       </section>
       <section className="card stack">
         <h2>{t("conversations.transcript")}</h2>

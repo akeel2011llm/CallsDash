@@ -104,6 +104,7 @@ export const deleteBooking = call("deleteBooking");
 export const updateKnowledge = call("updateKnowledge");
 export const deleteStaffRequest = call("deleteStaffRequest");
 export const deleteConversation = call("deleteConversation");
+export const markRecordingsDeleted = call("markRecordingsDeleted");
 export const adjustCredits = call("adjustCredits");
 export const declineTopUpRequest = call("declineTopUpRequest");
 export const deletePackage = call("deletePackage");
