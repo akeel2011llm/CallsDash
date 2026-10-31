@@ -31,7 +31,7 @@ export default async function BrandingPage({ params, searchParams }: { params: P
         subtitle={t("brand.help")}
         actions={
           <>
-            <Link className="btn ghost" href={`/admin/clients/${id}`}>{t("common.back")}</Link>
+            <Link className="btn ghost" href={`/admin/clients/${id}/business`}>{t("common.back")}</Link>
             <a className="btn ghost" href={`/login?c=${encodeURIComponent(tenant.slug)}`} target="_blank" rel="noreferrer">{t("brand.loginLink")}</a>
           </>
         }

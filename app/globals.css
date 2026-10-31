@@ -644,3 +644,12 @@ details.fold[open] > summary { border-block-end: 1px solid var(--line); }
   .step > a, .step > span { padding: 0; border: 0; background: none; box-shadow: none !important; }
   .step-text { display: none; }
 }
+
+/* ---------- client workspace header (app/(admin)/admin/clients/[id]/layout.tsx) ---------- */
+.ws-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 1rem; flex-wrap: wrap; }
+.ws-title { display: grid; gap: .2rem; min-inline-size: 0; }
+.ws-back { font-size: .85rem; }
+.ws-back::before { content: "‹ "; }
+[dir="rtl"] .ws-back::before { content: "› "; }
+.ws-name { font-family: var(--font-head); font-size: 1.5rem; line-height: 1.2; overflow-wrap: anywhere; }
+@media (max-width: 640px) { .ws-name { font-size: 1.2rem; } .ws-head form { inline-size: 100%; } .ws-head form .btn { inline-size: 100%; justify-content: center; } }

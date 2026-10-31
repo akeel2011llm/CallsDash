@@ -32,6 +32,18 @@ It also checks that every menu link points at a real page, and that every Englis
 - Set on New client and on the admin client page (Business type). Duplicating a client copies its type.
 - Not yet: the assistant's own wording (lib/agent-config.ts) still says doctor/patient/clinic.
 
+## Admin client workspace (milestone 2)
+
+- `app/(admin)/admin/clients/[id]/layout.tsx`: one header (name, status, View as client) and nine tabs for every screen about
+  a client. Tabs: Overview (`/`), Setup, Business, People, Catalog and data (`/data`), Assistant, Channels, Billing, Activity.
+- The long client page was split, field for field: Business = account profile, business type, white-label settings (+ the
+  branding studio at `/business/branding`); People = permissions + doctors; Billing = wallet, plans, credit history, top-up
+  requests; Activity = audit log, versions/rollback, duplicate (`/activity/duplicate`), delete.
+- Old addresses `/branding` and `/duplicate` redirect (next.config.ts, recorded in tests/parity/moves.json).
+- Saves and errors return to the tab they came from (the actions' fallbacks point at the tab; forms send returnTo).
+- Setup, Catalog and data, Assistant and Channels are unchanged inside; they still have their own heading and Back button
+  (tidied in milestone 3).
+
 ---
 
 # CallsDash reorganization proposal (Phase 1 audit + Phase 2 blueprint)

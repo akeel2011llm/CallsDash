@@ -1,6 +1,9 @@
 {
   "_help": "When a reorganisation moves or retires something on purpose, write it here. routes: old URL -> new URL (also add a redirect in next.config.ts). actions / fields: retired key -> where it went or why it is safe.",
-  "routes": {},
+  "routes": {
+    "/admin/clients/[id]/branding": "/admin/clients/[id]/business/branding",
+    "/admin/clients/[id]/duplicate": "/admin/clients/[id]/activity/duplicate"
+  },
   "actions": {},
   "fields": {}
 }

@@ -2,6 +2,13 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   agentRules: false,
+  // Client workspace (docs/reorganization.md): pages that moved under a tab keep answering at their old address.
+  async redirects() {
+    return [
+      { source: "/admin/clients/:id/branding", destination: "/admin/clients/:id/business/branding", permanent: false },
+      { source: "/admin/clients/:id/duplicate", destination: "/admin/clients/:id/activity/duplicate", permanent: false },
+    ];
+  },
   // The widget script is embedded on clinic websites, so it must be cacheable but never stale for long.
   async headers() {
     return [
