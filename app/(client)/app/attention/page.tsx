@@ -14,7 +14,7 @@ type SP = { kind?: string; show?: string; rules?: string };
 export default async function AttentionPage({ searchParams }: { searchParams: Promise<SP> }) {
   const { tenant } = await requireClient();
   const sp = await searchParams;
-  const { t, locale } = await getT();
+  const { t, locale } = await getT(tenant);
   const kind = FLAG_KINDS.find((k) => k === sp.kind);
   const showReviewed = sp.show === "reviewed";
   const flagged = (await getConversations(tenant.id)).filter((c) => c.flags.length > 0);

@@ -105,6 +105,10 @@ export function setOnboarding(tenantId: string, onboarding: Tenant["onboarding"]
   getTenant(tenantId)!.onboarding = onboarding;
   if (note) audit(actor, note, tenantId);
 }
+export function setBusiness(tenantId: string, business: NonNullable<Tenant["business"]>, actor: string, note?: string) {
+  getTenant(tenantId)!.business = business;
+  if (note) audit(actor, note, tenantId);
+}
 export const getTenant = (tenantId: string) => db().tenants.find((t) => t.id === tenantId);
 export const getAgent = (tenantId: string) => db().agents[tenantId];
 export const getAgentVersions = (tenantId: string) =>

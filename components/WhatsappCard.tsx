@@ -26,7 +26,7 @@ const SAMPLE_START = "2026-10-24T13:00:00.000Z";
 export interface PhotoState { hasToken: boolean; fail: string | null; items: { id: string; name: string }[] }
 
 export async function WhatsappCard({ tenant, testFail, wa, photo }: { tenant: Tenant; testFail: string | null; wa?: string; photo?: PhotoState }) {
-  const { t } = await getT();
+  const { t } = await getT(tenant);
   const w = tenant.integrations.whatsapp ?? {};
   const wording = wordingOf(w);
   const spec = TEMPLATES[wording];

@@ -15,7 +15,7 @@ const SHOWN = 200;
 export default async function CataloguePage({ searchParams }: { searchParams: Promise<{ q?: string; deleted?: string; err?: string }> }) {
   const { tenant } = await requireClient();
   const sp = await searchParams;
-  const [{ t }, all] = await Promise.all([getT(), getItems(tenant.id)]);
+  const [{ t }, all] = await Promise.all([getT(tenant), getItems(tenant.id)]);
   const locked = !tenant.permissions.editKnowledge;
   const q = foldText((sp.q ?? "").trim());
   const found = q ? all.filter((i) => foldText(`${i.name} ${i.nameAr ?? ""} ${i.keywords} ${i.details}`).includes(q)) : all;

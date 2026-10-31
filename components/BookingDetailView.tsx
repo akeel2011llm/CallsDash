@@ -19,7 +19,7 @@ const tone = (s: string) => (s === "confirmed" || s === "completed" ? "ok" : s =
 
 /** `canDelete`: the clinic's manager. Everyone else cancels, which keeps the record. */
 export async function BookingDetailView({ base, tenant, doctorId, id, sp, canDelete = false }: BookingScope & { id: string; sp: BookingDetailParams; canDelete?: boolean }) {
-  const { t, locale } = await getT();
+  const { t, locale } = await getT(tenant);
   const booking = (await getBookings(tenant.id)).find((b) => b.id === id && (!doctorId || b.doctorId === doctorId));
   if (!booking) notFound();
   const doctors = await getDoctors(tenant.id);

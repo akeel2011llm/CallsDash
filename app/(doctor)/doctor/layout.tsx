@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 export default async function DoctorLayout({ children }: { children: React.ReactNode }) {
   const { tenant, doctor } = await requireDoctor();
-  const { t, locale } = await getT();
+  const { t, locale } = await getT(tenant);
   return (
     <Shell
       title={locale === "ar" ? tenant.branding.displayNameAr : tenant.branding.displayName}

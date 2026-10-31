@@ -18,7 +18,7 @@ const live = (s: string) => s === "confirmed" || s === "rescheduled";
 export interface BookingScope { base: "/app" | "/doctor"; tenant: Tenant; /** Set for a doctor: they only ever see their own bookings. */ doctorId?: string }
 
 export async function BookingList({ base, tenant, doctorId, sp }: BookingScope & { sp: { doctor?: string; status?: string; view?: string; q?: string; err?: string; deleted?: string } }) {
-  const { t, locale } = await getT();
+  const { t, locale } = await getT(tenant);
   const view: View = (VIEWS as readonly string[]).includes(sp.view ?? "") ? (sp.view as View) : "upcoming";
   const doctors = await getDoctors(tenant.id);
   const docName = new Map(doctors.map((d) => [d.id, d.name]));

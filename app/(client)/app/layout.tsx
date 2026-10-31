@@ -1,3 +1,4 @@
+import { businessOf } from "@/lib/business-types";
 import { requireClient } from "@/lib/auth";
 import { getT } from "@/lib/i18n";
 import { Shell } from "@/components/Shell";
@@ -9,7 +10,7 @@ export const dynamic = "force-dynamic";
 
 export default async function ClientLayout({ children }: { children: React.ReactNode }) {
   const { tenant, viewingAsAdmin, staffRole } = await requireClient();
-  const { t, locale } = await getT();
+  const { t, locale } = await getT(tenant);
   const [w, requests, convs] = await Promise.all([getWallet(tenant.id), getStaffRequests(tenant.id), getConversations(tenant.id)]);
   const attention = convs.filter(needsAttention).length;
   const openRequests = requests.filter((r) => r.status === "open").length;
@@ -35,7 +36,11 @@ export default async function ClientLayout({ children }: { children: React.React
         { href: "/app/voice", label: t("nav.voice"), icon: "mic" },
         { href: "/app/website", label: t("nav.website"), icon: "globe" },
         { href: "/app/credits", label: t("nav.credits"), icon: "wallet", badge: w.low ? "!" : undefined, group: t("nav.g.account") },
-        ...(staffRole === "manager" ? [{ href: "/app/doctors", label: t("nav.doctors"), icon: "user" }, { href: "/app/team", label: t("nav.team"), icon: "users" }] : []),
+        ...(staffRole === "manager" ? [
+          // a shop or restaurant without staff scheduling has no people page (the address still works if typed)
+          ...(businessOf(tenant).staffScheduling ? [{ href: "/app/doctors", label: t("nav.doctors"), icon: "user" }] : []),
+          { href: "/app/team", label: t("nav.team"), icon: "users" },
+        ] : []),
         { href: "/app/settings", label: t("nav.settings"), icon: "gear" },
       ]}
     >

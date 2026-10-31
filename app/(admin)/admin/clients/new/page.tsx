@@ -4,6 +4,7 @@ import { listPackages } from "@/lib/data";
 import { PlanPicker } from "@/components/PlanPicker";
 import { Notice, PageHead } from "@/components/ui";
 import { SubmitButton } from "@/components/SubmitButton";
+import { BusinessFields } from "@/components/BusinessFields";
 
 export default async function NewClient({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const { error } = await searchParams;
@@ -19,6 +20,7 @@ export default async function NewClient({ searchParams }: { searchParams: Promis
         <label>{t("admin.displayNameAr")}<input name="nameAr" maxLength={120} dir="rtl" /></label>
         <label>{t("admin.new.domain")}<input name="domain" placeholder="clinic.example.bh" maxLength={200} /></label>
         <label>{t("admin.color")}<input type="color" name="color" defaultValue="#0e7c86" /></label>
+        <BusinessFields t={t} />
         <PlanPicker packages={packages} locale={locale} t={t} />
         <SubmitButton className="btn" type="submit">{t("admin.new.create")}</SubmitButton>
       </form>

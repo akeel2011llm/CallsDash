@@ -13,7 +13,7 @@ export default async function Team({ searchParams }: { searchParams: Promise<{ s
   const { tenant, staffRole, userId, viewingAsAdmin } = await requireClient();
   if (staffRole !== "manager") redirect("/app");
   const { saved, error } = await searchParams;
-  const { t, locale } = await getT();
+  const { t, locale } = await getT(tenant);
   const auth = authAdmin();
   const doctors = await store.getDoctors(tenant.id);
   const people = auth ? await listUsers({ auth, data: store }, tenant.id) : (await store.listProfiles(tenant.id)).map((p) => ({ ...p, lastSignIn: undefined }));

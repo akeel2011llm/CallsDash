@@ -1,3 +1,4 @@
+import type { BusinessProfile } from "./business-types";
 export type Locale = "en" | "ar";
 export type Channel = "website" | "whatsapp" | "instagram" | "phone";
 export type Outcome = "booked" | "answered" | "handed_off" | "abandoned";
@@ -239,6 +240,8 @@ export interface Tenant {
   onboarding: Onboarding;
   /** Per-channel settings that are not secret (account ids, template names). Secrets live in `TenantSecrets`. */
   integrations: Integrations;
+  /** Business type and its words (lib/business-types.ts). Missing on clients from before business types: they are clinics. */
+  business?: BusinessProfile;
   createdAt: string;
 }
 

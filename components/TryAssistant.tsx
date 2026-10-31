@@ -19,7 +19,7 @@ const SYNC_ERRORS = ["no_api_key", "no_secret", "bad_secret", "no_app_url", "unk
  * showing to new clients. On the admin's client page (`admin`) it also offers Sync when the agent is behind.
  */
 export async function TryAssistant({ tenant, admin, returnTo, sp = {} }: { tenant: Tenant; admin?: boolean; returnTo?: string; sp?: { saved?: string; error?: string } }) {
-  const [{ t, locale }, agent, wallet, url] = await Promise.all([getT(), getAgent(tenant.id), getWallet(tenant.id), appUrl()]);
+  const [{ t, locale }, agent, wallet, url] = await Promise.all([getT(tenant), getAgent(tenant.id), getWallet(tenant.id), appUrl()]);
   const el = tenant.integrations.elevenlabs;
   let host = "";
   try { host = new URL(url).hostname; } catch { /* no address: nothing to compare */ }

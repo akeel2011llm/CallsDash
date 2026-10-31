@@ -16,7 +16,7 @@ export default async function BrandingPage({ params, searchParams }: { params: P
   const sp = await searchParams;
   const tenant = await getTenant(id);
   if (!tenant) notFound();
-  const { t } = await getT();
+  const { t } = await getT(tenant);
   const b = tenant.branding;
   const primary = isHex(b.primaryColor) ? b.primaryColor : "#0e7c86";
   const choices = <K extends string>(name: string, list: readonly K[], current: K, label: (k: K) => string) => (

@@ -11,7 +11,7 @@ export default async function AdminDataPage({ params, searchParams }: { params: 
   const { id } = await params;
   const tenant = await getTenant(id);
   if (!tenant) notFound();
-  const [{ t, locale }, sp] = [await getT(), await searchParams];
+  const [{ t, locale }, sp] = [await getT(tenant), await searchParams];
   return (
     <>
       <PageHead

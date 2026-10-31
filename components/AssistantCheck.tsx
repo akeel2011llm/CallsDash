@@ -12,7 +12,7 @@ const TONE = { ok: "ok", warn: "warn", bad: "bad" } as const;
 /** Admin client page: why the assistant may not do what the screens say (see lib/assistant-check.ts), plus its latest tool calls. */
 export async function AssistantCheck({ tenant }: { tenant: Tenant }) {
   const [{ t, locale }, agent, doctors, items, calls] = await Promise.all([
-    getT(), getAgent(tenant.id), getDoctors(tenant.id), getItems(tenant.id), getToolCalls(tenant.id, 15),
+    getT(tenant), getAgent(tenant.id), getDoctors(tenant.id), getItems(tenant.id), getToolCalls(tenant.id, 15),
   ]);
   const checks = assistantChecks({ tenant, agentId: agent.elevenLabsAgentId, doctors, items, calls });
   const bad = checks.filter((c) => c.state === "bad").length;

@@ -25,7 +25,7 @@ export default async function Channels({ params, searchParams }: { params: Promi
   const tenant = await store.getTenant(id);
   if (!tenant) notFound();
   const [{ t, locale }, agent, secrets, url, testFail, photoFail, items] = await Promise.all([
-    getT(), store.getAgent(id), store.getSecrets(id), appUrl(),
+    getT(tenant), store.getAgent(id), store.getSecrets(id), appUrl(),
     wa === "failed" ? store.getSetting(testFailKey(id)).then((v) => testFailToShow(v)) : Promise.resolve(null),
     wa === "photo_failed" ? store.getSetting(`wa.photo.fail.${id}`).then((v) => testFailToShow(v)) : Promise.resolve(null),
     store.getItems(id),

@@ -14,7 +14,7 @@ export default async function DuplicateClient({ params, searchParams }: { params
   const { error } = await searchParams;
   const tenant = await getTenant(id);
   if (!tenant) notFound();
-  const [{ t, locale }, packages, doctors, knowledge] = await Promise.all([getT(), listPackages(), getDoctors(id), getKnowledge(id)]);
+  const [{ t, locale }, packages, doctors, knowledge] = await Promise.all([getT(tenant), listPackages(), getDoctors(id), getKnowledge(id)]);
   return (
     <>
       <PageHead

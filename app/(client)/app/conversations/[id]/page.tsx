@@ -16,7 +16,7 @@ export default async function ConversationPage({ params, searchParams }: { param
   const { id } = await params;
   const c = await getConversation(tenant.id, id);
   if (!c) notFound();
-  const { t, locale } = await getT();
+  const { t, locale } = await getT(tenant);
   const deleteOn = new Date(new Date(c.startedAt).getTime() + tenant.retentionDays * 86_400_000).toISOString();
   return (
     <>

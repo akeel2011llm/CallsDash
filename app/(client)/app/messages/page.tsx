@@ -11,7 +11,7 @@ import { SubmitButton } from "@/components/SubmitButton";
 export default async function MessagesPage({ searchParams }: { searchParams: Promise<{ deleted?: string }> }) {
   const { tenant, staffRole } = await requireClient();
   const { deleted } = await searchParams;
-  const [{ t, locale }, all] = await Promise.all([getT(), getStaffRequests(tenant.id)]);
+  const [{ t, locale }, all] = await Promise.all([getT(tenant), getStaffRequests(tenant.id)]);
   const open = all.filter((r) => r.status === "open").sort((a, b) => Number(b.urgent) - Number(a.urgent) || b.createdAt.localeCompare(a.createdAt));
   const done = all.filter((r) => r.status === "done").slice(0, 20);
   const card = (r: (typeof all)[number]) => (

@@ -14,7 +14,7 @@ const SHOWN = 200;
 export default async function CustomersPage({ searchParams }: { searchParams: Promise<{ q?: string; deleted?: string; err?: string; mode?: string }> }) {
   const { tenant, staffRole } = await requireClient();
   const sp = await searchParams;
-  const [{ t, locale }, all, agent] = await Promise.all([getT(), getCustomers(tenant.id), getAgent(tenant.id)]);
+  const [{ t, locale }, all, agent] = await Promise.all([getT(tenant), getCustomers(tenant.id), getAgent(tenant.id)]);
   const mode = lookupModeOf(agent);
   const q = (sp.q ?? "").trim().toLowerCase();
   const digits = phoneKey(q) ? q.replace(/\D/g, "") : "";

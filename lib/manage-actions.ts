@@ -17,6 +17,7 @@ import { ToolError } from "./booking";
 import { DuplicateError } from "./errors";
 import { autoSync } from "./auto-sync";
 import type { Booking, DateRange } from "./types";
+import { businessFromForm, businessOf } from "./business-types";
 
 const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 const confirmed = (f: FormData) => f.get("confirm") === "on";
@@ -298,6 +299,19 @@ export async function adminClientProfileAction(f: FormData) {
   await autoSync(id, actor);
   refreshAll();
   go(f, `/admin/clients/${id}`, "saved=1", "#profile");
+}
+
+/** Business type and its words (lib/business-types.ts). Only the words on screen follow it; no stored data changes. */
+export async function adminBusinessAction(f: FormData) {
+  const { actor } = await requireAdmin();
+  const id = str(f, "tenantId");
+  const tenant = await store.getTenant(id);
+  if (!tenant) redirect("/admin");
+  const business = businessFromForm((k) => str(f, k), (k) => f.has(k));
+  const before = businessOf(tenant);
+  await store.setBusiness(id, business, actor, `Business type ${before.type} -> ${business.type}${business.staffScheduling ? "" : " (no staff scheduling)"}`);
+  refreshAll();
+  go(f, `/admin/clients/${id}`, "saved=business", "#business");
 }
 
 /** A correction with a reason: plus adds credits, minus takes them away (never below zero). Both show in the history. */
