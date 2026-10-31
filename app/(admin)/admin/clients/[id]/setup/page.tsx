@@ -19,7 +19,7 @@ export default async function Setup({ params, searchParams }: { params: Promise<
   const { saved, scan: scanError, error } = await searchParams;
   const tenant = await store.getTenant(id);
   if (!tenant) notFound();
-  const [{ t, locale }, items] = await Promise.all([getT(), checklistFor(tenant)]);
+  const [{ t, locale }, items] = await Promise.all([getT(tenant), checklistFor(tenant)]);
   const auth = authAdmin();
   const people = auth ? await listUsers({ auth, data: store }, id) : (await store.listProfiles(id)).map((p) => ({ ...p, lastSignIn: undefined }));
   const p = progress(items);

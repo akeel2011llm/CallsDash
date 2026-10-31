@@ -8,7 +8,7 @@ import { SubmitButton } from "@/components/SubmitButton";
 export default async function AgentPage({ searchParams }: { searchParams: Promise<{ saved?: string }> }) {
   const { tenant } = await requireClient();
   const { saved } = await searchParams;
-  const { t } = await getT();
+  const { t } = await getT(tenant);
   const agent = await getAgent(tenant.id);
   const sections = ["identity", "languages", "mayDo", "neverDo", "emergencies", "handoff"] as const;
   const lockPrompt = !tenant.permissions.editPrompt;

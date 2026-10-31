@@ -7,6 +7,7 @@ import { demoMode, requireAdmin, requireBookingUser, requireClient } from "./aut
 import { safePath } from "./format";
 import { supabaseConfigured, supabaseServer } from "./supabase";
 import * as store from "./data";
+import { businessFromForm } from "./business-types";
 import { DuplicateError } from "./errors";
 import { duplicateClient, type CopyReport } from "./client-copy";
 import { nameKey } from "./tenant-keys";
@@ -445,6 +446,7 @@ export async function adminCreateTenantAction(f: FormData) {
     if (e instanceof DuplicateError) redirect(`/admin/clients/new?error=${e.field}`);
     throw e;
   }
+  if (f.has("businessType")) await store.setBusiness(tenantId, businessFromForm((k) => str(f, k), (k) => f.has(k)), actor);
   revalidatePath("/admin", "layout");
   redirect(`/admin/clients/${tenantId}/setup`);
 }
@@ -470,6 +472,9 @@ export async function adminDuplicateTenantAction(f: FormData) {
     if (e instanceof DuplicateError) redirect(fail(`error=${e.field}`));
     throw e;
   }
+  // the copy is the same kind of business as the original
+  const source = await store.getTenant(sourceId);
+  if (source?.business) await store.setBusiness(report.tenantId, source.business, actor);
   revalidatePath("/admin", "layout");
   redirect(`/admin/clients/${report.tenantId}?copied=${report.doctors}.${report.knowledge}.${report.renamed}`);
 }

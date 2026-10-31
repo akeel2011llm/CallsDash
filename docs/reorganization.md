@@ -22,6 +22,16 @@ It also checks that every menu link points at a real page, and that every Englis
 - `lib/steps.ts`: which step is open (resume at the first unfinished one), skipped steps (not needed for this business type),
   blocked steps (earlier steps first), Back/Next, and which tab is active for an address.
 
+## Business type (milestone 1b)
+
+- `lib/business-types.ts`: the six types, their words (EN + AR), the setup rules per type (`rulesOf`, used by the wizard in
+  milestone 5) and `relabel`, which rewrites a screen text for the client's type.
+- Stored in `tenants.business` (jsonb, optional, added by the app on start; migration 0016). Missing = clinic, so every
+  existing client looks exactly as before. Doctors are still stored as doctors whatever they are called on screen.
+- Screens about one client call `getT(tenant)` instead of `getT()`; texts about the type itself use plain `getT()`.
+- Set on New client and on the admin client page (Business type). Duplicating a client copies its type.
+- Not yet: the assistant's own wording (lib/agent-config.ts) still says doctor/patient/clinic.
+
 ---
 
 # CallsDash reorganization proposal (Phase 1 audit + Phase 2 blueprint)

@@ -9,7 +9,7 @@ import { SubmitButton } from "@/components/SubmitButton";
 export default async function KnowledgePage({ searchParams }: { searchParams: Promise<{ q?: string; lang?: string; saved?: string; deleted?: string }> }) {
   const { tenant } = await requireClient();
   const sp = await searchParams;
-  const { t } = await getT();
+  const { t } = await getT(tenant);
   const locked = !tenant.permissions.editKnowledge;
   const [unanswered, all] = await Promise.all([getUnanswered(tenant.id), getKnowledge(tenant.id)]);
   const q = (sp.q ?? "").trim().toLowerCase();

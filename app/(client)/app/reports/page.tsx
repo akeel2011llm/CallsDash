@@ -18,7 +18,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
   const { tenant } = await requireClient();
   const sp = await searchParams;
   const days = RANGES.find((d) => String(d) === sp.days) ?? 30;
-  const { t, locale } = await getT();
+  const { t, locale } = await getT(tenant);
   const now = Date.now();
   const convs = lastDays(await getConversations(tenant.id), days, now);
   const s = summarize(convs);

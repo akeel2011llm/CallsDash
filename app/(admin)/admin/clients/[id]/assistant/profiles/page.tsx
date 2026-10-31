@@ -37,7 +37,7 @@ export default async function ProfilesPage({ params, searchParams }: { params: P
   const sp = await searchParams;
   const tenant = await store.getTenant(id);
   if (!tenant) notFound();
-  const { locale } = await getT();
+  const { locale } = await getT(tenant);
   const dict = dictionaries[locale] as Record<string, string>;
   const T = text(dict);
   const has = (key: string) => key in dict;

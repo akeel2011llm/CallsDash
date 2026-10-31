@@ -9,7 +9,7 @@ import { SubmitButton } from "@/components/SubmitButton";
 export default async function CreditsPage({ searchParams }: { searchParams: Promise<{ requested?: string }> }) {
   const { tenant } = await requireClient();
   const { requested } = await searchParams;
-  const { t, locale } = await getT();
+  const { t, locale } = await getT(tenant);
   const w = await getWallet(tenant.id);
   const monthStart = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1));
   const usage = await usageByChannel(tenant.id, monthStart);

@@ -7,7 +7,7 @@ import { DataView, type DataSearch } from "@/components/DataView";
 export default async function DataPage({ searchParams }: { searchParams: Promise<DataSearch> }) {
   const { tenant, staffRole, viewingAsAdmin } = await requireClient();
   if (staffRole !== "manager") redirect("/app");
-  const [{ t, locale }, sp] = [await getT(), await searchParams];
+  const [{ t, locale }, sp] = [await getT(tenant), await searchParams];
   // an administrator viewing as the clinic keeps the screen even while it is off for the clinic itself
   if (!tenant.permissions.dataManager && !viewingAsAdmin) {
     return (

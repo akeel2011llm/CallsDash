@@ -20,7 +20,7 @@ const CHANNELS = ["website", "whatsapp", "instagram", "phone"] as const;
 
 export default async function Home() {
   const { tenant, staffRole, viewingAsAdmin } = await requireClient();
-  const [{ t, locale }, w, convs, bookings, checklist] = await Promise.all([getT(), getWallet(tenant.id), getConversations(tenant.id), getBookings(tenant.id), checklistFor(tenant)]);
+  const [{ t, locale }, w, convs, bookings, checklist] = await Promise.all([getT(tenant), getWallet(tenant.id), getConversations(tenant.id), getBookings(tenant.id), checklistFor(tenant)]);
   const todo = staffRole === "manager" ? checklist.filter((i) => i.forClient && !i.done) : [];
   const todoHref: Record<string, string> = { knowledge: "/app/knowledge", hours: "/app/calendar", calendar: "/app/calendar", test: "/app/website" };
   const now = Date.now();

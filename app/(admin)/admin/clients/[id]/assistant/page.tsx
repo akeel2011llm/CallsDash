@@ -62,7 +62,7 @@ export default async function AssistantStudioPage({ params, searchParams }: { pa
   const sp = await searchParams;
   const tenant = await getTenant(id);
   if (!tenant) notFound();
-  const { locale } = await getT();
+  const { locale } = await getT(tenant);
   const dict = dictionaries[locale] as Record<string, string>;
   const T = text(dict);
   /** The texts a client component needs, picked by prefix so a page does not ship the whole dictionary. */

@@ -9,7 +9,7 @@ import { getAgent, getAgentVersions, getBookings, getDoctors, getAudit, getLedge
 import {
   adminPermissionsAction, adminRenewAction, adminRollbackAction, adminTenantSettingsAction, adminTopUpAction, adminDeleteTenantAction, adminAddPlanAction, adminEndPlanAction, viewAsClient,
 } from "@/lib/actions";
-import { adminAdjustCreditsAction, adminClientProfileAction, adminDeclineTopUpAction } from "@/lib/manage-actions";
+import { adminAdjustCreditsAction, adminClientProfileAction, adminDeclineTopUpAction, adminBusinessAction } from "@/lib/manage-actions";
 import { DoctorsManager } from "@/components/DoctorsManager";
 import { TryAssistant } from "@/components/TryAssistant";
 import { AssistantCheck } from "@/components/AssistantCheck";
@@ -19,6 +19,8 @@ import { CopyChecklist } from "@/components/CopyChecklist";
 import { Fold } from "@/components/Fold";
 import { FoldControls } from "@/components/FoldControls";
 import { Guide } from "@/components/Guide";
+import { BusinessFields } from "@/components/BusinessFields";
+import { businessOf, vocabOf } from "@/lib/business-types";
 
 export default async function ClientAdmin({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ saved?: string; error?: string; cal?: string; doc?: string; clash?: string; copied?: string }> }) {
   const { id } = await params;
@@ -26,8 +28,12 @@ export default async function ClientAdmin({ params, searchParams }: { params: Pr
   const tenant = await getTenant(id);
   if (!tenant) notFound();
   const [{ t, locale }, w, agent, versions, doctors, ledger, audit, catalogue, bookings, logins, requests] = await Promise.all([
-    getT(), getWallet(id), getAgent(id), getAgentVersions(id), getDoctors(id), getLedger(id), getAudit(id), listPackages(), getBookings(id), listProfiles(id), getTopUpRequests(),
+    getT(tenant), getWallet(id), getAgent(id), getAgentVersions(id), getDoctors(id), getLedger(id), getAudit(id), listPackages(), getBookings(id), listProfiles(id), getTopUpRequests(),
   ]);
+  // the business type's own texts must not be reworded by the type they describe
+  const { t: plain } = await getT();
+  const biz = businessOf(tenant);
+  const words = vocabOf(tenant, locale);
   const asked = requests.filter((r) => r.tenantId === id);
   const returnTo = `/admin/clients/${id}`;
   const perms = [
@@ -82,7 +88,8 @@ export default async function ClientAdmin({ params, searchParams }: { params: Pr
           ))}
         </Notice>
       )}
-      {saved && saved !== "synced" && saved !== "created" && <Notice tone="ok">{t("agent.saved").split(".")[0]}.</Notice>}
+      {saved === "business" && <Notice tone="ok">{plain("biz.saved")}</Notice>}
+      {saved && saved !== "synced" && saved !== "created" && saved !== "business" && <Notice tone="ok">{t("agent.saved").split(".")[0]}.</Notice>}
       <div className="grid">
         <Stat label={t("admin.balance")} value={fmtNum(w.balance, locale, 1)} tone={w.low ? "warn" : undefined} hint={planNames(tenant.plans)} />
         <Stat label={t("common.status")} value={t(`status.${tenant.status}` as "status.live")} />
@@ -148,6 +155,17 @@ export default async function ClientAdmin({ params, searchParams }: { params: Pr
             <label>{t("admin.profile.low")}<input name="lowBalancePercent" type="number" min="0" max="90" step="1" defaultValue={Math.round(tenant.lowBalanceThreshold * 100)} /></label>
             <small className="muted">{t("admin.profile.lowHelp")}</small>
             <SubmitButton className="btn" type="submit">{t("common.save")}</SubmitButton>
+          </form>
+        </Fold>
+
+        <Fold id="business" open={saved === "business"} title={plain("biz.title")} hint={plain(`biz.type.${biz.type}`)}>
+          <form action={adminBusinessAction} className="stack">
+            <input type="hidden" name="tenantId" value={id} /><input type="hidden" name="returnTo" value={returnTo} />
+            <small className="muted">{plain("biz.help")}</small>
+            <BusinessFields t={plain} business={biz} />
+            <Notice>{plain("biz.preview").replace("{staff}", words.staffMany).replace("{customers}", words.customerMany).replace("{place}", words.place)}</Notice>
+            {biz.type !== "clinic" && <small className="muted">{plain("biz.assistantNote")}</small>}
+            <SubmitButton className="btn" type="submit">{plain("common.save")}</SubmitButton>
           </form>
         </Fold>
 

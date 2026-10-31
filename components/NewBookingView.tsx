@@ -13,7 +13,7 @@ import type { BookingScope } from "@/components/BookingList";
 export type NewBookingParams = { doctor?: string; date?: string; err?: string; name?: string; phone?: string; service?: string };
 
 export async function NewBookingView({ base, tenant, doctorId, sp }: BookingScope & { sp: NewBookingParams }) {
-  const { t, locale } = await getT();
+  const { t, locale } = await getT(tenant);
   const doctors = await getDoctors(tenant.id);
   const doctor = doctors.find((d) => d.id === (doctorId ?? sp.doctor));
   const date = /^\d{4}-\d{2}-\d{2}$/.test(sp.date ?? "") ? sp.date! : todayKey();

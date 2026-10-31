@@ -13,7 +13,7 @@ import { itemPhotoPath } from "@/lib/item-photo";
 export default async function ItemPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ saved?: string; err?: string }> }) {
   const { tenant, staffRole } = await requireClient();
   const [{ id }, sp] = await Promise.all([params, searchParams]);
-  const [{ t }, item] = await Promise.all([getT(), getItem(tenant.id, id)]);
+  const [{ t }, item] = await Promise.all([getT(tenant), getItem(tenant.id, id)]);
   if (!item) notFound();
   const locked = !tenant.permissions.editKnowledge;
   const errKey = sp.err && /^[a-z_]+$/.test(sp.err) ? `catalogue.err.${sp.err}` : "";

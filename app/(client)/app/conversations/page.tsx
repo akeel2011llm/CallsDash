@@ -12,7 +12,7 @@ type SP = { q?: string; channel?: string; outcome?: string; lang?: string; flag?
 export default async function ConversationsPage({ searchParams }: { searchParams: Promise<SP> }) {
   const { tenant } = await requireClient();
   const sp = await searchParams;
-  const { t, locale } = await getT();
+  const { t, locale } = await getT(tenant);
   const q = (sp.q ?? "").trim().toLowerCase();
   const rows = (await getConversations(tenant.id)).filter((c) =>
     (!sp.channel || c.channel === sp.channel) && (!sp.outcome || c.outcome === sp.outcome) && (!sp.lang || c.language === sp.lang) && (!sp.flag || c.flags.includes(sp.flag as never)) &&

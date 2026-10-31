@@ -13,7 +13,7 @@ const tone = (s: string) => (s === "confirmed" || s === "completed" ? "ok" : s =
 /** The doctor's day: today's visits with one-tap outcomes, and what is coming this week. */
 export default async function DoctorHome() {
   const { tenant, doctor } = await requireDoctor();
-  const { t, locale } = await getT();
+  const { t, locale } = await getT(tenant);
   const mine = (await getBookings(tenant.id)).filter((b) => b.doctorId === doctor.id).sort((a, b) => a.startsAt.localeCompare(b.startsAt));
   const nowMs = Date.now();
   const today = dayKey(new Date().toISOString());

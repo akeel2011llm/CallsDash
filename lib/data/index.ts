@@ -104,6 +104,7 @@ export const saveProfile = call("saveProfile");
 export const patchProfile = call("patchProfile");
 export const removeProfile = call("removeProfile");
 export const setOnboarding = call("setOnboarding");
+export const setBusiness = call("setBusiness");
 export const setIntegrations = call("setIntegrations");
 export const setChannelStatus = call("setChannelStatus");
 export const getSecrets = call("getSecrets");

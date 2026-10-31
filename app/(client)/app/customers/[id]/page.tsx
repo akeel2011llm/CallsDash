@@ -13,7 +13,7 @@ import { SubmitButton } from "@/components/SubmitButton";
 export default async function CustomerPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ saved?: string; err?: string }> }) {
   const { tenant, staffRole } = await requireClient();
   const [{ id }, sp] = await Promise.all([params, searchParams]);
-  const [{ t, locale }, c] = await Promise.all([getT(), getCustomer(tenant.id, id)]);
+  const [{ t, locale }, c] = await Promise.all([getT(tenant), getCustomer(tenant.id, id)]);
   if (!c) notFound();
   // a history entry holds ElevenLabs' conversation id; the page for it is under CallsDash's own id
   const own = new Map((await getConversations(tenant.id)).filter((x) => x.elevenLabsConversationId).map((x) => [x.elevenLabsConversationId, x.id]));

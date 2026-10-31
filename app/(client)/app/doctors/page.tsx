@@ -8,7 +8,7 @@ import { PageHead } from "@/components/ui";
 export default async function DoctorsPage({ searchParams }: { searchParams: Promise<DoctorNotice> }) {
   const { tenant, staffRole } = await requireClient();
   if (staffRole !== "manager") redirect("/app");
-  const [{ t, locale }, doctors, bookings, logins, sp] = await Promise.all([getT(), getDoctors(tenant.id), getBookings(tenant.id), listProfiles(tenant.id), searchParams]);
+  const [{ t, locale }, doctors, bookings, logins, sp] = await Promise.all([getT(tenant), getDoctors(tenant.id), getBookings(tenant.id), listProfiles(tenant.id), searchParams]);
   return (
     <>
       <PageHead title={t("doctors.title")} subtitle={t("doctors.subtitle")} />

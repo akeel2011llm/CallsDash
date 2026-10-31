@@ -17,7 +17,7 @@ const LOCAL_OFFSET_MS = 3 * 3_600_000; // Asia/Bahrain, no DST
 export default async function CalendarPage({ searchParams }: { searchParams: Promise<{ w?: string; hours?: string; closure?: string; clash?: string }> }) {
   const { tenant, staffRole } = await requireClient();
   const { w, hours, closure, clash } = await searchParams;
-  const { t, locale } = await getT();
+  const { t, locale } = await getT(tenant);
   const offset = Math.max(-52, Math.min(52, Number(w) || 0));
   const local = new Date(Date.now() + LOCAL_OFFSET_MS);
   local.setUTCHours(0, 0, 0, 0);

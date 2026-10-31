@@ -1,6 +1,7 @@
 import "server-only";
 import { cookies } from "next/headers";
-import type { Locale } from "./types";
+import type { Locale, Tenant } from "./types";
+import { businessOf, relabel, vocabOf } from "./business-types";
 
 const en = {
   "app.name": "CallsDash",
@@ -1738,6 +1739,26 @@ const en = {
   "steps.status.todo": "Not started",
   "steps.status.skipped": "Not needed",
   "steps.status.blocked": "Finish the earlier steps first",
+  "biz.title": "Business type",
+  "biz.help": "Changes the words on this client's screens and, later, which setup steps are required. Nothing stored changes.",
+  "biz.type": "Type of business",
+  "biz.type.clinic": "Clinic (doctors, patients)",
+  "biz.type.salon": "Beauty salon or spa (stylists, customers)",
+  "biz.type.retail": "Shop or online store (products, customers)",
+  "biz.type.restaurant": "Restaurant or café (guests, reservations)",
+  "biz.type.service": "Service business (staff, customers)",
+  "biz.type.custom": "Something else (your own words)",
+  "biz.scheduling": "Customers book time with named people",
+  "biz.scheduling.help": "Tick for doctors or stylists with their own calendars. Untick for a shop or restaurant: the people page is hidden and not needed to go live. Always on for a clinic.",
+  "biz.words": "Your own words for the people (something else only)",
+  "biz.words.one": "One, English (for example: trainer)",
+  "biz.words.many": "Several, English (for example: trainers)",
+  "biz.words.oneAr": "One, Arabic (for example: مدرب)",
+  "biz.words.manyAr": "Several, Arabic (for example: مدربين)",
+  "biz.preview": "This client's screens say: {staff}, {customers}, {place}.",
+  "biz.assistantNote": "The assistant's own wording (what it says on calls and chats) is not changed yet; that comes in a later step.",
+  "biz.saved": "Business type saved.",
+  "biz.new": "Type of business",
   "nav.data": "Data",
   "admin.perm.dataManager": "Data screen (photos, texts, import and export)",
   "data.open": "Data",
@@ -3612,6 +3633,26 @@ const ar: Record<Key, string> = {
   "steps.status.todo": "لم تبدأ",
   "steps.status.skipped": "غير مطلوبة",
   "steps.status.blocked": "أكمل الخطوات السابقة أولاً",
+  "biz.title": "نوع النشاط",
+  "biz.help": "يغيّر الكلمات في شاشات هذا العميل، ولاحقاً خطوات الإعداد المطلوبة. لا يتغير شيء من البيانات المحفوظة.",
+  "biz.type": "نوع النشاط",
+  "biz.type.clinic": "عيادة (أطباء، مرضى)",
+  "biz.type.salon": "صالون تجميل أو سبا (أخصائيون، عملاء)",
+  "biz.type.retail": "متجر أو متجر إلكتروني (منتجات، عملاء)",
+  "biz.type.restaurant": "مطعم أو مقهى (ضيوف، حجوزات)",
+  "biz.type.service": "نشاط خدمات (موظفون، عملاء)",
+  "biz.type.custom": "نشاط آخر (بكلماتك الخاصة)",
+  "biz.scheduling": "العملاء يحجزون موعداً مع أشخاص بأسمائهم",
+  "biz.scheduling.help": "فعّله للأطباء أو الأخصائيين الذين لهم تقاويم خاصة. ألغِه للمتجر أو المطعم: تُخفى صفحة الأشخاص ولا تكون مطلوبة للتشغيل. يبقى مفعّلاً دائماً للعيادة.",
+  "biz.words": "كلماتك الخاصة للأشخاص (للنشاط الآخر فقط)",
+  "biz.words.one": "المفرد بالإنجليزية (مثال: trainer)",
+  "biz.words.many": "الجمع بالإنجليزية (مثال: trainers)",
+  "biz.words.oneAr": "المفرد بالعربية (مثال: مدرب)",
+  "biz.words.manyAr": "الجمع بالعربية (مثال: مدربين)",
+  "biz.preview": "شاشات هذا العميل تقول: {staff}، {customers}، {place}.",
+  "biz.assistantNote": "كلام المساعد نفسه (ما يقوله في المكالمات والمحادثات) لم يتغير بعد؛ سيأتي ذلك في خطوة لاحقة.",
+  "biz.saved": "تم حفظ نوع النشاط.",
+  "biz.new": "نوع النشاط",
   "nav.data": "البيانات",
   "admin.perm.dataManager": "شاشة البيانات (الصور والنصوص والاستيراد والتصدير)",
   "data.open": "البيانات",
@@ -3755,8 +3796,22 @@ export async function getLocale(): Promise<Locale> {
   return v === "ar" ? "ar" : "en";
 }
 
-export async function getT() {
+/**
+ * The texts in the person's language. Give the client (`getT(tenant)`) on a screen about one client: its business type then
+ * changes the words, so a salon reads "stylists" and "customers" where a clinic reads "doctors" and "patients"
+ * (lib/business-types.ts). A clinic, or no client, gets the texts exactly as written.
+ */
+export async function getT(tenant?: Pick<Tenant, "business"> | null) {
   const locale = await getLocale();
   const d: Record<Key, string> = locale === "ar" ? ar : en;
-  return { locale, dir: (locale === "ar" ? "rtl" : "ltr") as "rtl" | "ltr", t: (k: Key) => d[k] };
+  const dir = (locale === "ar" ? "rtl" : "ltr") as "rtl" | "ltr";
+  if (businessOf(tenant).type === "clinic") return { locale, dir, t: (k: Key) => d[k] };
+  const v = vocabOf(tenant, locale);
+  const seen = new Map<Key, string>();
+  const t = (k: Key) => {
+    let s = seen.get(k);
+    if (s === undefined) { s = relabel(d[k], locale, v); seen.set(k, s); }
+    return s;
+  };
+  return { locale, dir, t };
 }

@@ -32,6 +32,7 @@ const tenantOf = (r: Row): Tenant => ({
   closures: r.closures == null ? [] : jsonish(r.closures),
   channels: jsonish(r.channels), openingHours: jsonish(r.opening_hours),
   integrations: r.integrations == null ? {} : jsonish<Tenant["integrations"]>(r.integrations),
+  ...(r.business == null || (typeof r.business === "object" && !Object.keys(r.business).length) ? {} : { business: jsonish<Tenant["business"]>(r.business) }),
   onboarding: ((o) => ({ ...o, done: o.done ?? [] }))(r.onboarding == null ? {} : jsonish<Partial<Tenant["onboarding"]>>(r.onboarding)), createdAt: iso(r.created_at),
 });
 const bookingOf = (r: Row): Booking => ({
@@ -160,6 +161,7 @@ export const SCHEMA_ADDITIONS = [
   `update profiles p set email = u.email from auth.users u where u.id = p.id and p.email = '' and u.email is not null`,
   `alter table tenants add column if not exists onboarding jsonb not null default '{}'`,
   `alter table tenants add column if not exists integrations jsonb not null default '{}'`,
+  `alter table tenants add column if not exists business jsonb`,
   `create table if not exists tenant_secrets (
      tenant_id uuid primary key references tenants on delete cascade,
      data jsonb not null default '{}',
@@ -392,6 +394,10 @@ export function createPgData(db: Db): Data {
     deleteChatSession: async (conversationId) => { await ensureSchema(); await q(`delete from chat_sessions where conversation_id = $1`, [conversationId]); },
     setOnboarding: async (tenantId, onboarding, actor, note) => tx(async (run) => {
       await run(`update tenants set onboarding = $2 where id = $1`, [tenantId, JSON.stringify(onboarding)]);
+      if (note) await audit(run, actor, note, tenantId);
+    }),
+    setBusiness: async (tenantId, business, actor, note) => tx(async (run) => {
+      await run(`update tenants set business = $2 where id = $1`, [tenantId, JSON.stringify(business)]);
       if (note) await audit(run, actor, note, tenantId);
     }),
     getAgent: async (tenantId) => {

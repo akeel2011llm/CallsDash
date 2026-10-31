@@ -9,7 +9,7 @@ import { SubmitButton } from "@/components/SubmitButton";
 export default async function VoicePage({ searchParams }: { searchParams: Promise<{ saved?: string; voiceRefused?: string }> }) {
   const { tenant } = await requireClient();
   const { saved, voiceRefused } = await searchParams;
-  const { t } = await getT();
+  const { t } = await getT(tenant);
   const agent = await getAgent(tenant.id);
   const locked = !tenant.permissions.editVoice;
   return (
