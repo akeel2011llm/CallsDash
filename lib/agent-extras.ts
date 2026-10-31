@@ -13,7 +13,7 @@ type Json = Record<string, unknown>;
 export type ExtraGroup = { name: ExtraGroupName; body: Json };
 export const EXTRA_GROUPS = [
   "tools", "hardening", "keywords", "guardrails", "analysis", "privacy", "limits", "widget", "branding", "model", "voice", "turn", "hearing",
-  "tags", "tier", "effects", "sound", "interrupt", "files", "queue",
+  "tags", "tier", "effects", "sound", "interrupt", "files", "queue", "rag",
 ] as const;
 export type ExtraGroupName = (typeof EXTRA_GROUPS)[number];
 
@@ -225,6 +225,11 @@ export function buildExtras(i: ExtrasInput): ExtraGroup[] {
     }));
     groups.push(g("files", {
       conversation_config: { conversation: { file_input: st.chatFiles ? { enabled: true, max_files_per_conversation: st.chatFilesMax, max_files_in_memory: Math.min(3, st.chatFilesMax) } : { enabled: false } } },
+    }));
+  }
+  if (saved("knowledge")) {
+    groups.push(g("rag", {
+      conversation_config: { agent: { prompt: { rag: { enabled: st.ragEnabled, embedding_model: st.ragEmbedding, max_documents_length: st.ragMaxLength, max_retrieved_rag_chunks_count: st.ragMaxChunks } } } },
     }));
   }
   if (saved("safety")) groups.push(g("queue", { platform_settings: { queueing_config: { enabled: st.queueEnabled, wait_timeout_seconds: st.queueWaitSeconds } } }));

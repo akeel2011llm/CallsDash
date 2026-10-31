@@ -9,7 +9,7 @@
  */
 import type { AgentSettings } from "./types";
 
-export const SECTIONS = ["model", "voice", "conversation", "hearing", "safety", "analysis", "widget"] as const;
+export const SECTIONS = ["model", "voice", "conversation", "hearing", "knowledge", "safety", "analysis", "widget"] as const;
 export type SectionId = (typeof SECTIONS)[number];
 
 /** Allowed values, in the order the screens list them. */
@@ -30,6 +30,7 @@ export const CHOICES = {
   /** ElevenLabs' background sound presets ("" = silence). */
   backgroundSound: ["", "office1", "office2", "restaurant", "city", "typing", "elevator1", "elevator2", "elevator3", "elevator4"],
   turnModel: ["", "turn_v2", "turn_v3"],
+  ragEmbedding: ["multilingual_e5_large_instruct", "e5_mistral_7b_instruct"],
 } as const;
 
 /** Numeric limits, from ElevenLabs' documentation. `[min, max]`; a value of `off` means the option is switched off. */
@@ -66,6 +67,8 @@ export const LIMITS = {
   queueWaitSeconds: [10, 600],
   tags: 10,
   tagLength: 40,
+  ragMaxLength: [1000, 200000],
+  ragMaxChunks: [1, 50],
 } as const;
 
 /** A voice style the expressive (v3) voices are told they may use, such as "warm" or "reassuring", and when. */
@@ -179,6 +182,15 @@ export interface AgentStudio {
   /** Extra words the speech recognition should listen for (on top of the clinic and doctor names, which are added automatically). */
   extraKeywords: string[];
 
+  /* knowledge base search (RAG) */
+  /** Search the knowledge base for each question instead of giving the assistant all of it every time. */
+  ragEnabled: boolean;
+  ragEmbedding: (typeof CHOICES.ragEmbedding)[number];
+  /** Most characters of found knowledge given to the assistant per answer. */
+  ragMaxLength: number;
+  /** Most pieces of knowledge looked at per answer. */
+  ragMaxChunks: number;
+
   /* safety, privacy and limits */
   guardFocus: boolean;
   guardInjection: boolean;
@@ -221,6 +233,7 @@ export const STUDIO_DEFAULTS: AgentStudio = {
   softTimeoutMessageEn: "One moment please.", softTimeoutMessageAr: "لحظة من فضلك.", greetingEn: "", greetingAr: "",
   backgroundSound: "", backgroundVolume: 0.2, initialWaitSeconds: 0, ignoreTerms: [], ignoreDefaults: false, turnModel: "", chatFiles: false, chatFilesMax: 5,
   asrProvider: "scribe_realtime", extraKeywords: [],
+  ragEnabled: false, ragEmbedding: "multilingual_e5_large_instruct", ragMaxLength: 50000, ragMaxChunks: 20,
   guardFocus: true, guardInjection: true, recordVoice: true, dailyLimit: 500, concurrencyLimit: 0, bursting: true, queueEnabled: true, queueWaitSeconds: 60,
   summaryLanguage: "", criteriaOff: [], tags: [],
   widget: WIDGET_DEFAULTS,
@@ -350,6 +363,10 @@ export function resolveStudio(raw: unknown): AgentStudio {
     chatFilesMax: number(s.chatFilesMax, LIMITS.chatFilesMax, d.chatFilesMax),
     asrProvider: pick(s.asrProvider, CHOICES.asrProvider, d.asrProvider),
     extraKeywords: list(s.extraKeywords, (x) => (typeof x === "string" ? text(x, LIMITS.keywordLength) : ""), LIMITS.keywords[1]),
+    ragEnabled: flag(s.ragEnabled, d.ragEnabled),
+    ragEmbedding: pick(s.ragEmbedding, CHOICES.ragEmbedding, d.ragEmbedding),
+    ragMaxLength: number(s.ragMaxLength, LIMITS.ragMaxLength, d.ragMaxLength, 500),
+    ragMaxChunks: number(s.ragMaxChunks, LIMITS.ragMaxChunks, d.ragMaxChunks),
     guardFocus: flag(s.guardFocus, d.guardFocus), guardInjection: flag(s.guardInjection, d.guardInjection), recordVoice: flag(s.recordVoice, d.recordVoice),
     dailyLimit: number(s.dailyLimit, LIMITS.dailyLimit, d.dailyLimit),
     concurrencyLimit: concurrency === 0 ? 0 : clamp(concurrency, LIMITS.concurrencyLimit),
@@ -559,6 +576,13 @@ export function parseSection(section: SectionId, f: FormData, current: AgentSett
       if (String(f.get("extraKeywords") ?? "").split(/[\n,;،؛]+/).some((w) => w.trim().length > LIMITS.keywordLength)) r.bad("extraKeywords", "studio.err.long");
       break;
     }
+    case "knowledge": {
+      s.ragEnabled = r.on("ragEnabled");
+      s.ragEmbedding = r.choice("ragEmbedding", CHOICES.ragEmbedding, d.ragEmbedding);
+      s.ragMaxLength = r.num("ragMaxLength", LIMITS.ragMaxLength, d.ragMaxLength, { step: 500 });
+      s.ragMaxChunks = r.num("ragMaxChunks", LIMITS.ragMaxChunks, d.ragMaxChunks);
+      break;
+    }
     case "safety": {
       s.guardFocus = r.on("guardFocus");
       s.guardInjection = r.on("guardInjection");
@@ -638,6 +662,7 @@ export function resetSection(cur: AgentSettings, section: SectionId): AgentSetti
       "backgroundSound", "backgroundVolume", "initialWaitSeconds", "ignoreTerms", "ignoreDefaults", "turnModel", "chatFiles", "chatFilesMax",
     ],
     hearing: ["asrProvider", "extraKeywords"],
+    knowledge: ["ragEnabled", "ragEmbedding", "ragMaxLength", "ragMaxChunks"],
     safety: ["guardFocus", "guardInjection", "recordVoice", "dailyLimit", "concurrencyLimit", "bursting", "queueEnabled", "queueWaitSeconds"],
     analysis: ["summaryLanguage", "criteriaOff", "tags"],
     widget: ["widget"],
@@ -665,6 +690,7 @@ export function describeStudioChange(before: AgentSettings, after: AgentSettings
     "backgroundSound", "backgroundVolume", "initialWaitSeconds", "ignoreTerms", "ignoreDefaults", "turnModel", "chatFiles", "chatFilesMax",
   ] as const) note(`conversation option ${k}`, a[k], b[k]);
   for (const k of ["asrProvider", "extraKeywords"] as const) note(`hearing option ${k}`, a[k], b[k]);
+  for (const k of ["ragEnabled", "ragEmbedding", "ragMaxLength", "ragMaxChunks"] as const) note(`knowledge search option ${k}`, a[k], b[k]);
   for (const k of ["guardFocus", "guardInjection", "recordVoice", "dailyLimit", "concurrencyLimit", "bursting", "queueEnabled", "queueWaitSeconds"] as const) note(`safety option ${k}`, a[k], b[k]);
   for (const k of ["summaryLanguage", "criteriaOff", "tags"] as const) note(`analysis option ${k}`, a[k], b[k]);
   note("widget look", a.widget, b.widget);

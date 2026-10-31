@@ -146,6 +146,10 @@ export interface LiveAgent {
   /** The clip callers hear while they wait in the queue; undefined when it is ElevenLabs' default tone. */
   holdAudio?: { name: string; url?: string; seconds?: number };
   tags?: string[];
+  ragEnabled?: boolean;
+  ragEmbedding?: string;
+  ragMaxLength?: number;
+  ragMaxChunks?: number;
 }
 
 /** One entry of ElevenLabs' audio-effects catalogue. */
@@ -303,6 +307,10 @@ export function mapLiveAgent(raw: unknown): LiveAgent {
     queueWaitSeconds: num(queue.wait_timeout_seconds),
     holdAudio: str(hold.original_filename) || str(hold.audio_url) ? { name: str(hold.original_filename) ?? "hold audio", url: safeUrl(hold.audio_url), seconds: num(hold.duration_secs) } : undefined,
     tags: strings(a.tags),
+    ragEnabled: bool(obj(prompt.rag).enabled),
+    ragEmbedding: str(obj(prompt.rag).embedding_model),
+    ragMaxLength: num(obj(prompt.rag).max_documents_length),
+    ragMaxChunks: num(obj(prompt.rag).max_retrieved_rag_chunks_count),
   };
 }
 

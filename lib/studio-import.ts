@@ -107,6 +107,10 @@ export function readLiveValues(i: ReadInput): Values {
     set("extraKeywords", live.keywords.filter((w) => !auto.has(w.trim().toLowerCase())));
   }
 
+  set("ragEnabled", live.ragEnabled);
+  if (oneOf(live.ragEmbedding, CHOICES.ragEmbedding)) set("ragEmbedding", live.ragEmbedding);
+  set("ragMaxLength", live.ragMaxLength);
+  set("ragMaxChunks", live.ragMaxChunks);
   set("guardFocus", live.guardrailsFocus);
   set("guardInjection", live.guardrailsPromptInjection);
   set("recordVoice", live.recordVoice);
