@@ -4,8 +4,9 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Icon } from "./icons";
+import { navActive } from "@/lib/nav";
 
-export interface TabItem { href: string; label: string; icon?: string; exact?: boolean; badge?: string | number }
+export interface TabItem { href: string; label: string; icon?: string; exact?: boolean; also?: string[]; badge?: string | number }
 
 /**
  * The frame around every signed-in page. On a computer it is just the sidebar and the page. On a phone the sidebar
@@ -25,7 +26,7 @@ export function ShellFrame({ style, sidebar, title, logo, home, settings, tabs, 
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [open]);
-  const active = (t: TabItem) => (t.exact ? path === t.href : path === t.href || path.startsWith(t.href + "/"));
+  const active = (t: TabItem) => navActive(path, t.href, t.exact, t.also);
   return (
     <div className="shell" style={style} data-open={open}>
       <header className="topbar">

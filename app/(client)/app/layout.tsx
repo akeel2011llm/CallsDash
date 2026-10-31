@@ -1,4 +1,3 @@
-import { businessOf } from "@/lib/business-types";
 import { requireClient } from "@/lib/auth";
 import { getT } from "@/lib/i18n";
 import { Shell } from "@/components/Shell";
@@ -9,7 +8,7 @@ import { publicBranding } from "@/lib/brand-image";
 export const dynamic = "force-dynamic";
 
 export default async function ClientLayout({ children }: { children: React.ReactNode }) {
-  const { tenant, viewingAsAdmin, staffRole } = await requireClient();
+  const { tenant, viewingAsAdmin } = await requireClient();
   const { t, locale } = await getT(tenant);
   const [w, requests, convs] = await Promise.all([getWallet(tenant.id), getStaffRequests(tenant.id), getConversations(tenant.id)]);
   const attention = convs.filter(needsAttention).length;
@@ -20,28 +19,17 @@ export default async function ClientLayout({ children }: { children: React.React
       subtitle={t("nav.portal")}
       branding={publicBranding(tenant)}
       viewingAs={viewingAsAdmin}
+      // 9 menu items; grouped pages keep their own addresses and show tabs (route groups (inbox), (bookings), ... in this folder)
       nav={[
-        { href: "/app", label: t("nav.home"), icon: "home", exact: true, tab: true, group: t("nav.g.overview") },
+        { href: "/app", label: t("nav.home"), icon: "home", exact: true, tab: true },
+        { href: "/app/conversations", label: t("nav.inbox"), icon: "chat", tab: true, also: ["/app/attention", "/app/messages"], badge: attention + openRequests || undefined, group: t("nav.g.work") },
+        { href: "/app/bookings", label: t("nav.bookings"), icon: "check", tab: true, also: ["/app/calendar", "/app/doctors"] },
+        { href: "/app/customers", label: t("nav.customers"), icon: "contact", tab: true },
         { href: "/app/reports", label: t("nav.reports"), icon: "chart" },
-        { href: "/app/conversations", label: t("nav.conversations"), short: t("nav.conversations.short"), icon: "chat", tab: true, group: t("nav.g.calls") },
-        { href: "/app/attention", label: t("nav.attention"), short: t("nav.attention.short"), icon: "flag", tab: true, badge: attention || undefined },
-        { href: "/app/messages", label: t("nav.messages"), icon: "inbox", badge: openRequests || undefined },
-        { href: "/app/bookings", label: t("nav.bookings"), icon: "check", tab: true },
-        { href: "/app/customers", label: t("nav.customers"), icon: "contact" },
-        { href: "/app/calendar", label: t("nav.calendar"), icon: "calendar" },
-        { href: "/app/knowledge", label: t("nav.knowledge"), icon: "book", group: t("nav.g.receptionist") },
-        { href: "/app/catalogue", label: t("nav.catalogue"), icon: "tag" },
-        ...(staffRole === "manager" && tenant.permissions.dataManager ? [{ href: "/app/data", label: t("nav.data"), icon: "database" }] : []),
-        { href: "/app/agent", label: t("nav.agent"), icon: "sliders" },
-        { href: "/app/voice", label: t("nav.voice"), icon: "mic" },
-        { href: "/app/website", label: t("nav.website"), icon: "globe" },
-        { href: "/app/credits", label: t("nav.credits"), icon: "wallet", badge: w.low ? "!" : undefined, group: t("nav.g.account") },
-        ...(staffRole === "manager" ? [
-          // a shop or restaurant without staff scheduling has no people page (the address still works if typed)
-          ...(businessOf(tenant).staffScheduling ? [{ href: "/app/doctors", label: t("nav.doctors"), icon: "user" }] : []),
-          { href: "/app/team", label: t("nav.team"), icon: "users" },
-        ] : []),
-        { href: "/app/settings", label: t("nav.settings"), icon: "gear" },
+        { href: "/app/catalogue", label: t("nav.catalog"), short: t("nav.catalog.short"), icon: "tag", also: ["/app/data"], group: t("nav.g.receptionist") },
+        { href: "/app/knowledge", label: t("nav.yourAssistant"), icon: "sliders", also: ["/app/agent", "/app/voice", "/app/website"] },
+        { href: "/app/credits", label: t("nav.billing"), icon: "wallet", badge: w.low ? "!" : undefined, group: t("nav.g.account") },
+        { href: "/app/settings", label: t("nav.settings"), icon: "gear", also: ["/app/team"] },
       ]}
     >
       {children}

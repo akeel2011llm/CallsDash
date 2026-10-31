@@ -23,6 +23,8 @@ export interface NavItem {
   tab?: boolean;
   /** A shorter name for the bottom bar. */
   short?: string;
+  /** Other addresses this item stands for (the tabs of a grouped item), so it stays active on them. */
+  also?: string[];
 }
 
 export async function Shell({
@@ -62,7 +64,7 @@ export async function Shell({
           {nav.map((n) => (
             <div key={n.href} style={{ display: "contents" }}>
               {n.group && <div className="nav-label">{n.group}</div>}
-              <NavLink href={n.href} exact={n.exact} icon={n.icon}>
+              <NavLink href={n.href} exact={n.exact} also={n.also} icon={n.icon}>
                 <span className="grow">{n.label}</span>
                 {n.badge ? <span className="pill">{n.badge}</span> : null}
               </NavLink>
