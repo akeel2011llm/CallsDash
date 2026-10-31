@@ -155,7 +155,6 @@ export async function importItems(d: ItemDeps, tenantId: string, text: SheetInpu
 export const CUSTOMER_COLUMNS = ["name", "phone", "cpr", "email", "language", "notes"] as const;
 
 export const customersTemplateRows = (): string[][] => [[...CUSTOMER_COLUMNS], ["Sara Ahmed", "+973 3600 1122", "", "sara@example.com", "ar", "Prefers morning appointments"]];
-export const customersTemplate = () => toCsv(customersTemplateRows());
 
 type CustomerDeps = Pick<Data, "getCustomer" | "findCustomer" | "putCustomer" | "deleteCustomer">;
 
@@ -195,7 +194,6 @@ export const customersCsv = (list: Customer[]) => toCsv(customersRows(list));
 export const KNOWLEDGE_COLUMNS = ["question", "answer", "language"] as const;
 
 export const knowledgeTemplateRows = (): string[][] => [[...KNOWLEDGE_COLUMNS], ["What are your opening hours?", "We are open Saturday to Thursday 8 am to 9 pm and Friday 4 pm to 9 pm.", "en"]];
-export const knowledgeTemplate = () => toCsv(knowledgeTemplateRows());
 export const knowledgeRows = (list: KnowledgeItem[]): string[][] => [[...KNOWLEDGE_COLUMNS], ...list.map((k) => [k.question, k.answer, k.language])];
 export const knowledgeCsv = (list: KnowledgeItem[]) => toCsv(knowledgeRows(list));
 
@@ -226,7 +224,6 @@ export async function importKnowledge(d: KnowledgeDeps, tenantId: string, text: 
 
 export const doctorsRows = (list: Doctor[]): string[][] =>
   [["name", "specialty", "active", "has_photo"], ...list.map((x) => [x.name, x.specialty, x.active === false ? "no" : "yes", x.photoAt ? "yes" : "no"])];
-export const doctorsCsv = (list: Doctor[]) => toCsv(doctorsRows(list));
 
 export const EXPORT_KINDS = ["catalogue", "customers", "knowledge", "doctors"] as const;
 export type ExportKind = (typeof EXPORT_KINDS)[number];

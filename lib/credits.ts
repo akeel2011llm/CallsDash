@@ -1,4 +1,4 @@
-import type { Channel, CreditBatch, Plan } from "./types";
+import type { CreditBatch, Plan } from "./types";
 
 // 1 credit = 1 voice minute = 20 text messages (see implementation plan, "Credits and billing").
 export const TEXT_MESSAGES_PER_CREDIT = 20;
@@ -170,10 +170,3 @@ export function lowBalance(batches: CreditBatch[], plans: Plan[], threshold: num
   const reference = pk.length > 0 ? round2(pk.reduce((s, p) => s + p.includedCredits, 0)) : Math.max(0, ...topups.map((b) => b.amount));
   return { low: reference > 0 ? bal <= reference * threshold : bal <= 0, balance: bal, reference };
 }
-
-export const CHANNEL_LABEL: Record<Channel, string> = {
-  website: "Website",
-  whatsapp: "WhatsApp",
-  instagram: "Instagram",
-  phone: "Phone",
-};

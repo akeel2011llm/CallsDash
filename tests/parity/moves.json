@@ -4,7 +4,8 @@
     "/admin/clients/[id]/branding": "/admin/clients/[id]/business/branding",
     "/admin/clients/[id]/duplicate": "/admin/clients/[id]/activity/duplicate",
     "/admin/packages": "/admin/billing/packages",
-    "/admin/usage": "/admin/billing/usage"
+    "/admin/usage": "/admin/billing/usage",
+    "/admin/billing": "/admin/billing/packages"
   },
   "actions": {},
   "fields": {
