@@ -40,7 +40,7 @@ export interface ModelBook {
 }
 
 export interface StudioDeps {
-  data: Pick<Data, "getAgent" | "getDoctors" | "getKnowledge" | "getSetting" | "setSetting">;
+  data: Pick<Data, "getAgent" | "getDoctors" | "getKnowledge" | "getSetting" | "setSetting"> & Partial<Pick<Data, "getTenant">>;
   catalog: CatalogApi | null;
   cache: StudioCache;
   now?: () => Date;
@@ -48,8 +48,10 @@ export interface StudioDeps {
 
 /** The size of the client's instructions plus knowledge base: what ElevenLabs sends the model on every turn. */
 export async function promptSize(d: Pick<StudioDeps, "data">, tenantId: string): Promise<number> {
-  const [settings, doctors, items] = await Promise.all([d.data.getAgent(tenantId), d.data.getDoctors(tenantId), d.data.getKnowledge(tenantId)]);
-  return buildPrompt(settings, doctors).length + knowledgeText(items).length;
+  const [settings, doctors, items, tenant] = await Promise.all([
+    d.data.getAgent(tenantId), d.data.getDoctors(tenantId), d.data.getKnowledge(tenantId), d.data.getTenant ? d.data.getTenant(tenantId) : undefined,
+  ]);
+  return buildPrompt(settings, doctors, tenant).length + knowledgeText(items).length;
 }
 
 const isModels = (v: unknown): v is SavedModels => !!v && typeof v === "object" && Array.isArray((v as SavedModels).llms) && typeof (v as SavedModels).at === "string";

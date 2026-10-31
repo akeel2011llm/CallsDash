@@ -8,6 +8,7 @@ import { safePath } from "./format";
 import { supabaseConfigured, supabaseServer } from "./supabase";
 import * as store from "./data";
 import { businessFromForm } from "./business-types";
+import { promptForWords } from "./business-words";
 import { DuplicateError } from "./errors";
 import { duplicateClient, type CopyReport } from "./client-copy";
 import { nameKey } from "./tenant-keys";
@@ -450,7 +451,13 @@ export async function adminCreateTenantAction(f: FormData) {
     if (e instanceof DuplicateError) redirect(`/admin/clients/new?error=${e.field}`);
     throw e;
   }
-  if (f.has("businessType")) await store.setBusiness(tenantId, businessFromForm((k) => str(f, k), (k) => f.has(k)), actor);
+  if (f.has("businessType")) {
+    const business = businessFromForm((k) => str(f, k), (k) => f.has(k));
+    const [tenant, settings] = await Promise.all([store.getTenant(tenantId), store.getAgent(tenantId)]);
+    const prompt = tenant ? promptForWords(settings, tenant, business) : null;
+    await store.setBusiness(tenantId, business, actor);
+    if (prompt) await store.saveAgent(tenantId, { ...settings, prompt }, actor, "The assistant's sections use the business words");
+  }
   revalidatePath("/admin", "layout");
   redirect(`/admin/clients/${tenantId}/setup`);
 }

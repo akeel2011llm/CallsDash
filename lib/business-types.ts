@@ -16,9 +16,25 @@ export interface BusinessProfile {
   type: BusinessType;
   /** Does the business book time with named people (doctors, stylists)? Off by default for shops and restaurants. */
   staffScheduling?: boolean;
-  /** Custom type only: the admin's own words for the people. Blank parts fall back to "staff". */
-  words?: { staffOne?: string; staffMany?: string; staffOneAr?: string; staffManyAr?: string };
+  /**
+   * The admin's own words, for any type (until milestone 8b only the custom type had them). A blank word keeps the type's word.
+   * staff* is the word for the whole team; with one role it defaults to that role's name.
+   */
+  words?: Partial<Record<WordKey, string>>;
+  /** The kinds of people who take bookings (Doctor, Nurse, Stylist). Missing = one role named after the type. */
+  roles?: Role[];
 }
+
+export const WORD_KEYS = [
+  "staffOne", "staffMany", "staffOneAr", "staffManyAr",
+  "customerOne", "customerMany", "customerOneAr", "customerManyAr",
+  "placeOne", "placeMany", "placeOneAr", "placeManyAr",
+] as const;
+export type WordKey = (typeof WORD_KEYS)[number];
+
+/** One kind of team member, named by the admin in English and Arabic, singular and plural. `key` never changes once made. */
+export interface Role { key: string; one: string; many: string; oneAr: string; manyAr: string }
+export const MAX_ROLES = 12;
 
 export interface Vocab {
   staffOne: string; staffMany: string;
@@ -85,21 +101,43 @@ export function rulesOf(t: Pick<Tenant, "business"> | null | undefined): TypeRul
   return { needsStaff: b.type === "clinic" || b.staffScheduling, needsCatalog: catalog, knowledgeOrCatalog: !catalog };
 }
 
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+const lower = (s: string, locale: Locale) => (locale === "en" ? s.charAt(0).toLowerCase() + s.slice(1) : s);
+
+/** The roles a client has. Before roles existed every client had one: the type's own word (Doctor for a clinic). */
+export function rolesOf(t: Pick<Tenant, "business"> | null | undefined): Role[] {
+  const b = businessOf(t);
+  const ok = (b.roles ?? []).filter((r) => r && /^[a-z][a-z0-9_]{0,30}$/.test(r.key) && r.one?.trim());
+  if (ok.length) return ok.slice(0, MAX_ROLES);
+  const en = VOCAB[b.type].en, ar = VOCAB[b.type].ar;
+  return [{ key: "staff", one: cap(en.staffOne), many: cap(en.staffMany), oneAr: ar.staffOne, manyAr: ar.staffMany }];
+}
+
+/** The role of one team member: its own, or the first role when it has none (every doctor made before roles existed). */
+export const roleOf = (roles: Role[], key: string | undefined): Role => roles.find((r) => r.key === key) ?? roles[0];
+
+/** A role's name in a language, singular or plural. Arabic falls back to English when the admin left it blank. */
+export const roleName = (r: Role, locale: Locale, many = false): string =>
+  (locale === "ar" ? (many ? r.manyAr || r.oneAr : r.oneAr) : "") || (many ? r.many || r.one : r.one);
+
 export function vocabOf(t: Pick<Tenant, "business"> | null | undefined, locale: Locale): Vocab {
   const b = businessOf(t);
   const v = { ...VOCAB[b.type][locale] };
-  if (b.type === "custom" && b.words) {
-    const w = b.words;
-    const one = (locale === "ar" ? w.staffOneAr : w.staffOne)?.trim();
-    const many = (locale === "ar" ? w.staffManyAr : w.staffMany)?.trim();
-    if (one) v.staffOne = one;
-    if (many) v.staffMany = many;
-    else if (one && locale === "en") v.staffMany = one + "s";
-  }
+  const w = b.words ?? {};
+  const pick = (k: string) => (w[(locale === "ar" ? `${k}Ar` : k) as WordKey] ?? "").trim();
+  // the team word: the admin's own, else the only role's name, else (several roles) a neutral word
+  const roles = b.roles?.length ? rolesOf(t) : [];
+  if (roles.length === 1) { v.staffOne = lower(roleName(roles[0], locale), locale); v.staffMany = lower(roleName(roles[0], locale, true), locale); }
+  else if (roles.length > 1) { v.staffOne = VOCAB.retail[locale].staffOne; v.staffMany = VOCAB.retail[locale].staffMany; }
+  if (pick("staffOne")) { v.staffOne = pick("staffOne"); v.staffMany = pick("staffMany") || (locale === "en" ? v.staffOne + "s" : v.staffOne); }
+  else if (pick("staffMany")) v.staffMany = pick("staffMany");
+  if (pick("customerOne")) { v.customerOne = pick("customerOne"); v.customerMany = pick("customerMany") || (locale === "en" ? v.customerOne + "s" : v.customerOne); }
+  else if (pick("customerMany")) v.customerMany = pick("customerMany");
+  if (pick("placeOne")) { v.place = pick("placeOne"); v.placeMany = pick("placeMany") || (locale === "en" ? v.place + "s" : v.place); }
+  else if (pick("placeMany")) v.placeMany = pick("placeMany");
   return v;
 }
 
-const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 /** English: whole words only, keeps capitals and the possessive. */
 function relabelEn(s: string, v: Vocab, base: Vocab): string {
@@ -169,11 +207,44 @@ export function businessFromForm(get: (k: string) => string, has: (k: string) =>
   const raw = get("businessType");
   const type: BusinessType = isBusinessType(raw) ? raw : "clinic";
   const w = (k: string) => get(k).replace(/\s+/g, " ").trim().slice(0, 40);
-  const words = { staffOne: w("staffOne"), staffMany: w("staffMany"), staffOneAr: w("staffOneAr"), staffManyAr: w("staffManyAr") };
+  const words = Object.fromEntries(WORD_KEYS.map((k) => [k, w(k)]).filter(([, v]) => v)) as BusinessProfile["words"];
+  const roles = has("roleCount") ? rolesFromForm(get) : undefined;
   return {
     type,
     // a clinic always books doctors; the box only appears with the other types
     staffScheduling: type === "clinic" ? true : has("schedulingShown") ? get("staffScheduling") === "on" : SCHEDULING_DEFAULT[type],
-    ...(type === "custom" && Object.values(words).some(Boolean) ? { words } : {}),
+    ...(words && Object.keys(words).length ? { words } : {}),
+    ...(roles && roles.length ? { roles } : {}),
   };
+}
+
+/** A role key from its English name: lower case latin letters, digits and "_", unique among the client's roles. */
+export function roleKey(name: string, taken: Iterable<string>): string {
+  const used = new Set(taken);
+  const base = name.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 24) || "role";
+  let key = /^[a-z]/.test(base) ? base : `r_${base}`;
+  for (let n = 2; used.has(key); n++) key = `${base}_${n}`;
+  return key;
+}
+
+/**
+ * The role lines of the business form (role0_key, role0_one, ...; `roleCount` lines). A removed or blank line is dropped; an
+ * existing role keeps its key so its team members keep it. English singular is required; the rest fills itself.
+ */
+export function rolesFromForm(get: (k: string) => string): Role[] {
+  const n = Math.min(Number(get("roleCount")) || 0, MAX_ROLES + 3);
+  const t = (k: string) => get(k).replace(/\s+/g, " ").trim().slice(0, 40);
+  const lines = Array.from({ length: n }, (_, i) => ({
+    key: /^[a-z][a-z0-9_]{0,30}$/.test(get(`role${i}_key`)) ? get(`role${i}_key`) : "",
+    one: t(`role${i}_one`), many: t(`role${i}_many`), oneAr: t(`role${i}_oneAr`), manyAr: t(`role${i}_manyAr`), remove: get(`role${i}_remove`) === "on",
+  })).filter((l) => !l.remove && l.one);
+  const taken = new Set(lines.map((l) => l.key).filter(Boolean));
+  const out: Role[] = [];
+  for (const l of lines) {
+    const key = l.key || roleKey(l.one, taken);
+    taken.add(key);
+    if (out.some((r) => r.key === key)) continue;
+    out.push({ key, one: l.one, many: l.many || `${l.one}s`, oneAr: l.oneAr, manyAr: l.manyAr || l.oneAr });
+  }
+  return out.slice(0, MAX_ROLES);
 }

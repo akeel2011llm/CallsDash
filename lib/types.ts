@@ -391,6 +391,8 @@ export interface Doctor {
   tenantId: string;
   name: string;
   specialty: string;
+  /** The key of the client's role this person has (lib/business-types.ts rolesOf). Missing = the client's first role. */
+  role?: string;
   /** What the assistant tells customers about the doctor (experience, languages, what they treat), in English and Arabic. */
   about?: string;
   aboutAr?: string;
