@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "parity:update": "tsx scripts/parity-update.ts"
   },
   "dependencies": {
     "@elevenlabs/client": "1.27.0",
