@@ -477,6 +477,8 @@ export interface Conversation {
   flags: FlagKind[];
   /** A person has looked at the flags. */
   reviewed: boolean;
+  /** When staff deleted the recording (the conversation's copy at ElevenLabs). The transcript and summary stay here. */
+  recordingDeletedAt?: string;
 }
 
 /** A finished conversation as it arrives from ElevenLabs, before it is charged and stored. */

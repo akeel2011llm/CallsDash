@@ -26,6 +26,7 @@ export async function ClientTabs({ group }: { group: ClientGroup }) {
       tab("/app/conversations", "nav.conversations"),
       tab("/app/attention", "nav.attention", convs.filter(needsAttention).length),
       tab("/app/messages", "nav.messages", requests.filter((r) => r.status === "open").length),
+      tab("/app/recordings", "nav.recordings"),
     ];
   } else if (group === "bookings") {
     items = [

@@ -93,6 +93,7 @@ const convOf = (r: Row): Conversation => ({
   transcript: jsonish(r.transcript), recordingUrl: undefined, // signed URLs for `recording_path` are issued by the storage layer
   creditsCharged: num(r.credits_charged), costUsd: num(r.cost_usd), elevenLabsConversationId: r.elevenlabs_conversation_id ?? undefined,
   flags: (r.flags ?? []) as Conversation["flags"], reviewed: Boolean(r.reviewed),
+  ...(r.recording_deleted_at ? { recordingDeletedAt: iso(r.recording_deleted_at) } : {}),
 });
 const ledgerOf = (r: Row): LedgerEntry => ({
   id: r.id, tenantId: r.tenant_id, at: iso(r.at), kind: r.kind, credits: num(r.credits), channel: r.channel ?? undefined,
@@ -261,6 +262,7 @@ export const SCHEMA_ADDITIONS = [
   `alter table doctors add column if not exists extra jsonb`,
   `alter table bookings add column if not exists extra jsonb`,
   `alter table customers add column if not exists extra jsonb`,
+  `alter table conversations add column if not exists recording_deleted_at timestamptz`,
 ];
 
 export function createPgData(db: Db): Data {
@@ -931,6 +933,13 @@ export function createPgData(db: Db): Data {
     deleteStaffRequest: async (tenantId, requestId, actor) => tx(async (run) => {
       const r = await run(`delete from staff_requests where tenant_id = $1 and id = $2 returning id`, [tenantId, requestId]);
       if (r[0]) await audit(run, actor, "Message deleted", tenantId);
+    }),
+
+    markRecordingsDeleted: async (tenantId, conversationIds, actor) => tx(async (run) => {
+      const r = await run(`update conversations set recording_deleted_at = now() where tenant_id = $1 and id = any($2::uuid[]) and recording_deleted_at is null returning id`,
+        [tenantId, conversationIds.filter(isUuid)]);
+      if (r.length) await audit(run, actor, `${r.length} recording(s) deleted`, tenantId);
+      return r.length;
     }),
 
     deleteConversation: async (tenantId, conversationId, actor) => tx(async (run) => {

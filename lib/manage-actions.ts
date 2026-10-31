@@ -19,6 +19,7 @@ import { autoSync } from "./auto-sync";
 import type { Booking, DateRange } from "./types";
 import { businessFromForm, businessOf, rolesOf } from "./business-types";
 import { promptForWords } from "./business-words";
+import { deleteRecordings, recordingState } from "./recordings";
 import { ExtraError, cleanExtra, extraFieldsOf, extraFromForm, extraFromLines, isExtraTarget, mergeExtra } from "./extra-fields";
 
 const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
@@ -294,6 +295,27 @@ export async function deleteConversationAction(f: FormData) {
   await store.deleteConversation(tenant.id, id, actor);
   revalidatePath("/app", "layout");
   redirect("/app/conversations?deleted=1");
+}
+
+/**
+ * Deletes the ticked recordings at ElevenLabs (lib/recordings.ts); the transcripts and summaries stay. Managers only, with the
+ * tick box. Recordings that are not playable any more (already deleted, past the retention period) are skipped.
+ */
+export async function deleteRecordingsAction(f: FormData) {
+  const { tenant, actor, staffRole } = await requireClient();
+  const back = (q: string) => redirect(`/app/recordings?${q}`);
+  if (staffRole !== "manager") back("err=manager");
+  if (!confirmed(f)) back("err=confirm");
+  const ids = f.getAll("ids").map(String).slice(0, 200);
+  if (!ids.length) back("err=none");
+  const key = process.env.ELEVENLABS_API_KEY;
+  if (!key) back("err=no_key");
+  const all = await store.getConversations(tenant.id);
+  const picked = all.filter((c) => ids.includes(c.id) && recordingState(c, tenant.retentionDays) === "available");
+  const { done, failed } = await deleteRecordings(key!, picked);
+  if (done.length) await store.markRecordingsDeleted(tenant.id, done, actor);
+  revalidatePath("/app", "layout");
+  back(`deleted=${done.length}${failed ? `&failed=${failed}` : ""}`);
 }
 
 /* ---------- admin: clients, credits, packages ---------- */
