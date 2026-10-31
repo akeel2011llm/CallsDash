@@ -131,8 +131,9 @@ export function TableDelete({ tenant, table, open, t }: { tenant: Tenant; table:
 /* ---------- rows ---------- */
 
 /** The input for one column, by its type. */
-function FieldInput({ f, value, t, locale }: { f: DataField; value: string; t: T; locale: Locale }) {
-  const name = `v_${f.key}`;
+/** One value's input for its column type. `prefix` names it: v_ in a table row, x_ for a client's own fields (components/ExtraFields.tsx). */
+export function FieldInput({ f, value, t, locale, prefix = "v_" }: { f: DataField; value: string; t: T; locale: Locale; prefix?: string }) {
+  const name = `${prefix}${f.key}`;
   const label = labelOf(f, locale);
   const req = Boolean(f.required);
   let input: React.ReactNode;

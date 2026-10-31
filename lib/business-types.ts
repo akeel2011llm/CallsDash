@@ -8,6 +8,7 @@
  */
 import type { Locale, Tenant } from "./types";
 import { ID_KINDS, type IdKind, type IdRule } from "./id-rule";
+import type { ExtraFields } from "./extra-fields";
 
 export const BUSINESS_TYPES = ["clinic", "salon", "retail", "restaurant", "service", "custom"] as const;
 export type BusinessType = (typeof BUSINESS_TYPES)[number];
@@ -26,6 +27,8 @@ export interface BusinessProfile {
   roles?: Role[];
   /** The ID number customers give (lib/id-rule.ts). Missing = the CPR number, as every client asked before the rule existed. */
   id?: IdRule;
+  /** The client's own fields on bookings, customers and team members (lib/extra-fields.ts). Edited on the Business tab. */
+  fields?: ExtraFields;
 }
 
 export const WORD_KEYS = [

@@ -1,12 +1,13 @@
 import type { Data } from "./data/demo";
 import { asciiDigits } from "./cpr";
 import { ID_CPR, asksId, idify, normalizeId, type IdRule } from "./id-rule";
+import { cleanExtra, mergeExtra, type ExtraField } from "./extra-fields";
 import type { Channel, Customer, Locale } from "./types";
 
 export type CustomerDeps = Pick<Data, "getCustomer" | "findCustomer" | "putCustomer" | "deleteCustomer">;
 
 export class CustomerError extends Error {
-  constructor(public code: "bad_phone" | "bad_cpr" | "bad_email" | "duplicate_phone" | "cpr_mismatch" | "unknown") { super(code); }
+  constructor(public code: "bad_phone" | "bad_cpr" | "bad_email" | "duplicate_phone" | "cpr_mismatch" | "bad_extra" | "unknown", readonly detail = "") { super(code); }
 }
 
 const MAX_HISTORY = 50;
@@ -82,6 +83,8 @@ async function lookupByCpr(d: CustomerDeps, tenantId: string, rawCpr: string, ru
 
 export interface AssistantSave {
   phone: string; name?: string; cpr?: string; language?: Locale; email?: string; note?: string; conversationId?: string; channel?: Channel;
+  /** Answers to the client's own customer fields that the assistant asks for (lib/extra-fields.ts), already tidied. */
+  extra?: Record<string, string>;
 }
 
 /**
@@ -104,16 +107,17 @@ export async function saveCustomerFromAssistant(d: CustomerDeps, tenantId: strin
   const stamp = (n: string) => `${now.slice(0, 10)}: ${n}`;
   const convs = (c: string[]) => (input.conversationId && !c.includes(input.conversationId) ? [input.conversationId, ...c] : c).slice(0, MAX_CONVERSATIONS);
 
+  const extra = input.extra && Object.keys(input.extra).length ? input.extra : undefined;
   if (!existing) {
     const customer = await d.putCustomer(tenantId, {
-      phone, name: clip(input.name ?? "", 120), cpr: cpr ?? undefined, language: input.language, email, notes: note ? stamp(note) : "",
+      phone, name: clip(input.name ?? "", 120), cpr: cpr ?? undefined, language: input.language, email, notes: note ? stamp(note) : "", ...(extra ? { extra } : {}),
       createdAt: now, updatedAt: now, lastContactAt: now, conversationIds: convs([]), history: [],
     }, "assistant");
     return { customer, created: true, cprSaved: Boolean(cpr) };
   }
   // someone who knows the number but not the CPR on file may add a note, but not change who the customer is
   const mayChange = !existing.cpr || (cpr !== null && cpr === existing.cpr);
-  if (!mayChange && (input.name || input.email || cpr)) throw new CustomerError("cpr_mismatch");
+  if (!mayChange && (input.name || input.email || cpr || extra)) throw new CustomerError("cpr_mismatch");
   const notes = note ? `${existing.notes ? `${existing.notes}\n` : ""}${stamp(note)}`.slice(-MAX_NOTES) : existing.notes;
   // CPR mode also fills in a record the post-call webhook made from a bare phone number (no name, no notes): it starts afresh with its
   // earlier conversations dropped, since nothing shows they were this person's
@@ -126,6 +130,7 @@ export async function saveCustomerFromAssistant(d: CustomerDeps, tenantId: strin
     cpr: existing.cpr ?? (attach ? cpr : undefined),
     language: input.language ?? existing.language,
     email: email ?? existing.email,
+    ...(extra ? { extra: { ...(existing.extra ?? {}), ...extra } } : {}),
     notes, updatedAt: now, lastContactAt: now, conversationIds: convs(base.conversationIds),
   }, "assistant");
   return { customer, created: false, cprSaved: attach };
@@ -156,13 +161,17 @@ export async function recordVisit(d: CustomerDeps, tenantId: string, v: { conver
   }, "assistant");
 }
 
-export interface StaffCustomerInput { id?: string; name: string; phone: string; cpr?: string; email?: string; language?: Locale; notes?: string }
+export interface StaffCustomerInput {
+  id?: string; name: string; phone: string; cpr?: string; email?: string; language?: Locale; notes?: string;
+  /** Answers to the client's own customer fields, as typed; only the fields given are changed. */
+  extra?: Record<string, unknown>;
+}
 
 /**
  * Add (no id) or edit a customer from the Customers screen. Phone numbers are unique per client. A business that asks for no
  * ID number has no ID box, so an edit keeps any number saved before.
  */
-export async function saveCustomerByStaff(d: CustomerDeps, tenantId: string, input: StaffCustomerInput, actor: string, rule: IdRule = ID_CPR): Promise<Customer> {
+export async function saveCustomerByStaff(d: CustomerDeps, tenantId: string, input: StaffCustomerInput, actor: string, rule: IdRule = ID_CPR, fields: ExtraField[] = [], need: "all" | "none" = "all"): Promise<Customer> {
   const phone = cleanPhone(input.phone);
   if (!phone) throw new CustomerError("bad_phone");
   const cprRaw = asksId(rule) ? (input.cpr ?? "").trim() : "";
@@ -172,6 +181,8 @@ export async function saveCustomerByStaff(d: CustomerDeps, tenantId: string, inp
   if (cprRaw && !cpr) throw new CustomerError("bad_cpr");
   const email = (input.email ?? "").trim();
   if (email && !emailOk(email)) throw new CustomerError("bad_email");
+  const answers = input.extra && fields.length ? cleanExtra(fields, input.extra, need) : null;
+  if (answers?.errors.length) throw new CustomerError("bad_extra", answers.errors.map((e) => fields.find((f) => f.key === e.key)?.label ?? e.key).join(", "));
   const other = await d.findCustomer(tenantId, { phoneKey: phoneKey(phone) });
   if (other && other.id !== input.id) throw new CustomerError("duplicate_phone");
   const now = new Date().toISOString();
@@ -180,11 +191,13 @@ export async function saveCustomerByStaff(d: CustomerDeps, tenantId: string, inp
     if (!cur) throw new CustomerError("unknown");
     return d.putCustomer(tenantId, {
       ...cur, name: clip(input.name, 120), phone, cpr: asksId(rule) ? cpr ?? undefined : cur.cpr, email: email || undefined, language: input.language,
+      ...(answers ? { extra: mergeExtra(cur.extra, fields, answers.values) } : {}),
       notes: clip(input.notes ?? "", MAX_NOTES), updatedAt: now,
     }, actor);
   }
   return d.putCustomer(tenantId, {
     name: clip(input.name, 120), phone, cpr: cpr ?? undefined, email: email || undefined, language: input.language, notes: clip(input.notes ?? "", MAX_NOTES),
+    ...(answers && Object.values(answers.values).some(Boolean) ? { extra: mergeExtra(undefined, fields, answers.values) } : {}),
     createdAt: now, updatedAt: now, conversationIds: [], history: [],
   }, actor);
 }

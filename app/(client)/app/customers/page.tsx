@@ -9,6 +9,7 @@ import { lookupModeOf, phoneKey } from "@/lib/customers";
 import { Empty, Notice, PageHead } from "@/components/ui";
 import { SubmitButton } from "@/components/SubmitButton";
 import { CustomerFields } from "@/components/CustomerFields";
+import { extraFieldsOf } from "@/lib/extra-fields";
 
 const SHOWN = 200;
 
@@ -76,7 +77,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
         <details>
           <summary><strong>{t("customers.add")}</strong></summary>
           <form action={saveCustomerAction} className="stack" style={{ marginBlockStart: ".75rem" }}>
-            <CustomerFields t={t} id={idRule} />
+            <CustomerFields t={t} id={idRule} fields={extraFieldsOf(tenant, "customer")} locale={locale} />
             <div><SubmitButton className="btn" type="submit">{t("common.add")}</SubmitButton></div>
           </form>
         </details>

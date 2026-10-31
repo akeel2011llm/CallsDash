@@ -153,6 +153,21 @@ It also checks that every menu link points at a real page, and that every Englis
   rule)`: CPR wording is unchanged, another ID is named by `idify()`, and `none` has its own phone-number rules. With
   `none` a returning customer is greeted by first name only; notes are never shared. Agent version 13.
 
+## Any business: your own fields (step 2b)
+
+- `tenants.business.fields` (lib/extra-fields.ts): per client, own fields for `booking`, `customer` and `team`, with the
+  custom-table column types (no stock), English and Arabic names, required, and the assistant box (booking/customer: the
+  assistant asks for it; team: the assistant may tell customers). Up to 15 per target. Designed on the Business tab
+  (components/ExtraFields.tsx, `adminExtraFieldsAction`).
+- Answers: `extra` jsonb on bookings, customers and doctors (migration 0019), by field key. Removing a field hides it and
+  keeps its answers. Forms send `x_<key>` plus `extraShown`.
+- Screens: New booking, booking detail (shown and editable), Customers (add, edit, Data tab), team (add, edit, shown in the
+  list). Exports: bookings, customers and team sheets get a column per field (key, or extra_<key> if it repeats a fixed
+  column); the customer import reads it by key or by either name. The duplicate copies team answers.
+- Assistant (agent version 14): `extraRules(tenant)` lists the asked fields with key, type and choices; `book_appointment`
+  and `save_customer` take `details` (JSON by key, or "name: value" lines). The service refuses a booking missing a
+  required asked field and names it; staff must fill every required field. Told team fields appear in the team list.
+
 ---
 
 # CallsDash reorganization proposal (Phase 1 audit + Phase 2 blueprint)

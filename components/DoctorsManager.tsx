@@ -10,9 +10,11 @@ import { Badge, Notice } from "./ui";
 import { SubmitButton } from "./SubmitButton";
 import { HoursFields } from "./HoursFields";
 import { ConfirmDelete } from "./Confirm";
+import { ExtraInputs, ExtraValuesInline } from "./ExtraFields";
+import { extraFieldsOf } from "@/lib/extra-fields";
 
 export type DoctorNotice = { doc?: string; cal?: string; clash?: string; role?: string };
-const DOC_NOTICES = ["added", "saved", "removed", "name_missing", "name_taken", "hours_invalid", "dates_invalid", "confirm", "has_bookings", "has_login"];
+const DOC_NOTICES = ["added", "saved", "removed", "name_missing", "name_taken", "hours_invalid", "dates_invalid", "confirm", "has_bookings", "has_login", "bad_extra"];
 const CAL_RESULTS = ["ok", "no_id", "no_key", "key_rejected", "not_shared", "timeout", "other"];
 
 /**
@@ -37,6 +39,7 @@ export function DoctorsManager({ tenant, doctors, bookings, logins, returnTo, sp
   const filter = many && roles.some((r) => r.key === sp.role) ? sp.role : "";
   const shown = filter ? doctors.filter((d) => roleOf(roles, d.role).key === filter) : doctors;
   const base = returnTo.split(/[?#]/)[0];
+  const teamFields = extraFieldsOf(tenant, "team");
   const rolePick = (cur?: string) => many ? (
     <label style={{ flex: 1, minWidth: 140 }}>{t("team.role")}
       <select name="role" defaultValue={roleOf(roles, cur).key}>{roles.map((r) => <option key={r.key} value={r.key}>{roleName(r, locale)}</option>)}</select>
@@ -72,7 +75,8 @@ export function DoctorsManager({ tenant, doctors, bookings, logins, returnTo, sp
                   // eslint-disable-next-line @next/next/no-img-element
                   ? <img src={`/api/data/photo/doctor/${d.id}?v=${Date.parse(d.photoAt) || 0}&t=${tenant.id}`} alt="" width={36} height={36} loading="lazy" style={{ objectFit: "cover", borderRadius: "50%" }} />
                   : null}
-                <span><strong>{d.name}</strong>{many ? <span className="muted"> · {roleName(roleOf(roles, d.role), locale)}</span> : null}{d.specialty ? <span className="muted"> · {d.specialty}</span> : null}</span>
+                <span><strong>{d.name}</strong>{many ? <span className="muted"> · {roleName(roleOf(roles, d.role), locale)}</span> : null}{d.specialty ? <span className="muted"> · {d.specialty}</span> : null}
+                  {teamFields.length > 0 && <small className="muted" style={{ display: "block" }}><ExtraValuesInline fields={teamFields} values={d.extra} t={t} locale={locale} /></small>}</span>
               </span>
               <span className="row">
                 <Badge tone={active ? "ok" : "neutral"}>{active ? t("doctors.active") : t("doctors.inactive")}</Badge>
@@ -94,6 +98,7 @@ export function DoctorsManager({ tenant, doctors, bookings, logins, returnTo, sp
                   <label style={{ flex: 2, minWidth: 160 }}>{t("admin.doctor.specialty")}<input name="specialty" maxLength={120} defaultValue={d.specialty} /></label>
                   <label style={{ flex: 0 }}>{t("doctors.color")}<input type="color" name="color" defaultValue={d.color} /></label>
                 </div>
+                <ExtraInputs fields={teamFields} values={d.extra} t={t} locale={locale} />
                 <label>{t("admin.doctor.about")}<textarea name="about" rows={3} maxLength={800} defaultValue={d.about ?? ""} /></label>
                 <label>{t("admin.doctor.aboutAr")}<textarea name="aboutAr" rows={3} maxLength={800} dir="rtl" defaultValue={d.aboutAr ?? ""} /></label>
                 <small className="muted">{t("admin.doctor.about.help")}</small>
@@ -160,6 +165,7 @@ export function DoctorsManager({ tenant, doctors, bookings, logins, returnTo, sp
         {rolePick(filter || undefined)}
         <label style={{ flex: 2, minWidth: 160 }}>{t("admin.doctor.specialty")}<input name="specialty" maxLength={120} /></label>
         <label style={{ flex: "1 1 100%" }}>{t("admin.doctor.about")}<textarea name="about" rows={2} maxLength={800} /></label>
+        {teamFields.length > 0 && <div className="form-cols" style={{ flex: "1 1 100%" }}><ExtraInputs fields={teamFields} t={t} locale={locale} /></div>}
         <SubmitButton className="btn small" type="submit">{t("admin.doctor.add")}</SubmitButton>
       </form>
     </section>

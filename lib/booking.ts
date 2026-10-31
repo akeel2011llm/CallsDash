@@ -2,6 +2,7 @@ import { LOCAL_OFFSET_MIN, computeSlots, describeSlot, isOpenAt, isSlotFree, nex
 import { SlotTakenError } from "./errors";
 import { asciiDigits } from "./cpr";
 import { asksId, idRuleOf, idify, normalizeId, type IdRule } from "./id-rule";
+import { cleanExtra, describeField, extraFieldsOf, mergeExtra, type ExtraValues } from "./extra-fields";
 import type { Calendar, EventInput } from "./google-calendar";
 import type { Data } from "./data/demo";
 import type { Booking, BookingSource, BookingStatus, DateRange, Doctor, Locale, Tenant } from "./types";
@@ -33,6 +34,24 @@ const ASK_CPR = "Ask for the patient's CPR number: the 9 digits on their Bahrain
 /** What the assistant is told when the ID number is missing or not valid, in the client's own ID (lib/id-rule.ts). */
 const askId = (r: IdRule) => idify(ASK_CPR, r);
 const ASK_PHONE = "Ask for the phone number the booking was made with, and pass it as patient_phone.";
+
+/**
+ * The client's own booking fields (lib/extra-fields.ts) from what was given. Staff must fill every required field; the
+ * assistant only those it is told to ask for. A problem names the fields, so the assistant knows what to ask again.
+ */
+function bookingExtra(tenant: Tenant, raw: Record<string, unknown> | undefined, byAssistant: boolean, before?: ExtraValues): ExtraValues | undefined {
+  const fields = extraFieldsOf(tenant, "booking");
+  if (!fields.length) return before;
+  const { values, errors } = cleanExtra(fields, raw ?? {}, byAssistant ? "asked" : "all");
+  if (errors.length) {
+    const bad = fields.filter((f) => errors.some((e) => e.key === f.key));
+    throw new ToolError("bad_extra", byAssistant
+      ? `Ask the customer for these details and pass them in details, as a JSON object by key: ${bad.map(describeField).join("; ")}.`
+      : bad.map((f) => f.label).join(", "));
+  }
+  const out = mergeExtra(before, fields, values);
+  return Object.keys(out).length ? out : undefined;
+}
 const DAY_MS = 86_400_000;
 /** A doctor with their own hours works those; otherwise the clinic's opening hours. */
 export const hoursFor = (tenant: Tenant, doctor: Doctor) => doctor.hours ?? tenant.openingHours;
@@ -207,7 +226,7 @@ export function createBookingService(data: Data, calendar: Calendar | null, nowF
       return { slots: out.slice(0, p.limit ?? 8) };
     },
 
-    async bookAppointment(tenantId: string, p: ChangeOptions & { doctorId: string; startsAt: string; patientName: string; patientPhone: string; patientCpr?: string; service?: string; conversationId?: string; notes?: string; source?: BookingSource; actor?: string; language?: Locale }) {
+    async bookAppointment(tenantId: string, p: ChangeOptions & { doctorId: string; startsAt: string; patientName: string; patientPhone: string; patientCpr?: string; service?: string; conversationId?: string; notes?: string; source?: BookingSource; actor?: string; language?: Locale; extra?: Record<string, unknown> }) {
       const { tenant, doctors } = await context(tenantId, p.doctorId);
       const doctor = doctors[0];
       if (!isActive(doctor)) throw new ToolError("doctor_unavailable", "That doctor is not taking bookings. Offer another doctor.");
@@ -220,6 +239,7 @@ export function createBookingService(data: Data, calendar: Calendar | null, nowF
       const cprGiven = asksId(rule) ? (p.patientCpr ?? "").trim() : "";
       const cpr = normalizeId(rule, cprGiven);
       if (asksId(rule) && !cpr && (cprGiven || (p.source ?? "ai") === "ai")) throw new ToolError("bad_cpr", cprGiven ? idify("The CPR number must be 9 digits, or left empty for a visitor.", rule) : askId(rule));
+      const extra = bookingExtra(tenant, p.extra, (p.source ?? "ai") === "ai");
       const free = isSlotFree({ openingHours: hoursFor(tenant, doctor), busy: await busyFor(tenant, doctor, startMs, startMs + SLOT_MIN * 60_000), startMs, durationMin: SLOT_MIN, nowMs: nowFn().getTime() });
       if (!free) throw new ToolError("slot_taken", "That time is no longer available. Offer other slots.");
       let booking: Booking;
@@ -228,6 +248,7 @@ export function createBookingService(data: Data, calendar: Calendar | null, nowF
           doctorId: doctor.id, patientName: p.patientName.trim().slice(0, 120), patientPhone: p.patientPhone.trim().slice(0, 30), patientCpr: cpr ?? undefined,
           service: (p.service ?? "Consultation").slice(0, 120), startsAt: new Date(startMs).toISOString(), durationMin: SLOT_MIN, status: "confirmed", conversationId: p.conversationId,
           notes: p.notes?.trim().slice(0, 1000) || undefined, source: p.source ?? "ai", language: p.language === "ar" || p.language === "en" ? p.language : undefined,
+          ...(extra ? { extra } : {}),
         }, p.actor ?? "agent");
       } catch (e) {
         if (e instanceof SlotTakenError) throw new ToolError("slot_taken", "That time was just taken. Offer other slots.");
@@ -374,7 +395,7 @@ export function createBookingService(data: Data, calendar: Calendar | null, nowF
      * A new doctor or a corrected phone number means the patient's confirmation is wrong or went astray, so a fresh one is sent
      * (unless `opts.notify` is false). Other fixes, such as a spelling in the name, send nothing.
      */
-    async staffUpdateDetails(tenantId: string, bookingId: string, p: { patientName?: string; patientPhone?: string; patientCpr?: string; service?: string; doctorId?: string; language?: string }, actor: string, onlyDoctorId?: string, opts: ChangeOptions = {}) {
+    async staffUpdateDetails(tenantId: string, bookingId: string, p: { patientName?: string; patientPhone?: string; patientCpr?: string; service?: string; doctorId?: string; language?: string; extra?: Record<string, unknown> }, actor: string, onlyDoctorId?: string, opts: ChangeOptions = {}) {
       const { tenant, booking, doctor } = await found(tenantId, bookingId, onlyDoctorId);
       const patch: Partial<Booking> = {};
       if (p.patientName !== undefined) {
@@ -395,6 +416,7 @@ export function createBookingService(data: Data, calendar: Calendar | null, nowF
       }
       if (p.service !== undefined) patch.service = p.service.trim().slice(0, 120) || "Consultation";
       if (p.language === "ar" || p.language === "en") patch.language = p.language;
+      if (p.extra) patch.extra = bookingExtra(tenant, p.extra, false, booking.extra) ?? {};
       let target = doctor;
       if (p.doctorId && p.doctorId !== doctor.id) {
         if (onlyDoctorId) throw new ToolError("not_allowed", "Only the clinic team can give a booking to another doctor.");

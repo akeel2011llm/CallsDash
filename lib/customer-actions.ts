@@ -9,6 +9,7 @@ import { getData } from "./data";
 import { autoSync } from "./auto-sync";
 import { lookupModeOf } from "./customers";
 import type { Locale } from "./types";
+import { extraFieldsOf, extraFromForm } from "./extra-fields";
 
 const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 
@@ -23,7 +24,8 @@ export async function saveCustomerAction(f: FormData) {
     saved = await saveCustomerByStaff(await getData(), tenant.id, {
       id: id || undefined, name: str(f, "name"), phone: str(f, "phone"), cpr: str(f, "cpr"), email: str(f, "email"),
       language: lang === "ar" || lang === "en" ? (lang as Locale) : undefined, notes: str(f, "notes"),
-    }, actor, idRuleOf(tenant));
+      ...(f.has("extraShown") ? { extra: extraFromForm(extraFieldsOf(tenant, "customer"), (k) => str(f, k)) } : {}),
+    }, actor, idRuleOf(tenant), extraFieldsOf(tenant, "customer"));
   } catch (e) {
     if (e instanceof CustomerError) redirect(`${back}?err=${e.code}`);
     throw e;

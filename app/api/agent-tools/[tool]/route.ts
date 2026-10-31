@@ -7,6 +7,7 @@ import { sharedCalendar } from "@/lib/booking-service";
 import { elevenLabsFromEnv } from "@/lib/elevenlabs-api";
 import { asciiDigits } from "@/lib/cpr";
 import { asksId, idRuleOf, idify, type IdRule } from "@/lib/id-rule";
+import { cleanExtra, describeField, extraFieldsOf, parseDetails } from "@/lib/extra-fields";
 import { appUrl } from "@/lib/app-url";
 import { ensureSharedTools } from "@/lib/agent-sync";
 import { badHeaderSetting } from "@/lib/header-safe";
@@ -121,7 +122,7 @@ async function run(tool: string, body: Record<string, unknown>, data: Awaited<Re
         return ok(await svc.bookAppointment(tenant.id, {
           doctorId: str(body.doctor_id), startsAt: str(body.starts_at), patientName: str(body.patient_name),
           patientPhone: str(body.patient_phone), patientCpr: str(body.patient_cpr), service: str(body.service) || undefined, conversationId: str(body.conversation_id) || undefined,
-          language: lang(body.language),
+          language: lang(body.language), extra: parseDetails(extraFieldsOf(await data.getTenant(tenant.id), "booking"), body.details),
         }));
       }
       case "find_patient_booking": {
@@ -148,13 +149,18 @@ async function run(tool: string, body: Record<string, unknown>, data: Awaited<Re
       case "lookup_customer":
         return ok(await lookupCustomer(data, tenant.id, { phone: str(body.patient_phone), cpr: str(body.patient_cpr) || undefined }, lookupModeOf(await data.getAgent(tenant.id), rule), rule));
       case "save_customer": {
+        // only the fields the assistant is told to ask for; a value that does not fit is left out and named in the answer
+        const asked = extraFieldsOf(await data.getTenant(tenant.id), "customer").filter((f) => f.ask);
+        const answers = cleanExtra(asked, parseDetails(asked, body.details), "none");
         const r = await saveCustomerFromAssistant(data, tenant.id, {
+          extra: Object.fromEntries(Object.entries(answers.values).filter(([, v]) => v)),
           phone: str(body.patient_phone), name: str(body.patient_name) || undefined, cpr: str(body.patient_cpr) || undefined, email: str(body.email) || undefined,
           note: str(body.note) || undefined, language: lang(body.language), conversationId: str(body.conversation_id) || undefined,
         }, lookupModeOf(await data.getAgent(tenant.id), rule), rule);
         return ok({
           saved: true, created: r.created,
           ...(str(body.patient_cpr) && asksId(rule) && !r.cprSaved && !r.customer.cpr ? { message: idify("The CPR number was not saved: it must be 9 digits, and staff add it to an existing customer's record. Do not mention this to the customer.", rule) } : {}),
+          ...(answers.errors.length ? { details_not_saved: `These details were not saved because the answer did not fit; ask again if needed: ${asked.filter((f) => answers.errors.some((e) => e.key === f.key)).map(describeField).join("; ")}.` } : {}),
         });
       }
       case "find_item": {
@@ -213,6 +219,7 @@ const CUSTOMER_MESSAGES: Record<CustomerError["code"], string> = {
   bad_email: "That is not a valid email address. Ask the customer to spell it.",
   duplicate_phone: "Another customer already has this phone number.",
   cpr_mismatch: "The CPR number does not match the one on file for this phone number, so nothing was changed. Do not share anything about this customer.",
+  bad_extra: "Some details did not fit their field. Ask the customer again.",
   unknown: "No such customer.",
 };
 

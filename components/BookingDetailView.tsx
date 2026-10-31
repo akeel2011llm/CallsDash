@@ -14,6 +14,8 @@ import { deleteBookingAction, resendWhatsappConfirmationAction, updateBookingDet
 import { bookingRef } from "@/lib/booking-ref";
 import { confirmationOptions, failureHint } from "@/lib/whatsapp";
 import { ConfirmDelete } from "@/components/Confirm";
+import { ExtraInputs, ExtraValuesList } from "@/components/ExtraFields";
+import { extraFieldsOf } from "@/lib/extra-fields";
 
 export type BookingDetailParams = { date?: string; err?: string; created?: string; moved?: string; saved?: string; wa?: string };
 const tone = (s: string) => (s === "confirmed" || s === "completed" ? "ok" : s === "cancelled" ? "bad" : s === "no_show" ? "warn" : "info");
@@ -38,6 +40,7 @@ export async function BookingDetailView({ base, tenant, doctorId, id, sp, canDel
   const phoneDigits = booking.patientPhone.replace(/\D/g, "");
   const wa = confirmationOptions(tenant);
   const idRule = idRuleOf(tenant);
+  const extraFields = extraFieldsOf(tenant, "booking");
   const msg = booking.message;
   // a note that says "sending" for more than ten minutes means the sending was cut short: nobody knows if it arrived
   const stuck = msg?.status === "sending" && Date.now() - Date.parse(msg.at) > 10 * 60_000;
@@ -65,6 +68,7 @@ export async function BookingDetailView({ base, tenant, doctorId, id, sp, canDel
         <div>{t("common.doctor")}: <strong>{doctor?.name}</strong></div>
         <div>{t("bookings.ref")}: <strong dir="ltr">{bookingRef(booking.id)}</strong></div>
         <div>{t("common.service")}: {booking.service}</div>
+        <ExtraValuesList fields={extraFields} values={booking.extra} t={t} locale={locale} />
         <div>{t("common.phone")}: <a href={`tel:+${phoneDigits}`} dir="ltr">{booking.patientPhone}</a> · <a href={`https://wa.me/${phoneDigits}`} target="_blank" rel="noreferrer">WhatsApp</a></div>
         {(asksId(idRule) || booking.patientCpr) && <div>{t("bookings.patientCpr")}: {booking.patientCpr ? <span dir="ltr">{booking.patientCpr}</span> : <span className="muted">{t("bookings.noCpr")}</span>}</div>}
         <small className="muted">{t("bookings.remindersNote")}</small>
@@ -112,6 +116,7 @@ export async function BookingDetailView({ base, tenant, doctorId, id, sp, canDel
             {asksId(idRule) && <label style={{ flex: 1, minWidth: 130 }}>{t("bookings.patientCpr")}<input name="patientCpr" {...idInputProps(idRule)} placeholder={undefined} defaultValue={booking.patientCpr ?? ""} required={Boolean(booking.patientCpr)} /></label>}
           </div>
           <label>{t("common.service")}<input name="service" maxLength={120} defaultValue={booking.service} /></label>
+          <ExtraInputs fields={extraFields} values={booking.extra} t={t} locale={locale} />
           {wa.languages.length > 1 && (
             <label>{t("bookings.wa.lang")}
               <select name="language" defaultValue={waLang}>{wa.languages.map((l) => <option key={l} value={l}>{l === "ar" ? "العربية" : "English"}</option>)}</select>

@@ -436,7 +436,7 @@ export function createBooking(tenantId: string, b: Omit<Booking, "id" | "tenantI
   return booking;
 }
 
-export function updateBooking(tenantId: string, bookingId: string, patch: Partial<Pick<Booking, "startsAt" | "status" | "calendarEventId" | "notes" | "patientName" | "patientPhone" | "patientCpr" | "service" | "doctorId" | "language">>, actor: string): Booking {
+export function updateBooking(tenantId: string, bookingId: string, patch: Partial<Pick<Booking, "startsAt" | "status" | "calendarEventId" | "notes" | "patientName" | "patientPhone" | "patientCpr" | "service" | "doctorId" | "language" | "extra">>, actor: string): Booking {
   const d = db();
   const b = d.bookings.find((x) => x.tenantId === tenantId && x.id === bookingId);
   if (!b) throw new Error("booking not found");
@@ -470,9 +470,9 @@ export function setDoctorCalendar(tenantId: string, doctorId: string, calendarId
 
 const DOCTOR_COLOURS = ["#0e7c86", "#d97706", "#be185d", "#7c3aed", "#c2410c", "#2563eb", "#15803d"];
 
-export function addDoctor(tenantId: string, input: { name: string; specialty: string; about?: string; aboutAr?: string; role?: string }, actor: string): Doctor {
+export function addDoctor(tenantId: string, input: { name: string; specialty: string; about?: string; aboutAr?: string; role?: string; extra?: Record<string, string> }, actor: string): Doctor {
   const doctors = db().doctors.filter((x) => x.tenantId === tenantId);
-  const doc: Doctor = { id: id("d"), tenantId, name: input.name, specialty: input.specialty, ...(input.about ? { about: input.about } : {}), ...(input.aboutAr ? { aboutAr: input.aboutAr } : {}), ...(input.role ? { role: input.role } : {}), color: DOCTOR_COLOURS[doctors.length % DOCTOR_COLOURS.length] };
+  const doc: Doctor = { id: id("d"), tenantId, name: input.name, specialty: input.specialty, ...(input.about ? { about: input.about } : {}), ...(input.aboutAr ? { aboutAr: input.aboutAr } : {}), ...(input.role ? { role: input.role } : {}), ...(input.extra && Object.keys(input.extra).length ? { extra: input.extra } : {}), color: DOCTOR_COLOURS[doctors.length % DOCTOR_COLOURS.length] };
   db().doctors.push(doc);
   audit(actor, `Doctor added: ${doc.name}`, tenantId);
   return doc;
@@ -631,7 +631,7 @@ export function findTenantByAgent(agentId: string) {
 
 /* ---------- edit and delete everywhere ---------- */
 
-export function updateDoctor(tenantId: string, doctorId: string, patch: Partial<Pick<Doctor, "name" | "specialty" | "about" | "aboutAr" | "role" | "color" | "active" | "hours" | "timeOff">>, actor: string): Doctor {
+export function updateDoctor(tenantId: string, doctorId: string, patch: Partial<Pick<Doctor, "name" | "specialty" | "about" | "aboutAr" | "role" | "color" | "active" | "hours" | "timeOff" | "extra">>, actor: string): Doctor {
   const doc = db().doctors.find((x) => x.tenantId === tenantId && x.id === doctorId);
   if (!doc) throw new Error("doctor not found");
   Object.assign(doc, patch);
