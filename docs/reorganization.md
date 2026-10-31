@@ -77,6 +77,17 @@ It also checks that every menu link points at a real page, and that every Englis
 - **Go live** (`goLiveAction`) checks every required step again on the server and stores `onboarding.liveAt` (audit logged);
   `undoLiveAction` removes the mark. The client list shows "Live" or phases done (x / 5); the Overview shows "Continue setup".
 
+## Client portal menu (milestone 6)
+
+- 18 menu items became 9: Home, Inbox, Bookings, Customers, Reports, Catalog and data, Assistant, Billing, Settings.
+- Grouped pages sit in route groups (`app/(client)/app/(inbox)`, `(bookings)`, `(catalog)`, `(assistant)`, `(settings)`), so
+  every address is unchanged; each group's layout shows `components/ClientTabs.tsx` above the page:
+  Inbox = Conversations, Needs attention, Messages; Bookings = Bookings, Calendar and hours, Doctors (named by business type,
+  manager only, hidden without staff scheduling); Catalog and data = Catalogue, Data and photos (when the admin allows it);
+  Assistant = Knowledge base, Agent and prompt, Voice, Website widget; Settings = Account, Team (manager).
+- A menu item stays lit on its group's pages (`also` on the nav item, `lib/nav.ts`). The phone bar: Home, Inbox, Bookings,
+  Customers, More. Inbox's badge adds needs-attention and open messages.
+
 ---
 
 # CallsDash reorganization proposal (Phase 1 audit + Phase 2 blueprint)

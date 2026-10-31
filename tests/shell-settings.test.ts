@@ -9,7 +9,7 @@ import { dictionaries } from "@/lib/i18n";
 const read = (p: string) => readFileSync(join(__dirname, "..", p), "utf8");
 const PORTALS = [
   { layout: "app/(admin)/admin/layout.tsx", page: "app/(admin)/admin/settings/page.tsx", href: "/admin/settings" },
-  { layout: "app/(client)/app/layout.tsx", page: "app/(client)/app/settings/page.tsx", href: "/app/settings" },
+  { layout: "app/(client)/app/layout.tsx", page: "app/(client)/app/(settings)/settings/page.tsx", href: "/app/settings" },
   { layout: "app/(doctor)/doctor/layout.tsx", page: "app/(doctor)/doctor/settings/page.tsx", href: "/doctor/settings" },
 ];
 
