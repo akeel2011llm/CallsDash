@@ -101,6 +101,46 @@ export interface Customer {
   history: CustomerVisit[];
 }
 
+/** Kinds of column a custom table can have (lib/custom-tables.ts checks and tidies each value). */
+export type DataFieldType = "text" | "longtext" | "number" | "price" | "stock" | "yesno" | "choice" | "date" | "link";
+
+/** One column of a custom table. `key` never changes once made, so renaming the label keeps every stored value. */
+export interface DataField {
+  key: string;
+  label: string;
+  labelAr?: string;
+  type: DataFieldType;
+  /** For "choice": the allowed answers. */
+  options?: string[];
+  required?: boolean;
+}
+
+/**
+ * A table the admin designs for one client (milestone 6c of docs/reorganization.md): a price list, a stock list, a menu,
+ * anything the catalogue's fixed columns do not fit. The first column names a row (import matches rows by it).
+ */
+export interface DataTable {
+  id: string;
+  tenantId: string;
+  name: string;
+  nameAr?: string;
+  fields: DataField[];
+  /** The client's managers may add, change and delete rows (the admin always may). */
+  clientEdit: boolean;
+  /** The assistant may search this table (find_record) and answer from it. */
+  assistant: boolean;
+  createdAt: string;
+}
+
+export interface DataRow {
+  id: string;
+  tableId: string;
+  tenantId: string;
+  /** By field key. Values are kept as tidy text ("12.5", "yes", "2026-11-03"). */
+  values: Record<string, string>;
+  updatedAt: string;
+}
+
 /**
  * Something the clinic offers that the assistant can look up and show: a product, treatment or package, with its details and
  * a photo. The photo is stored apart (see getItemImage) so lists stay light; `hasImage` says whether there is one.

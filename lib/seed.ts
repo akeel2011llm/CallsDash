@@ -25,6 +25,8 @@ export interface DB {
   /** Catalogue items and their photos (data: URLs), by item id. Missing until the first item is added. */
   items?: import("./types").Item[];
   itemImages?: Record<string, string>;
+  dataTables?: import("./types").DataTable[];
+  dataRows?: import("./types").DataRow[];
   /** Doctors' photos (data: URLs), by doctor id. Missing until the first one is added. */
   doctorImages?: Record<string, string>;
   toolCalls: import("./types").AgentToolCall[];

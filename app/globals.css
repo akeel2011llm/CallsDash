@@ -591,6 +591,15 @@ details.fold[open] > summary { border-block-end: 1px solid var(--line); }
 .import-row { padding-block: .25rem; }
 .import-row input[type="file"] { max-inline-size: 100%; }
 
+/* Custom tables (milestone 6c): designer column cards and the values under each row's name */
+.form-cols { display: grid; gap: .75rem; grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr)); }
+.col-line { border: 1px solid var(--line); border-radius: calc(var(--radius) - 2px); padding: .75rem; }
+.row-values { display: flex; flex-wrap: wrap; gap: .15rem 1rem; margin: .25rem 0 0; }
+.row-values > div { display: flex; gap: .35rem; min-inline-size: 0; }
+.row-values dt { color: var(--muted); }
+.row-values dt::after { content: ":"; }
+.row-values dd { margin: 0; overflow-wrap: anywhere; }
+
 .build-badge { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 6px 12px; margin-bottom: 12px; border: 1px dashed var(--line); border-radius: 10px; font-size: 13px; background: var(--surface, transparent); }
 .build-badge strong { text-transform: uppercase; letter-spacing: .04em; font-size: 12px; }
 
