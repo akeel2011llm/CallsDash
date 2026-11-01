@@ -81,7 +81,7 @@ export async function Shell({
           <InstallPrompt label={t("pwa.install")} iosHint={t("pwa.iosHint")} />
           <Suspense fallback={null}><LocaleSwitch locale={locale} /></Suspense>
           <form action={logout}><SubmitButton className="btn ghost" type="submit"><Icon name="logout" size={18} />{t("nav.signOut")}</SubmitButton></form>
-          {!branding?.hidePoweredBy && <div className="powered">Powered by CallsDash</div>}
+          {!branding?.hidePoweredBy && <div className="powered">{t("shell.powered")}</div>}
         </div>
       </aside>
       )}

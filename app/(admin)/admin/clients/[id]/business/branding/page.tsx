@@ -102,7 +102,7 @@ export default async function BrandingPage({ params, searchParams }: { params: P
 
         <aside className="sticky card stack">
           <h2>{t("brand.preview")}</h2>
-          <BrandingPreview formId="brand-form" initial={publicBranding(tenant)} words={{ title: t("home.greeting"), body: t("brand.sample.body"), nav: t("brand.sample.nav"), stat: t("home.conversations") }} />
+          <BrandingPreview formId="brand-form" initial={publicBranding(tenant)} words={{ title: t("home.greeting"), body: t("brand.sample.body"), nav: t("brand.sample.nav"), stat: t("home.conversations"), powered: t("shell.powered") }} />
         </aside>
       </div>
     </>

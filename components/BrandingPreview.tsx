@@ -5,7 +5,7 @@ import { patternOf, sidebarOf, themeVars } from "@/lib/theme";
 import type { Branding } from "@/lib/types";
 import { Icon } from "./icons";
 
-type Words = { title: string; body: string; nav: string; stat: string };
+type Words = { title: string; body: string; nav: string; stat: string; powered: string };
 
 /**
  * Live preview of the branding form. It listens to the form it sits next to and draws a small portal with the real CSS,
@@ -79,7 +79,7 @@ export function BrandingPreview({ formId, initial, words }: { formId: string; in
           </nav>
           <div className="side-foot">
             {(b.supportPhone || b.supportEmail) && <div className="powered" dir="ltr">{b.supportPhone || b.supportEmail}</div>}
-            {!b.hidePoweredBy && <div className="powered">Powered by CallsDash</div>}
+            {!b.hidePoweredBy && <div className="powered">{words.powered}</div>}
           </div>
         </aside>
         <div className="preview-main">
