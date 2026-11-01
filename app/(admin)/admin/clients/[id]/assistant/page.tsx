@@ -1,3 +1,4 @@
+import { systemText } from "@/lib/system-text";
 import Link from "next/link";
 import { Suspense } from "react";
 import { notFound } from "next/navigation";
@@ -292,7 +293,7 @@ export default async function AssistantStudioPage({ params, searchParams }: { pa
         </form>
       </div>
       {book.noKey && <Notice tone="warn">{T("studio.model.noKey")}</Notice>}
-      {book.problem && !book.noKey && <Notice tone="warn">{book.problem}</Notice>}
+      {book.problem && !book.noKey && <Notice tone="warn">{systemText(book.problem, T)}</Notice>}
       {book.priceProblem && <Notice tone="warn">{T("studio.model.pricesLate")} {book.priceProblem}</Notice>}
       {sp.refreshed && <Notice tone="ok">{T("studio.refreshed")}</Notice>}
     </div>

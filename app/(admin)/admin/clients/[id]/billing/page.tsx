@@ -1,3 +1,4 @@
+import { systemText } from "@/lib/system-text";
 import { notFound } from "next/navigation";
 import { getT } from "@/lib/i18n";
 import { Badge, Notice, PageHead, Stat } from "@/components/ui";
@@ -150,7 +151,7 @@ export default async function ClientBilling({ params, searchParams }: { params: 
                   <td>{fmtDateTime(l.at, locale)}</td>
                   <td><Badge>{t(`ledger.${l.kind}` as "ledger.topup")}</Badge></td>
                   <td>{l.credits > 0 ? "+" : ""}{fmtNum(l.credits, locale, 1)}</td>
-                  <td className="muted">{l.note}</td>
+                  <td className="muted">{systemText(l.note, t as (k: string, v?: Record<string, string | number>) => string)}</td>
                 </tr>
               ))}
             </tbody>

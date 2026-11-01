@@ -32,7 +32,7 @@ export default async function Account() {
         {s.mustChangePassword && <Notice tone="warn">{t("account.force")}</Notice>}
         <AccountSections session={s} passwordOnly={s.mustChangePassword} />
         <div className="row" style={{ justifyContent: "space-between" }}>
-          {!s.mustChangePassword ? <Link href={home}>{t("common.back")}</Link> : <span />}
+          {!s.mustChangePassword ? <Link className="btn ghost small" href={home}>{t("common.back")}</Link> : <span />}
           <form action={logout}><SubmitButton className="btn small ghost" type="submit">{t("nav.signOut")}</SubmitButton></form>
         </div>
       </div>

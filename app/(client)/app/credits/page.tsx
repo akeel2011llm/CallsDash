@@ -1,3 +1,4 @@
+import { systemText } from "@/lib/system-text";
 import { requireClient } from "@/lib/auth";
 import { getT } from "@/lib/i18n";
 import { fmtDate, fmtDateTime, fmtNum } from "@/lib/format";
@@ -43,7 +44,7 @@ export default async function CreditsPage({ searchParams }: { searchParams: Prom
               <tbody>
                 {w.batches.filter((b) => b.remaining > 0 && new Date(b.expiresAt) > new Date()).sort((a, b) => a.expiresAt.localeCompare(b.expiresAt)).map((b) => (
                   <tr key={b.id}>
-                    <td>{t(`kind.${b.kind}` as "kind.topup")}{b.note && (b.kind === "package" || b.kind === "rollover") ? <><br /><small className="muted">{b.note}</small></> : null}</td>
+                    <td>{t(`kind.${b.kind}` as "kind.topup")}{b.note && (b.kind === "package" || b.kind === "rollover") ? <><br /><small className="muted">{systemText(b.note, t as (k: string, v?: Record<string, string | number>) => string)}</small></> : null}</td>
                     <td>{fmtNum(b.remaining, locale, 1)} / {fmtNum(b.amount, locale, 0)}</td>
                     <td>{fmtDate(b.expiresAt, locale)}</td>
                   </tr>
@@ -79,7 +80,7 @@ export default async function CreditsPage({ searchParams }: { searchParams: Prom
                   <td>{fmtDateTime(l.at, locale)}</td>
                   <td><Badge>{t(`ledger.${l.kind}` as "ledger.topup")}</Badge></td>
                   <td>{l.credits > 0 ? "+" : ""}{fmtNum(l.credits, locale, 2)}</td>
-                  <td className="muted">{l.channel ? t(`channel.${l.channel}` as "channel.website") : l.note}</td>
+                  <td className="muted">{l.channel ? t(`channel.${l.channel}` as "channel.website") : systemText(l.note, t as (k: string, v?: Record<string, string | number>) => string)}</td>
                 </tr>
               ))}
             </tbody>

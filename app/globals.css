@@ -680,3 +680,7 @@ details.fold[open] > summary { border-block-end: 1px solid var(--line); }
 .wf-node::before { content: ""; position: absolute; inset-inline-start: .75rem; top: 1.15rem; width: .8rem; height: .8rem; border-radius: 50%; background: var(--brand); }
 .wf-main { display: flex; flex-direction: column; gap: .15rem; padding-block: .6rem; }
 .wf-node > details { margin: 0; }
+
+/* Easy to tap on a phone (at least 24 px high): the back link above a client, and the small fold-out lines */
+.ws-back { display: inline-block; padding-block: .3rem; }
+details:not(.fold):not(.card) > summary { padding-block: .3rem; cursor: pointer; }

@@ -1,4 +1,5 @@
 import { getT } from "@/lib/i18n";
+import { systemText } from "@/lib/system-text";
 import { fmtDateTime } from "@/lib/format";
 import { getAlerts, listTenants } from "@/lib/data";
 import { resolveAlertAction } from "@/lib/actions";
@@ -19,7 +20,7 @@ export default async function AlertsPage() {
             <div>
               <Badge tone={a.severity === "error" ? "bad" : a.severity === "warning" ? "warn" : "info"}>{a.severity}</Badge>{" "}
               <strong>{names.get(a.tenantId)}</strong>
-              <div>{a.message}</div>
+              <div>{systemText(a.message, t as (k: string, v?: Record<string, string | number>) => string)}</div>
               <small className="muted">{fmtDateTime(a.at, locale)}</small>
             </div>
             <form action={resolveAlertAction}>
