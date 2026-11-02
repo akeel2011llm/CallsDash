@@ -5,7 +5,8 @@ import {
   addDoctorAction, addTimeOffAction, removeDoctorAction, removeTimeOffAction, saveDoctorAction, saveDoctorHoursAction, testDoctorCalendarAction,
 } from "@/lib/manage-actions";
 import { todayKey } from "@/lib/booking-ui";
-import { departmentName, departmentsOf, roleName, roleOf, rolesOf } from "@/lib/business-types";
+import { businessOf, departmentName, departmentsOf, kindChoice, roleName, roleOf, rolesOf } from "@/lib/business-types";
+import { suggestedGroups } from "@/lib/team-library";
 import { Badge, Notice } from "./ui";
 import { SubmitButton } from "./SubmitButton";
 import { HoursFields } from "./HoursFields";
@@ -45,20 +46,38 @@ export function DoctorsManager({ tenant, doctors, bookings, logins, returnTo, sp
   const base = returnTo.split(/[?#]/)[0];
   const href = (role: string, dept: string) => `${base}${role || dept ? `?${[role && `role=${role}`, dept && `dept=${dept}`].filter(Boolean).join("&")}` : ""}#doctors`;
   const deptOf = (d: Doctor) => depts.find((x) => x.key === d.department);
-  const deptPick = (cur?: string) => depts.length ? (
+  // the library (lib/team-library.ts) for this kind of business: picking one adds it to the client's list on save
+  const groups = suggestedGroups(kindChoice(businessOf(tenant)));
+  const groupLabel = (key: string) => t((key === "general" ? "teamlib.general" : `biz.kind.${key}`) as Key);
+  const sameName = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+  const libRoles = groups.map((g) => ({ key: g.key, items: g.roles.filter((r) => !roles.some((x) => sameName(x.one, r.one) || x.oneAr === r.oneAr)) })).filter((g) => g.items.length);
+  const libDepts = groups.map((g) => ({ key: g.key, items: g.departments.filter((d) => !depts.some((x) => sameName(x.en, d.en) || x.ar === d.ar)) })).filter((g) => g.items.length);
+  const deptPick = (cur?: string) => (
     <label style={{ flex: 1, minWidth: 140 }}>{t("team.department")}
       <select name="department" defaultValue={depts.some((x) => x.key === cur) ? cur : ""}>
         <option value="">{t("team.noDepartment")}</option>
-        {depts.map((x) => <option key={x.key} value={x.key}>{departmentName(x, locale)}</option>)}
+        {depts.length > 0 && <optgroup label={t("team.yourDepartments")}>{depts.map((x) => <option key={x.key} value={x.key}>{departmentName(x, locale)}</option>)}</optgroup>}
+        {libDepts.map((g) => (
+          <optgroup key={g.key} label={`${t("team.fromLibrary")}: ${groupLabel(g.key)}`}>
+            {g.items.map((d) => <option key={d.key} value={`lib:${d.key}`}>{locale === "ar" ? d.ar : d.en}</option>)}
+          </optgroup>
+        ))}
       </select>
     </label>
-  ) : null;
+  );
   const teamFields = extraFieldsOf(tenant, "team");
-  const rolePick = (cur?: string) => many ? (
+  const rolePick = (cur?: string) => (
     <label style={{ flex: 1, minWidth: 140 }}>{t("team.role")}
-      <select name="role" defaultValue={roleOf(roles, cur).key}>{roles.map((r) => <option key={r.key} value={r.key}>{roleName(r, locale)}</option>)}</select>
+      <select name="role" defaultValue={roleOf(roles, cur).key}>
+        <optgroup label={t("team.yourRoles")}>{roles.map((r) => <option key={r.key} value={r.key}>{roleName(r, locale)}</option>)}</optgroup>
+        {libRoles.map((g) => (
+          <optgroup key={g.key} label={`${t("team.fromLibrary")}: ${groupLabel(g.key)}`}>
+            {g.items.map((r) => <option key={r.key} value={`lib:${r.key}`}>{locale === "ar" ? r.oneAr : r.one}</option>)}
+          </optgroup>
+        ))}
+      </select>
     </label>
-  ) : null;
+  );
   return (
     <section className="card stack" id="doctors">
       <h2>{t("doctors.title")}</h2>

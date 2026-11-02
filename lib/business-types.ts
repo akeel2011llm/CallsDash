@@ -9,6 +9,7 @@
 import type { Locale, Tenant } from "./types";
 import { ID_KINDS, type IdKind, type IdRule } from "./id-rule";
 import type { ExtraFields } from "./extra-fields";
+import { findRoleByName } from "./team-library";
 
 export const BUSINESS_TYPES = ["clinic", "salon", "retail", "restaurant", "service", "custom"] as const;
 export type BusinessType = (typeof BUSINESS_TYPES)[number];
@@ -310,7 +311,11 @@ export function rolesFromForm(get: (k: string) => string): Role[] {
     const key = l.key || roleKey(l.one, taken);
     taken.add(key);
     if (out.some((r) => r.key === key)) continue;
-    out.push({ key, one: l.one, many: l.many || `${l.one}s`, oneAr: l.oneAr, manyAr: l.manyAr || l.oneAr });
+    // a name from the roles library (lib/team-library.ts) fills the boxes left blank
+    const lib = findRoleByName(l.one);
+    const fit = lib && lib.one.toLowerCase() === l.one.toLowerCase();
+    const oneAr = l.oneAr || lib?.oneAr || "";
+    out.push({ key, one: l.one, many: l.many || (fit ? lib.many : `${l.one}s`), oneAr, manyAr: l.manyAr || (lib && oneAr === lib.oneAr ? lib.manyAr : oneAr) });
   }
   return out.slice(0, MAX_ROLES);
 }
