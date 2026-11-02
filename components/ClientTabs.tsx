@@ -42,9 +42,9 @@ export async function ClientTabs({ group }: { group: ClientGroup }) {
       ...(manager && tenant.permissions.dataManager ? [tab("/app/data", "nav.dataPhotos")] : []),
     ];
   } else if (group === "assistant") {
-    items = [tab("/app/knowledge", "nav.knowledge"), tab("/app/agent", "nav.agent"), tab("/app/voice", "nav.voice"), tab("/app/website", "nav.website")];
+    items = [tab("/app/assistant", "nav.test"), tab("/app/knowledge", "nav.knowledge"), tab("/app/agent", "nav.agent"), tab("/app/voice", "nav.voice"), tab("/app/website", "nav.website")];
   } else {
     items = [tab("/app/settings", "nav.account"), ...(manager ? [tab("/app/team", "nav.team")] : [])];
   }
-  return items.length > 1 ? <Tabs label={t(GROUP_LABEL[group])} items={items} /> : null;
+  return items.length > 1 ? <Tabs label={t(GROUP_LABEL[group])} items={items} wrap /> : null;
 }

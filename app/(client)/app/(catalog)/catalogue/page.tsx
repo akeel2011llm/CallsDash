@@ -44,7 +44,7 @@ export default async function CataloguePage({ searchParams }: { searchParams: Pr
         </form>
         {rows.length === 0 ? <Empty kind="inbox">{q ? t("catalogue.noneMatch") : t("catalogue.none")}</Empty> : (
           <div className="table-wrap">
-            <table>
+            <table className="cards">
               <thead><tr><th /><th>{t("catalogue.name")}</th><th>{t("catalogue.price")}</th><th>{t("catalogue.status")}</th><th /></tr></thead>
               <tbody>
                 {rows.map((i) => (
@@ -55,10 +55,10 @@ export default async function CataloguePage({ searchParams }: { searchParams: Pr
                         ? <img src={itemPhotoPath(tenant.slug, i)} alt="" width={48} height={48} style={{ objectFit: "cover", borderRadius: 6 }} loading="lazy" />
                         : null}
                     </td>
-                    <td><Link href={`/app/catalogue/${i.id}`}><strong dir="auto">{i.name}</strong></Link>{i.nameAr && <><br /><small className="muted" dir="rtl">{i.nameAr}</small></>}</td>
-                    <td dir="auto">{i.price ?? <span className="muted">-</span>}</td>
-                    <td>{i.active ? <Badge>{t("catalogue.active.short")}</Badge> : <Badge>{t("catalogue.hidden")}</Badge>}{!i.hasImage && <> <small className="muted">{t("catalogue.noPhoto")}</small></>}</td>
-                    <td><Link className="btn small ghost" href={`/app/catalogue/${i.id}`}>{t("catalogue.open")}</Link></td>
+                    <td className="lead"><Link href={`/app/catalogue/${i.id}`}><strong dir="auto">{i.name}</strong></Link>{i.nameAr && <><br /><small className="muted" dir="rtl">{i.nameAr}</small></>}</td>
+                    <td className="sub" dir="auto">{i.price ?? <span className="muted">-</span>}</td>
+                    <td className="sub">{i.active ? <Badge>{t("catalogue.active.short")}</Badge> : <Badge>{t("catalogue.hidden")}</Badge>}{!i.hasImage && <> <small className="muted">{t("catalogue.noPhoto")}</small></>}</td>
+                    <td className="actions"><Link className="btn small ghost" href={`/app/catalogue/${i.id}`}>{t("catalogue.open")}</Link></td>
                   </tr>
                 ))}
               </tbody>

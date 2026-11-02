@@ -5,6 +5,8 @@ import { addKnowledgeAction, deleteKnowledgeAction, dismissUnansweredAction } fr
 import { updateKnowledgeAction } from "@/lib/manage-actions";
 import { Notice, PageHead } from "@/components/ui";
 import { SubmitButton } from "@/components/SubmitButton";
+import { Fold } from "@/components/Fold";
+import { ConfirmDelete } from "@/components/Confirm";
 
 export default async function KnowledgePage({ searchParams }: { searchParams: Promise<{ q?: string; lang?: string; saved?: string; deleted?: string }> }) {
   const { tenant } = await requireClient();
@@ -43,8 +45,7 @@ export default async function KnowledgePage({ searchParams }: { searchParams: Pr
           ))}
         </section>
       )}
-      <section className="card stack">
-        <h2>{t("knowledge.add")}</h2>
+      <Fold id="add" title={t("knowledge.add")}>
         <form action={addKnowledgeAction} className="stack">
           <fieldset disabled={locked}>
             <label>{t("knowledge.question")}<input name="question" required maxLength={500} /></label>
@@ -55,7 +56,7 @@ export default async function KnowledgePage({ searchParams }: { searchParams: Pr
             <div><SubmitButton className="btn" type="submit">{t("common.add")}</SubmitButton></div>
           </fieldset>
         </form>
-      </section>
+      </Fold>
       <section className="card stack">
         <h2>{t("knowledge.list")} <span className="muted">({all.length})</span></h2>
         <form method="get" className="filters">
@@ -89,10 +90,7 @@ export default async function KnowledgePage({ searchParams }: { searchParams: Pr
                     <div><SubmitButton className="btn small" type="submit">{t("common.save")}</SubmitButton></div>
                   </form>
                 </details>
-                <form action={deleteKnowledgeAction}>
-                  <input type="hidden" name="id" value={k.id} />
-                  <SubmitButton className="btn small danger">{t("common.delete")}</SubmitButton>
-                </form>
+                <ConfirmDelete action={deleteKnowledgeAction} summary={t("common.delete")} warning={t("knowledge.delete.warning")} tick={t("knowledge.delete.tick")} button={t("common.delete")} fields={{ id: k.id }} />
               </div>
             )}
           </article>

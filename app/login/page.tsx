@@ -65,6 +65,11 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
                     {t("login.client")} {locale === "ar" ? x.branding.displayNameAr : x.branding.displayName}
                   </SubmitButton>
                 ))}
+                {tenants.filter((x) => !brand || x.slug === c).slice(0, 1).map((x) => (
+                  <SubmitButton key={`r-${x.id}`} className="btn ghost" name="who" value={`reception:${x.id}`}>
+                    {t("login.reception")} {locale === "ar" ? x.branding.displayNameAr : x.branding.displayName}
+                  </SubmitButton>
+                ))}
                 {demoDoctors.filter((x) => !brand || x.tenant.slug === c).map((x) => (
                   <SubmitButton key={x.doctor.id} className="btn ghost" name="who" value={`doctor:${x.tenant.id}:${x.doctor.id}`}>
                     {t("login.doctor")} {x.doctor.name}

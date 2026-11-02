@@ -19,6 +19,7 @@
     "@BusinessFields:staffOne": "Still on the form: BusinessFields now draws all twelve word boxes (staff, customer, place; English and Arabic) with one helper, so the scanner no longer sees the literal names. businessFromForm reads every key in WORD_KEYS.",
     "@BusinessFields:staffMany": "Still on the form: BusinessFields now draws all twelve word boxes (staff, customer, place; English and Arabic) with one helper, so the scanner no longer sees the literal names. businessFromForm reads every key in WORD_KEYS.",
     "@BusinessFields:staffOneAr": "Still on the form: BusinessFields now draws all twelve word boxes (staff, customer, place; English and Arabic) with one helper, so the scanner no longer sees the literal names. businessFromForm reads every key in WORD_KEYS.",
-    "@BusinessFields:staffManyAr": "Still on the form: BusinessFields now draws all twelve word boxes (staff, customer, place; English and Arabic) with one helper, so the scanner no longer sees the literal names. businessFromForm reads every key in WORD_KEYS."
+    "@BusinessFields:staffManyAr": "Still on the form: BusinessFields now draws all twelve word boxes (staff, customer, place; English and Arabic) with one helper, so the scanner no longer sees the literal names. businessFromForm reads every key in WORD_KEYS.",
+    "deleteKnowledgeAction:id": "Still sent: the delete now sits behind a tick box (components/Confirm.tsx ConfirmDelete), which writes the id as a hidden field from its fields prop."
   }
 }

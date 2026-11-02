@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { getSession, requireAdmin, requireBookingUser, requireClient } from "./auth";
+import { getSession, requireAdmin, requireBookingUser, requireClient, requireSection } from "./auth";
 import { dayKey, safePath } from "./format";
 import * as store from "./data";
 import { getData } from "./data";
@@ -254,7 +254,7 @@ export async function resendWhatsappConfirmationAction(f: FormData) {
 
 /** Managers only. Receptionists and doctors cancel instead, which keeps the record. */
 export async function deleteBookingAction(f: FormData) {
-  const { tenant, actor, staffRole } = await requireClient();
+  const { tenant, actor, staffRole } = await requireSection("bookings");
   const id = str(f, "id");
   if (staffRole !== "manager") redirect(`/app/bookings/${id}`);
   if (!confirmed(f)) redirect(`/app/bookings/${id}?err=confirm`);
@@ -268,7 +268,7 @@ export async function deleteBookingAction(f: FormData) {
 /* ---------- knowledge, messages, conversations ---------- */
 
 export async function updateKnowledgeAction(f: FormData) {
-  const { tenant, actor } = await requireClient();
+  const { tenant, actor } = await requireSection("assistant");
   if (!tenant.permissions.editKnowledge) redirect("/app/knowledge");
   const question = str(f, "question").slice(0, 500), answer = str(f, "answer").slice(0, 2000);
   if (question && answer) {
@@ -280,7 +280,7 @@ export async function updateKnowledgeAction(f: FormData) {
 }
 
 export async function deleteStaffRequestAction(f: FormData) {
-  const { tenant, actor, staffRole } = await requireClient();
+  const { tenant, actor, staffRole } = await requireSection("inbox");
   if (staffRole === "manager") await store.deleteStaffRequest(tenant.id, str(f, "id"), actor);
   revalidatePath("/app", "layout");
   redirect("/app/messages?deleted=1");
@@ -288,7 +288,7 @@ export async function deleteStaffRequestAction(f: FormData) {
 
 /** A patient's request to erase what was said. The credits it used stay on the bill. */
 export async function deleteConversationAction(f: FormData) {
-  const { tenant, actor, staffRole } = await requireClient();
+  const { tenant, actor, staffRole } = await requireSection("inbox");
   const id = str(f, "id");
   if (staffRole !== "manager") redirect(`/app/conversations/${id}`);
   if (!confirmed(f)) redirect(`/app/conversations/${id}?err=confirm`);
@@ -302,7 +302,7 @@ export async function deleteConversationAction(f: FormData) {
  * tick box. Recordings that are not playable any more (already deleted, past the retention period) are skipped.
  */
 export async function deleteRecordingsAction(f: FormData) {
-  const { tenant, actor, staffRole } = await requireClient();
+  const { tenant, actor, staffRole } = await requireSection("inbox");
   const back = (q: string) => redirect(`/app/recordings?${q}`);
   if (staffRole !== "manager") back("err=manager");
   if (!confirmed(f)) back("err=confirm");

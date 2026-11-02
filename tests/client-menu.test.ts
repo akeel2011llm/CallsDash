@@ -24,22 +24,27 @@ describe("menu items that stand for several pages", () => {
 
 describe("client portal menu (milestone 6)", () => {
   const layout = read("app/(client)/app/layout.tsx");
-  const items = [...layout.matchAll(/\{ href: "([^"]+)"/g)].map((m) => m[1]);
+  const items = [...layout.matchAll(/href: "([^"]+)", label/g)].map((m) => m[1]);
 
-  it("has nine items in the approved order", () => {
-    expect(items).toEqual(["/app", "/app/conversations", "/app/bookings", "/app/customers", "/app/reports", "/app/catalogue", "/app/knowledge", "/app/credits", "/app/settings"]);
+  it("has nine items in the order a front desk works (2026-11-02)", () => {
+    expect(items).toEqual(["/app", "/app/conversations", "/app/bookings", "/app/customers", "/app/catalogue", "/app/assistant", "/app/reports", "/app/credits", "/app/settings"]);
+  });
+
+  it("every section is guarded where it is opened", () => {
+    for (const [g, s] of Object.entries({ inbox: "inbox", bookings: "bookings", catalog: "catalog", assistant: "assistant" })) expect(read(`app/(client)/app/(${g})/layout.tsx`)).toContain(`requireSection("${s}")`);
+    for (const [d, s] of Object.entries({ credits: "billing", customers: "customers", reports: "reports" })) expect(read(`app/(client)/app/${d}/layout.tsx`)).toContain(`requireSection("${s}")`);
   });
 
   it("reaches every former menu page through a group tab", () => {
     const tabs = read("components/ClientTabs.tsx");
-    for (const p of ["/app/attention", "/app/messages", "/app/calendar", "/app/doctors", "/app/data", "/app/agent", "/app/voice", "/app/website", "/app/team"]) {
+    for (const p of ["/app/knowledge", "/app/attention", "/app/messages", "/app/calendar", "/app/doctors", "/app/data", "/app/agent", "/app/voice", "/app/website", "/app/team"]) {
       expect(tabs, p).toContain(`"${p}"`);
       expect(layout, p).toContain(`"${p}"`); // in the item's also list, so the menu item stays lit
     }
   });
 
   it("keeps every grouped page at its old address (route groups add no URL segment)", () => {
-    for (const [g, pages] of Object.entries({ inbox: ["conversations", "attention", "messages"], bookings: ["bookings", "calendar", "doctors"], catalog: ["catalogue", "data"], assistant: ["knowledge", "agent", "voice", "website"], settings: ["settings", "team"] })) {
+    for (const [g, pages] of Object.entries({ inbox: ["conversations", "attention", "messages"], bookings: ["bookings", "calendar", "doctors"], catalog: ["catalogue", "data"], assistant: ["assistant", "knowledge", "agent", "voice", "website"], settings: ["settings", "team"] })) {
       expect(read(`app/(client)/app/(${g})/layout.tsx`)).toContain(`group="${g}"`);
       for (const p of pages) expect(existsSync(join(__dirname, "..", `app/(client)/app/(${g})/${p}/page.tsx`)), p).toBe(true);
     }

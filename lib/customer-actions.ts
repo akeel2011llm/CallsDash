@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { requireClient } from "./auth";
+import { requireSection } from "./auth";
 import { CustomerError, saveCustomerByStaff } from "./customers";
 import { asksId, idRuleOf } from "./id-rule";
 import { getData } from "./data";
@@ -15,7 +15,7 @@ const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 
 /** Adds a customer (no id) or saves the changes to one. Any member of the clinic's staff may do this. */
 export async function saveCustomerAction(f: FormData) {
-  const { tenant, actor } = await requireClient();
+  const { tenant, actor } = await requireSection("customers");
   const id = str(f, "id");
   const back = id ? `/app/customers/${id}` : "/app/customers";
   const lang = str(f, "language");
@@ -36,7 +36,7 @@ export async function saveCustomerAction(f: FormData) {
 
 /** Erases a customer's record (a customer's request, or a mistake). Their conversations and bookings stay. Managers only, with the tick box. */
 export async function deleteCustomerAction(f: FormData) {
-  const { tenant, actor, staffRole } = await requireClient();
+  const { tenant, actor, staffRole } = await requireSection("customers");
   const id = str(f, "id");
   if (staffRole !== "manager") redirect(`/app/customers/${id}`);
   if (f.get("confirm") !== "on") redirect(`/app/customers/${id}?err=confirm`);
@@ -47,7 +47,7 @@ export async function deleteCustomerAction(f: FormData) {
 
 /** Chooses how the assistant finds a returning customer: by phone number or by CPR number. Managers only; the assistant is updated on its own. */
 export async function saveLookupModeAction(f: FormData) {
-  const { tenant, actor, staffRole } = await requireClient();
+  const { tenant, actor, staffRole } = await requireSection("customers");
   if (staffRole !== "manager") redirect("/app/customers");
   const mode = str(f, "mode") === "cpr" && asksId(idRuleOf(tenant)) ? "cpr" : "phone";
   const data = await getData();

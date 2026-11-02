@@ -7,6 +7,7 @@ import { getAgent, getCustomers } from "@/lib/data";
 import { saveCustomerAction, saveLookupModeAction } from "@/lib/customer-actions";
 import { lookupModeOf, phoneKey } from "@/lib/customers";
 import { Empty, Notice, PageHead } from "@/components/ui";
+import { Fold } from "@/components/Fold";
 import { SubmitButton } from "@/components/SubmitButton";
 import { CustomerFields } from "@/components/CustomerFields";
 import { extraFieldsOf } from "@/lib/extra-fields";
@@ -32,39 +33,22 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
       {sp.mode && <Notice tone="ok">{t("customers.lookup.saved")}</Notice>}
       {err in dictionaries.en && <Notice tone="warn">{t(err as "customers.err.bad_phone")}</Notice>}
       <section className="card stack">
-        <h2>{t("customers.lookup.title")}</h2>
-        {!asksId(idRule) ? <p><strong>{t("customers.lookup.phone")}</strong><br /><small className="muted">{t("customers.lookup.phone.help")}</small></p> : staffRole === "manager" ? (
-          <form action={saveLookupModeAction} className="stack">
-            <label className="row" style={{ flexWrap: "nowrap", alignItems: "flex-start" }}>
-              <input type="radio" name="mode" value="phone" defaultChecked={mode === "phone"} />
-              <span><strong>{t("customers.lookup.phone")}</strong><br /><small className="muted">{t("customers.lookup.phone.help")}</small></span>
-            </label>
-            <label className="row" style={{ flexWrap: "nowrap", alignItems: "flex-start" }}>
-              <input type="radio" name="mode" value="cpr" defaultChecked={mode === "cpr"} />
-              <span><strong>{t("customers.lookup.cpr")}</strong><br /><small className="muted">{t("customers.lookup.cpr.help")}</small></span>
-            </label>
-            <div><SubmitButton className="btn" type="submit">{t("common.save")}</SubmitButton></div>
-          </form>
-        ) : <p>{mode === "cpr" ? t("customers.lookup.cpr") : t("customers.lookup.phone")}</p>}
-        {asksId(idRule) && <small className="muted">{t("customers.lookup.note")}</small>}
-      </section>
-      <section className="card stack">
         <form className="row" style={{ flexWrap: "nowrap" }} role="search">
           <input name="q" defaultValue={sp.q ?? ""} placeholder={t("customers.search")} aria-label={t("customers.search")} maxLength={80} style={{ flex: 1 }} />
           <SubmitButton className="btn" type="submit">{t("common.search")}</SubmitButton>
         </form>
         {rows.length === 0 ? <Empty kind="inbox">{q ? t("customers.noneMatch") : t("customers.none")}</Empty> : (
           <div className="table-wrap">
-            <table>
+            <table className="cards">
               <thead><tr><th>{t("customers.name")}</th><th>{t("customers.phone")}</th><th>{t("customers.language")}</th><th>{t("customers.last")}</th><th /></tr></thead>
               <tbody>
                 {rows.map((c) => (
                   <tr key={c.id}>
-                    <td><Link href={`/app/customers/${c.id}`}><strong dir="auto">{c.name || t("customers.noName")}</strong></Link></td>
-                    <td dir="ltr">{c.phone}</td>
-                    <td>{c.language === "ar" ? "العربية" : c.language === "en" ? "English" : <span className="muted">{t("customers.language.none")}</span>}</td>
-                    <td>{fmtDateTime(c.lastContactAt ?? c.createdAt, locale)}</td>
-                    <td><Link className="btn small ghost" href={`/app/customers/${c.id}`}>{t("customers.open")}</Link></td>
+                    <td className="lead"><Link href={`/app/customers/${c.id}`}><strong dir="auto">{c.name || t("customers.noName")}</strong></Link></td>
+                    <td className="sub" dir="ltr">{c.phone}</td>
+                    <td className="sub">{c.language === "ar" ? "العربية" : c.language === "en" ? "English" : <span className="muted">{t("customers.language.none")}</span>}</td>
+                    <td className="sub">{fmtDateTime(c.lastContactAt ?? c.createdAt, locale)}</td>
+                    <td className="actions"><Link className="btn small ghost" href={`/app/customers/${c.id}`}>{t("customers.open")}</Link></td>
                   </tr>
                 ))}
               </tbody>
@@ -83,6 +67,22 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
         </details>
         <small className="muted">{t("customers.privacy")}</small>
       </section>
+      <Fold id="lookup" open={Boolean(sp.mode)} title={t("customers.lookup.title")}>
+        {!asksId(idRule) ? <p><strong>{t("customers.lookup.phone")}</strong><br /><small className="muted">{t("customers.lookup.phone.help")}</small></p> : staffRole === "manager" ? (
+          <form action={saveLookupModeAction} className="stack">
+            <label className="row" style={{ flexWrap: "nowrap", alignItems: "flex-start" }}>
+              <input type="radio" name="mode" value="phone" defaultChecked={mode === "phone"} />
+              <span><strong>{t("customers.lookup.phone")}</strong><br /><small className="muted">{t("customers.lookup.phone.help")}</small></span>
+            </label>
+            <label className="row" style={{ flexWrap: "nowrap", alignItems: "flex-start" }}>
+              <input type="radio" name="mode" value="cpr" defaultChecked={mode === "cpr"} />
+              <span><strong>{t("customers.lookup.cpr")}</strong><br /><small className="muted">{t("customers.lookup.cpr.help")}</small></span>
+            </label>
+            <div><SubmitButton className="btn" type="submit">{t("common.save")}</SubmitButton></div>
+          </form>
+        ) : <p>{mode === "cpr" ? t("customers.lookup.cpr") : t("customers.lookup.phone")}</p>}
+        {asksId(idRule) && <small className="muted">{t("customers.lookup.note")}</small>}
+      </Fold>
     </>
   );
 }

@@ -3,7 +3,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { demoMode, requireAdmin, requireBookingUser, requireClient } from "./auth";
+import { demoMode, requireAdmin, requireBookingUser, requireSection } from "./auth";
 import { safePath } from "./format";
 import { supabaseConfigured, supabaseServer } from "./supabase";
 import * as store from "./data";
@@ -50,6 +50,10 @@ export async function login(f: FormData) {
     jar.set("cd_session", who, cookieOpts);
     redirect("/app");
   }
+  if (who.startsWith("reception:") && await store.getTenant(who.slice(10))) {
+    jar.set("cd_session", who, cookieOpts);
+    redirect("/app");
+  }
   if (who.startsWith("doctor:")) {
     const [, tenantId, doctorId] = who.split(":");
     if (tenantId && doctorId && (await store.getDoctors(tenantId)).some((d) => d.id === doctorId)) {
@@ -93,7 +97,7 @@ export async function exitViewAs() {
 /* ---------- client actions ---------- */
 
 export async function saveAgentAction(f: FormData) {
-  const { tenant, actor } = await requireClient();
+  const { tenant, actor } = await requireSection("assistant");
   const cur = await store.getAgent(tenant.id);
   const next: AgentSettings = structuredClone(cur);
   const changed: string[] = [];
@@ -130,7 +134,7 @@ export async function saveAgentAction(f: FormData) {
 }
 
 export async function addKnowledgeAction(f: FormData) {
-  const { tenant, actor } = await requireClient();
+  const { tenant, actor } = await requireSection("assistant");
   if (!tenant.permissions.editKnowledge) throw new Error("forbidden");
   const q = str(f, "question"), a = str(f, "answer");
   if (q && a) await store.addKnowledge(tenant.id, q.slice(0, 500), a.slice(0, 2000), str(f, "language") === "ar" ? "ar" : "en", actor);
@@ -142,7 +146,7 @@ export async function addKnowledgeAction(f: FormData) {
 }
 
 export async function deleteKnowledgeAction(f: FormData) {
-  const { tenant, actor } = await requireClient();
+  const { tenant, actor } = await requireSection("assistant");
   if (!tenant.permissions.editKnowledge) throw new Error("forbidden");
   await store.deleteKnowledge(tenant.id, str(f, "id"), actor);
   await autoSync(tenant.id, actor);
@@ -151,7 +155,7 @@ export async function deleteKnowledgeAction(f: FormData) {
 }
 
 export async function dismissUnansweredAction(f: FormData) {
-  const { tenant } = await requireClient();
+  const { tenant } = await requireSection("assistant");
   await store.dismissUnanswered(tenant.id, str(f, "id"));
   revalidatePath("/app/knowledge");
   back(f, "/app/knowledge", "deleted=1");
@@ -209,7 +213,7 @@ export async function saveBookingNotesAction(f: FormData) {
 }
 
 export async function requestTopUpAction(f: FormData) {
-  const { tenant, actor } = await requireClient();
+  const { tenant, actor } = await requireSection("billing");
   const credits = Math.min(100_000, Math.max(1, Math.round(num(f, "credits")) || 500));
   await store.requestTopUp(tenant.id, credits, actor);
   revalidatePath("/admin");
@@ -217,14 +221,14 @@ export async function requestTopUpAction(f: FormData) {
 }
 
 export async function staffRequestStatusAction(f: FormData) {
-  const { tenant, actor } = await requireClient();
+  const { tenant, actor } = await requireSection("inbox");
   await store.setStaffRequestStatus(tenant.id, str(f, "id"), str(f, "status") === "open" ? "open" : "done", actor);
   revalidatePath("/app", "layout");
   redirect("/app/messages");
 }
 
 export async function setOpeningHoursAction(f: FormData) {
-  const { tenant, actor } = await requireClient();
+  const { tenant, actor } = await requireSection("bookings");
   const raw: Record<string, [string, string][]> = {};
   for (let d = 0; d < 7; d++)
     raw[String(d)] = (["a", "b"] as const).map((r): [string, string] => [str(f, `open${d}${r}`), str(f, `close${d}${r}`)]).filter(([a, b]) => a || b);
@@ -237,14 +241,14 @@ export async function setOpeningHoursAction(f: FormData) {
 }
 
 export async function reviewConversationAction(f: FormData) {
-  const { tenant, actor } = await requireClient();
+  const { tenant, actor } = await requireSection("inbox");
   await store.setConversationReviewed(tenant.id, str(f, "id"), str(f, "reviewed") === "1", actor);
   revalidatePath("/app", "layout");
   back(f, "/app/attention", "done=1");
 }
 
 export async function setAlertRulesAction(f: FormData) {
-  const { tenant, actor } = await requireClient();
+  const { tenant, actor } = await requireSection("inbox");
   const raw: Record<string, unknown> = {};
   for (const k of FLAG_KINDS)
     raw[k] = {
