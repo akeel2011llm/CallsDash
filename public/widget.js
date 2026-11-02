@@ -43,9 +43,11 @@
     } catch (e) { return null; }
   }
 
-  function showPhoto(raw, caption, rtl, side) {
+  function showPhoto(raw, caption, rtl, side, typed) {
     var href = photoUrl(raw);
     if (!href) return "That picture cannot be shown.";
+    // In a typed chat the photo belongs inside the conversation, never in a floating card: the assistant is told to write it into its reply.
+    if (typed) return PHONE_REPLY;
     // On a phone the chat fills the screen, so a floating card would sit outside it: the assistant writes the photo into its reply instead.
     if (window.matchMedia && window.matchMedia("(max-width: 700px)").matches) return PHONE_REPLY;
     Array.prototype.forEach.call(document.querySelectorAll('[data-callsdash-widget="photo"]'), function (n) { n.remove(); });
@@ -142,8 +144,10 @@
         var config = event.detail && event.detail.config;
         if (!config) return;
         smallChatPhotos(embed);
+        // a typed chat is marked textOnly (when the chat widget version tells us), so its photos stay inside the chat
+        var typed = config.textOnly === true || !!(config.overrides && config.overrides.conversation && (config.overrides.conversation.textOnly === true || config.overrides.conversation.text_only === true));
         config.clientTools = Object.assign({}, config.clientTools, {
-          show_image: function (p) { return showPhoto(p && p.image_url, p && p.caption, rtl, side); },
+          show_image: function (p) { return showPhoto(p && p.image_url, p && p.caption, rtl, side, typed); },
         });
       });
       document.body.appendChild(embed);
