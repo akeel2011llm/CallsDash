@@ -348,7 +348,7 @@ export function toolDefinitions(appUrl: string, secret: string): Record<string, 
     // not a webhook: the customer's browser runs it (public/widget.js draws the photo), so it needs no address or secret
     show_image: {
       type: "client", name: "show_image", expects_response: true,
-      description: "Show a photo to the customer in the website chat. Use the image_url that find_item returned, exactly as it is, and a short caption in the customer's language.",
+      description: "Show a photo to the customer in the website chat, only when the customer is talking (Typed chat: false). In a typed chat never call this: put the photo inside your reply as a markdown image instead. Use the image_url that find_item returned, exactly as it is, and a short caption in the customer's language.",
       parameters: {
         type: "object", required: ["image_url"],
         properties: { image_url: str("The image_url from find_item, unchanged."), caption: str("A short caption, such as the item's name, in the customer's language.") },
