@@ -1,5 +1,6 @@
 import { requireSection } from "@/lib/auth";
 import { getT } from "@/lib/i18n";
+import { businessOf } from "@/lib/business-types";
 import * as store from "@/lib/data";
 import { readServices, servicesKey } from "@/lib/services";
 import { ServicesManager, type ServicesQuery } from "@/components/ServicesManager";
@@ -13,7 +14,7 @@ export default async function Services({ searchParams }: { searchParams: Promise
   return (
     <>
       <PageHead title={t("services.title")} subtitle={t("services.subtitle")} />
-      <ServicesManager list={list} sp={await searchParams} t={t} locale={locale} canEdit={staffRole === "manager"} />
+      <ServicesManager list={list} sp={await searchParams} t={t} locale={locale} canEdit={staffRole === "manager"} kind={businessOf(tenant).kind} />
     </>
   );
 }

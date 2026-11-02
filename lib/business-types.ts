@@ -29,6 +29,40 @@ export interface BusinessProfile {
   id?: IdRule;
   /** The client's own fields on bookings, customers and team members (lib/extra-fields.ts). Edited on the Business tab. */
   fields?: ExtraFields;
+  /**
+   * The exact kind of business (2026-11-02), one of the 20 kinds of the services library (lib/service-library.ts): "dental",
+   * "barber", "carWash"... It names the business precisely and opens the services library on the right list. `type` still
+   * decides the words and setup rules, and comes from the kind (BUSINESS_KINDS).
+   */
+  kind?: BusinessKind;
+}
+
+/** The 20 kinds offered in Type of business, each with the type whose words and rules it uses. Keys match lib/service-library.ts. */
+export const BUSINESS_KINDS = {
+  health: "clinic", dental: "clinic", derma: "clinic", physio: "clinic", eye: "clinic", vet: "clinic",
+  ladies: "salon", barber: "salon", spa: "salon", bridal: "salon",
+  restaurant: "restaurant",
+  fitness: "service", carService: "service", carWash: "service", realEstate: "service", education: "service",
+  legal: "service", home: "service", travel: "service", photo: "service",
+} as const satisfies Record<string, BusinessType>;
+export type BusinessKind = keyof typeof BUSINESS_KINDS;
+export const isBusinessKind = (v: unknown): v is BusinessKind => typeof v === "string" && Object.hasOwn(BUSINESS_KINDS, v);
+
+/** The groups of Type of business, in order. Shop and "Something else" have no kind: their value is the plain type. */
+export const KIND_GROUPS: { key: string; options: (BusinessKind | "retail" | "service" | "custom")[] }[] = [
+  { key: "health", options: ["health", "dental", "derma", "physio", "eye", "vet"] },
+  { key: "beauty", options: ["ladies", "barber", "spa", "bridal"] },
+  { key: "food", options: ["restaurant", "retail"] },
+  { key: "services", options: ["fitness", "carService", "carWash", "realEstate", "education", "legal", "home", "travel", "photo", "service"] },
+  { key: "other", options: ["custom"] },
+];
+
+/** The option Type of business shows for a client: its kind, or for a client from before kinds, the closest one. */
+export function kindChoice(b: Pick<BusinessProfile, "type" | "kind">): string {
+  if (isBusinessKind(b.kind) && BUSINESS_KINDS[b.kind] === b.type) return b.kind;
+  if (b.type === "clinic") return "health";
+  if (b.type === "salon") return "ladies";
+  return b.type;
 }
 
 export const WORD_KEYS = [
@@ -211,12 +245,14 @@ export function relabel(text: string, locale: Locale, v: Vocab): string {
 /** Reads the business form (admin client page, New client). Unknown values fall back to clinic; words are trimmed and short. */
 export function businessFromForm(get: (k: string) => string, has: (k: string) => boolean): BusinessProfile {
   const raw = get("businessType");
-  const type: BusinessType = isBusinessType(raw) ? raw : "clinic";
+  const kind = isBusinessKind(raw) ? raw : undefined;
+  const type: BusinessType = kind ? BUSINESS_KINDS[kind] : isBusinessType(raw) ? raw : "clinic";
   const w = (k: string) => get(k).replace(/\s+/g, " ").trim().slice(0, 40);
   const words = Object.fromEntries(WORD_KEYS.map((k) => [k, w(k)]).filter(([, v]) => v)) as BusinessProfile["words"];
   const roles = has("roleCount") ? rolesFromForm(get) : undefined;
   return {
     type,
+    ...(kind ? { kind } : {}),
     // a clinic always books doctors; the box only appears with the other types
     staffScheduling: type === "clinic" ? true : has("schedulingShown") ? get("staffScheduling") === "on" : SCHEDULING_DEFAULT[type],
     ...(words && Object.keys(words).length ? { words } : {}),

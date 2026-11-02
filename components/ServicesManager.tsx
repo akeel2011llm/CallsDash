@@ -19,14 +19,16 @@ const ERR = ["name", "minutes", "full", "same", "type", "none", "confirm", "gone
  * English and Arabic) or add one's own. Used by the admin (client > Business > Services) and the client's manager
  * (Bookings > Services). `canEdit` false shows the list only.
  */
-export function ServicesManager({ tenantId, list, sp, t, locale, canEdit }: {
+export function ServicesManager({ tenantId, list, sp, t, locale, canEdit, kind }: {
   tenantId?: string; list: Service[]; sp: ServicesQuery; t: (k: Key) => string; locale: Locale; canEdit: boolean;
+  /** The client's kind of business (Business tab). The library shows its list first, until another kind is picked. */
+  kind?: string;
 }) {
   const T = (k: string, v?: Record<string, string | number>) => (v ? fill(t(k as Key), v) : t(k as Key));
   const hidden = tenantId ? <input type="hidden" name="tenantId" value={tenantId} /> : null;
   const q = (sp.q ?? "").trim().toLowerCase();
   const rows = q ? list.filter((s) => `${s.name} ${s.nameAr}`.toLowerCase().includes(q)) : list;
-  const lib = libraryType(sp.lib ?? "");
+  const lib = libraryType(sp.lib ?? kind ?? "");
   const fields = (s?: Service) => (
     <>
       <div className="grid two" style={{ gap: ".6rem" }}>
