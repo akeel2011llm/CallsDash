@@ -43,11 +43,40 @@
     } catch (e) { return null; }
   }
 
-  function showPhoto(raw, caption, rtl, side, typed) {
+  // Experimental: in a spoken call the photo is placed inside the chat's transcript (the widget's open shadow root), where a typed chat shows it.
+  // The widget's markup is not ours and may change, so the transcript is found by what it is (the scrolling box holding the most text) and
+  // anything unexpected returns false: the caller then draws the floating card as before.
+  function placeInTranscript(embed, href, caption, rtl) {
+    try {
+      var root = embed && embed.shadowRoot;
+      if (!root) return false;
+      var best = null, bestLen = 0;
+      Array.prototype.forEach.call(root.querySelectorAll("div"), function (d) {
+        var cs = getComputedStyle(d);
+        if ((cs.overflowY !== "auto" && cs.overflowY !== "scroll") || !d.clientHeight) return;
+        var len = (d.textContent || "").length;
+        if (len >= bestLen) { best = d; bestLen = len; }
+      });
+      if (!best || bestLen < 1) return false;
+      var host = best.lastElementChild;
+      if (!host || host.tagName !== "DIV" || (host.textContent || "").length < bestLen * 0.8) host = best;
+      var img = el("img", { src: href, alt: caption || "", style: { display: "block", width: "100%", maxHeight: "220px", objectFit: "cover", borderRadius: "10px" } });
+      var kids = [img];
+      if (caption) kids.push(el("div", { text: String(caption).slice(0, 200), style: { fontSize: "13px", lineHeight: "1.4", paddingTop: "4px", opacity: ".8" } }));
+      var card = el("div", { "data-callsdash-widget": "transcript-photo", dir: rtl ? "rtl" : "ltr", style: { maxWidth: "min(220px, 100%)", margin: "6px 0", alignSelf: rtl ? "flex-end" : "flex-start" } }, kids);
+      host.appendChild(card);
+      best.scrollTop = best.scrollHeight;
+      img.addEventListener("load", function () { best.scrollTop = best.scrollHeight; });
+      return true;
+    } catch (e) { return false; }
+  }
+
+  function showPhoto(raw, caption, rtl, side, typed, embed) {
     var href = photoUrl(raw);
     if (!href) return "That picture cannot be shown.";
     // In a typed chat the photo belongs inside the conversation, never in a floating card: the assistant is told to write it into its reply.
     if (typed) return PHONE_REPLY;
+    if (placeInTranscript(embed, href, caption, rtl)) return "Shown.";
     // On a phone the chat fills the screen, so a floating card would sit outside it: the assistant writes the photo into its reply instead.
     if (window.matchMedia && window.matchMedia("(max-width: 700px)").matches) return PHONE_REPLY;
     Array.prototype.forEach.call(document.querySelectorAll('[data-callsdash-widget="photo"]'), function (n) { n.remove(); });
@@ -147,7 +176,7 @@
         // a typed chat is marked textOnly (when the chat widget version tells us), so its photos stay inside the chat
         var typed = config.textOnly === true || !!(config.overrides && config.overrides.conversation && (config.overrides.conversation.textOnly === true || config.overrides.conversation.text_only === true));
         config.clientTools = Object.assign({}, config.clientTools, {
-          show_image: function (p) { return showPhoto(p && p.image_url, p && p.caption, rtl, side, typed); },
+          show_image: function (p) { return showPhoto(p && p.image_url, p && p.caption, rtl, side, typed, embed); },
         });
       });
       document.body.appendChild(embed);
