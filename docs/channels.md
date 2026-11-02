@@ -98,3 +98,16 @@ Why: a client is found by its ElevenLabs agent id, its Instagram account id and 
 ## Guides you can fold, hide and bring back
 
 A setup guide or a list of precautions is a `Guide` (`components/Guide.tsx`): folded by default, with an x that hides it for that person only (stored per person in `app_settings` as `guides.hidden.<user id>`). **Settings** (in the menu of the admin, clinic and doctor portals; on a phone, open the menu with the bottom bar's *More* or the top-left button) lists the hidden guides with *Show again* and *Show all guides again*, and has the person's password form. The logo and name at the top left of every portal open that portal's home page. To make another guide hideable, add its id and title key to `GUIDES` in `lib/guides.ts` and wrap it in `<Guide id="...">`. Today: the precautions after copying a client (`copy`) and the WhatsApp setup steps on Channels (`whatsapp`).
+
+## Phone line (Twilio through ElevenLabs)
+
+Page: `/admin/clients/[id]/channels/phone` (button inside the Phone line fold on Channels). Code: `lib/phone.ts` (requests), `lib/phone-actions.ts` (actions).
+
+- **Connect**: the admin types the number, the Twilio SID (AC… account or SK… API key) and the token or API secret. They are sent once to `POST /v1/convai/phone-numbers` and **never stored**; CallsDash keeps only the returned number id in `Integrations.phone.elevenLabsId` and sets the channel to connected.
+- **Status** is read live from ElevenLabs (number, label, which assistant answers, inbound/outbound). If the number answers with another assistant there is a button to point it at this client's assistant. A number deleted in ElevenLabs shows a notice and can be connected again.
+- **Test call**: `POST /v1/convai/twilio/outbound-call`; the assistant calls a number the admin types (tick box required, it costs phone credit). The assistant speaks first, so it needs a first message.
+- **Disconnect** (tick box) deletes the number in ElevenLabs only; it stays in Twilio.
+- Request shapes come from the ElevenLabs SDK 2.75.0 types and a stand-in server; **not yet tried against the real services**. Things to check on the first real call: a Twilio trial account only calls verified numbers; calling Bahrain must be allowed in Twilio (Voice > Geo permissions); the agent's audio format for telephony (ElevenLabs says it configures the Twilio number itself).
+
+### WhatsApp on the Bahrain number (+973 6633 8611)
+A number registered as a Twilio WhatsApp sender cannot also be used for ElevenLabs' own WhatsApp connection, so the Twilio number is used for calls and the +973 business WhatsApp number is connected on the WhatsApp card of the same Channels page (Meta sign-in through ElevenLabs, then paste the phone number ID).
