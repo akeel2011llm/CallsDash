@@ -1,6 +1,7 @@
 import { KIND_GROUPS, MAX_ROLES, kindChoice, VOCAB, businessOf, rolesOf, type BusinessProfile, type WordKey } from "@/lib/business-types";
 import type { Key } from "@/lib/i18n";
 import { ID_KINDS, idRuleOf } from "@/lib/id-rule";
+import { searchRoles } from "@/lib/team-library";
 
 /**
  * The business inputs, shared by New client and the client's Business tab: the type (a starting point only), the client's own
@@ -66,14 +67,15 @@ export function BusinessFields({ t, business }: { t: (k: Key) => string; busines
         <div className="stack" style={{ marginBlockStart: ".5rem" }}>
           <small className="muted">{t("biz.roles.help")}</small>
           <input type="hidden" name="roleCount" value={lines.length} />
+          <datalist id="biz-role-names">{searchRoles("").flatMap((r) => [<option key={`e${r.key}`} value={r.one}>{r.oneAr}</option>, <option key={`a${r.key}`} value={r.oneAr}>{r.one}</option>])}</datalist>
           {lines.map((r, i) => (
             <fieldset key={r?.key ?? `new${i}`} className="col-line stack" style={{ margin: 0 }}>
               <legend className="muted">{r ? `${t("biz.role")} ${i + 1}` : t("biz.role.new")}</legend>
               {r && <input type="hidden" name={`role${i}_key`} value={r.key} />}
               <div className="form-cols">
-                <label>{t("biz.role.one")}<input name={`role${i}_one`} defaultValue={r?.one ?? ""} maxLength={40} placeholder={i === 0 ? "Doctor" : i === 1 ? "Nurse" : "Stylist"} dir="ltr" /></label>
+                <label>{t("biz.role.one")}<input name={`role${i}_one`} list="biz-role-names" autoComplete="off" defaultValue={r?.one ?? ""} maxLength={40} placeholder={i === 0 ? "Doctor" : i === 1 ? "Nurse" : "Stylist"} dir="ltr" /></label>
                 <label>{t("biz.role.many")}<input name={`role${i}_many`} defaultValue={r?.many ?? ""} maxLength={40} placeholder={i === 0 ? "Doctors" : i === 1 ? "Nurses" : "Stylists"} dir="ltr" /></label>
-                <label>{t("biz.role.oneAr")}<input name={`role${i}_oneAr`} defaultValue={r?.oneAr ?? ""} maxLength={40} placeholder={i === 0 ? "طبيب" : i === 1 ? "ممرض" : "أخصائي تجميل"} dir="rtl" /></label>
+                <label>{t("biz.role.oneAr")}<input name={`role${i}_oneAr`} list="biz-role-names" autoComplete="off" defaultValue={r?.oneAr ?? ""} maxLength={40} placeholder={i === 0 ? "طبيب" : i === 1 ? "ممرض" : "أخصائي تجميل"} dir="rtl" /></label>
                 <label>{t("biz.role.manyAr")}<input name={`role${i}_manyAr`} defaultValue={r?.manyAr ?? ""} maxLength={40} placeholder={i === 0 ? "أطباء" : i === 1 ? "ممرضون" : "أخصائيو تجميل"} dir="rtl" /></label>
               </div>
               {r && roles.length > 1 && <label className="inline"><input type="checkbox" name={`role${i}_remove`} />{t("biz.role.remove")}</label>}

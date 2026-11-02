@@ -17,7 +17,8 @@ import { ToolError } from "./booking";
 import { DuplicateError } from "./errors";
 import { autoSync } from "./auto-sync";
 import type { Booking, DateRange } from "./types";
-import { businessFromForm, businessOf, departmentsOf, rolesOf } from "./business-types";
+import { MAX_DEPARTMENTS, MAX_ROLES, businessFromForm, businessOf, departmentsOf, roleKey, rolesOf } from "./business-types";
+import { libraryDepartment, libraryRole } from "./team-library";
 import { promptForWords } from "./business-words";
 import { deleteRecordings, recordingState } from "./recordings";
 import { ExtraError, cleanExtra, extraFieldsOf, extraFromForm, extraFromLines, isExtraTarget, mergeExtra } from "./extra-fields";
@@ -55,22 +56,51 @@ const refreshAll = () => { revalidatePath("/admin", "layout"); revalidatePath("/
 
 /* ---------- doctors ---------- */
 
-/** The role key the form chose, if it is one of the client's roles; otherwise none (the first role). */
-async function roleFrom(f: FormData, tenantId: string): Promise<string | undefined> {
-  const key = str(f, "role");
-  return key && rolesOf(await store.getTenant(tenantId)).some((r) => r.key === key) ? key : undefined;
+const sameName = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+
+/**
+ * The role key the form chose, if it is one of the client's roles; otherwise none (the first role). A library role
+ * ("lib:<key>", lib/team-library.ts) is added to the client's roles first, or matched to one it already has.
+ */
+async function roleFrom(f: FormData, tenantId: string, actor: string): Promise<string | undefined> {
+  const value = str(f, "role");
+  const tenant = await store.getTenant(tenantId);
+  const roles = rolesOf(tenant);
+  if (value.startsWith("lib:")) {
+    const r = libraryRole(value.slice(4));
+    if (!r || !tenant) return undefined;
+    const have = roles.find((x) => sameName(x.one, r.one) || x.oneAr === r.oneAr);
+    if (have) return have.key;
+    if (roles.length >= MAX_ROLES) return undefined;
+    const key = roleKey(r.one, roles.map((x) => x.key));
+    await store.setBusiness(tenantId, { ...businessOf(tenant), roles: [...roles, { key, one: r.one, many: r.many, oneAr: r.oneAr, manyAr: r.manyAr }] }, actor, `Added the role "${r.one}" from the library`);
+    return key;
+  }
+  return value && roles.some((r) => r.key === value) ? value : undefined;
+}
+
+/** The department key the form chose, if it is one of the client's departments; otherwise none. A library one is added first. */
+async function departmentFrom(f: FormData, tenantId: string, actor: string): Promise<string | undefined> {
+  const value = str(f, "department");
+  const tenant = await store.getTenant(tenantId);
+  const list = departmentsOf(tenant);
+  if (value.startsWith("lib:")) {
+    const d = libraryDepartment(value.slice(4));
+    if (!d || !tenant) return undefined;
+    const have = list.find((x) => sameName(x.en, d.en) || x.ar === d.ar);
+    if (have) return have.key;
+    if (list.length >= MAX_DEPARTMENTS) return undefined;
+    const key = roleKey(d.en, list.map((x) => x.key));
+    await store.setBusiness(tenantId, { ...businessOf(tenant), departments: [...list, { key, en: d.en, ar: d.ar }] }, actor, `Added the department "${d.en}" from the library`);
+    return key;
+  }
+  return value && list.some((d) => d.key === value) ? value : undefined;
 }
 
 /**
  * The client's own team member fields from a team form (lib/extra-fields.ts): the answers merged into what was stored,
  * undefined when the form has none, null when a required one is blank or an answer does not fit.
  */
-/** The department key the form chose, if it is one of the client's departments; otherwise none. */
-async function departmentFrom(f: FormData, tenantId: string): Promise<string | undefined> {
-  const key = str(f, "department");
-  return key && departmentsOf(await store.getTenant(tenantId)).some((d) => d.key === key) ? key : undefined;
-}
-
 async function teamExtra(f: FormData, tenantId: string, before?: Record<string, string>): Promise<Record<string, string> | undefined | null> {
   if (!f.has("extraShown")) return undefined;
   const fields = extraFieldsOf(await store.getTenant(tenantId), "team");
@@ -91,7 +121,7 @@ export async function addDoctorAction(f: FormData) {
   if ((await store.getDoctors(tenantId)).some((d) => d.name.toLowerCase() === name.toLowerCase())) go(f, fallback, "doc=name_taken", "#doctors");
   const extra = await teamExtra(f, tenantId);
   if (extra === null) go(f, fallback, "doc=bad_extra", "#doctors");
-  await store.addDoctor(tenantId, { name, specialty: str(f, "specialty").slice(0, 120), about: str(f, "about").slice(0, 800), aboutAr: str(f, "aboutAr").slice(0, 800), role: await roleFrom(f, tenantId), department: await departmentFrom(f, tenantId), ...(extra ? { extra } : {}) }, actor);
+  await store.addDoctor(tenantId, { name, specialty: str(f, "specialty").slice(0, 120), about: str(f, "about").slice(0, 800), aboutAr: str(f, "aboutAr").slice(0, 800), role: await roleFrom(f, tenantId, actor), department: await departmentFrom(f, tenantId, actor), ...(extra ? { extra } : {}) }, actor);
   await autoSync(tenantId, actor);
   refreshAll();
   go(f, fallback, "doc=added", "#doctors");
@@ -110,8 +140,8 @@ export async function saveDoctorAction(f: FormData) {
   await store.updateDoctor(tenantId, doc.id, {
     ...(extra ? { extra } : {}),
     name, specialty: str(f, "specialty").slice(0, 120), about: str(f, "about").slice(0, 800), aboutAr: str(f, "aboutAr").slice(0, 800), color: hex.test(color) ? color : doc.color, active: f.get("active") === "on",
-    ...(f.has("role") ? { role: await roleFrom(f, tenantId) } : {}),
-    ...(f.has("department") ? { department: await departmentFrom(f, tenantId) } : {}),
+    ...(f.has("role") ? { role: await roleFrom(f, tenantId, actor) } : {}),
+    ...(f.has("department") ? { department: await departmentFrom(f, tenantId, actor) } : {}),
   }, actor);
   if (f.has("calendarId")) {
     const calendarId = str(f, "calendarId").slice(0, 300);

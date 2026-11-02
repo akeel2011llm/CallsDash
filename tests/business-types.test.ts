@@ -109,6 +109,14 @@ describe("roles and the client's own words (milestone 8b)", () => {
     { key: "nurse", one: "Nurse", many: "Nurses", oneAr: "ممرض", manyAr: "ممرضون" },
   ];
 
+  it("fills role names left blank from the roles library, and keeps unknown names as typed", () => {
+    const get = (o: Record<string, string>) => (k: string) => o[k] ?? "";
+    expect(rolesFromForm(get({ roleCount: "2", role0_one: "Mechanic", role1_one: "Wizard" }))).toEqual([
+      { key: "mechanic", one: "Mechanic", many: "Mechanics", oneAr: "ميكانيكي", manyAr: "ميكانيكيون" },
+      { key: "wizard", one: "Wizard", many: "Wizards", oneAr: "", manyAr: "" },
+    ]);
+  });
+
   it("gives a client without roles one role named after its type", () => {
     expect(rolesOf(tenant())).toEqual([{ key: "staff", one: "Doctor", many: "Doctors", oneAr: "طبيب", manyAr: "أطباء" }]);
     expect(rolesOf(tenant({ type: "salon" }))[0]).toMatchObject({ one: "Stylist", oneAr: "أخصائي" });
@@ -121,8 +129,8 @@ describe("roles and the client's own words (milestone 8b)", () => {
       role1_one: "Nurse", role1_oneAr: "ممرض", role2_key: "old", role2_one: "Old", role2_remove: "on", role3_one: "",
     }));
     expect(r).toEqual([
-      { key: "staff", one: "Doctor", many: "Doctors", oneAr: "طبيب", manyAr: "طبيب" },
-      { key: "nurse", one: "Nurse", many: "Nurses", oneAr: "ممرض", manyAr: "ممرض" },
+      { key: "staff", one: "Doctor", many: "Doctors", oneAr: "طبيب", manyAr: "أطباء" },
+      { key: "nurse", one: "Nurse", many: "Nurses", oneAr: "ممرض", manyAr: "ممرضون" },
     ]);
   });
 
