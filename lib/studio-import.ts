@@ -172,7 +172,7 @@ export type LivePreview =
   | { kind: "no_key" | "no_agent" }
   | { kind: "failed"; detail: string };
 
-async function readLive(d: ImportDeps, tenantId: string) {
+export async function readLive(d: ImportDeps, tenantId: string) {
   const [settings, doctors, tenant] = await Promise.all([d.data.getAgent(tenantId), d.data.getDoctors(tenantId), d.data.getTenant(tenantId)]);
   if (!tenant) return { kind: "no_agent" as const };
   if (!d.catalog) return { kind: "no_key" as const };

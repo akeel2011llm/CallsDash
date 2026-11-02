@@ -1,10 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createDemoData, type Data } from "@/lib/data/demo";
 import { createPgData, type Db, type Q } from "@/lib/data/pg";
-import { PARTS, applyList, applySettings, buildClientExport, namesOf, readExportFile, type ImportOptions, type ListPart, type PartId } from "@/lib/client-transfer";
+import { PARTS, applyList, applySettings, applyVoiceMode, buildClientExport, namesOf, readExportFile, type ImportOptions, type ListPart, type PartId } from "@/lib/client-transfer";
 import { readServices, servicesKey } from "@/lib/services";
 import { studioOf } from "@/lib/agent-studio";
 import { makeDb } from "./helpers/pgdb";
+import { findKey, mapLiveAgent } from "@/lib/elevenlabs-catalog";
 
 vi.mock("server-only", () => ({}));
 
@@ -26,6 +27,27 @@ describe("readExportFile", () => {
     expect(r.ok && Object.keys(r.file.parts)).toEqual(["knowledge"]);
   });
   it("names every part once", () => expect(new Set(PARTS).size).toBe(PARTS.length));
+});
+
+describe("Voice mode", () => {
+  it("finds realtime_model wherever ElevenLabs keeps it", () => {
+    expect(findKey({ agent: { prompt: { realtime_model: "eleven_realtime_v1_max" } } }, "realtime_model")).toEqual({ path: ["agent", "prompt", "realtime_model"], value: "eleven_realtime_v1_max" });
+    expect(mapLiveAgent({ conversation_config: { agent: { realtime_model: null } } }).realtime).toEqual({ path: ["agent", "realtime_model"], model: null });
+    expect(mapLiveAgent({ conversation_config: { agent: {} } }).realtime).toBeUndefined();
+  });
+  it("sends the mode at the same place, or reports that the place is unknown", async () => {
+    const calls: unknown[] = [];
+    const api = { updateAgent: async (_id: string, body: Record<string, unknown>) => { calls.push(body); } };
+    expect(await applyVoiceMode(api, "a1", { model: "eleven_realtime_v1_mini", path: ["agent", "realtime_model"] })).toBe("set");
+    expect(await applyVoiceMode(api, "a1", { model: null }, ["agent", "prompt", "realtime_model"])).toBe("set");
+    expect(await applyVoiceMode(api, "a1", { model: "bad value", path: ["x", "realtime_model"] })).toBe("set");
+    expect(await applyVoiceMode(api, "a1", { model: null })).toBe("unknown");
+    expect(calls).toEqual([
+      { conversation_config: { agent: { realtime_model: "eleven_realtime_v1_mini" } } },
+      { conversation_config: { agent: { prompt: { realtime_model: null } } } },
+      { conversation_config: { x: { realtime_model: null } } },
+    ]);
+  });
 });
 
 describe.each(["demo", "postgres"] as const)("client Import/Export (%s)", (kind) => {
@@ -118,6 +140,29 @@ describe.each(["demo", "postgres"] as const)("client Import/Export (%s)", (kind)
     expect(again.knowledge).toMatchObject({ added: 0, updated: 2 });
     expect(again.team).toMatchObject({ added: 0, updated: 1 });
     expect(await data.getKnowledge(target.id)).toHaveLength(2);
+  });
+
+  it("uses the settings read from ElevenLabs, replaces every listed name (English and Arabic) and carries the Voice mode", async () => {
+    const data = await backend(kind);
+    const src = await source(data);
+    const stored = await data.getAgent(src.id);
+    const liveAgent = { ...stored, voiceEn: "voice_live", temperature: 0.2, studio: { ...stored.studio, llm: "gpt-live", greetingEn: "Hi, Al Mosawi here", greetingAr: "أهلاً بكم في ميو" } };
+    const file = await buildClientExport(data, (await data.getTenant(src.id))!, ["voices", "voiceMode", "studio.model", "studio.conversation", "services"], false, "2031-02-01T00:00:00Z",
+      { agent: liveAgent, realtime: { path: ["agent", "realtime_model"], model: "eleven_realtime_v1_max" } });
+    expect(file.assistantFrom).toBe("live");
+    expect(file.parts.voiceMode).toEqual({ model: "eleven_realtime_v1_max", path: ["agent", "realtime_model"] });
+    const target = await data.createTenant({ name: "Almosawi Center", nameAr: "الموسوي", color: "#223344", domain: "almosawi.example.bh", planType: "package", actor: "x" });
+    await data.setSetting(servicesKey(src.id), [{ id: "svc_b", name: "MioCclinic package", nameAr: "باقة ميو", minutes: 30, price: "", active: true }]);
+    const parts = (await buildClientExport(data, (await data.getTenant(src.id))!, ["services"], false, "x")).parts;
+    const o: ImportOptions = { mode: "merge", rename: true, photos: false, from: file.from, oldNames: ["MioCclinic", "Al Mosawi", "ميو"], newName: "Almosawi Center", newNameAr: "الموسوي" };
+    const s = await applySettings(data, target.id, file.parts, o, "admin");
+    const l = await applyList(data, target.id, "services", parts.services as unknown[], o, "admin");
+    expect(s.renamed).toBe(2);
+    expect(l.renamed).toBe(2);
+    const a = await data.getAgent(target.id);
+    expect(a).toMatchObject({ voiceEn: "voice_live", temperature: 0.2 });
+    expect(studioOf(a)).toMatchObject({ llm: "gpt-live", greetingEn: "Hi, Almosawi Center here", greetingAr: "أهلاً بكم في الموسوي" });
+    expect(readServices(await data.getSetting(servicesKey(target.id)))[0]).toMatchObject({ name: "Almosawi Center package", nameAr: "باقة الموسوي" });
   });
 
   it("replace removes what the file does not have, archives people and never deletes customers", async () => {

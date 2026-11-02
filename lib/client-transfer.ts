@@ -18,7 +18,7 @@ import { readSuite, testsKey } from "./agent-tests";
 import { accessKey, readAccess } from "./access";
 import { renamer } from "./client-copy";
 import {
-  FORMAT, FORMAT_VERSION, PARTS, PART_GROUPS, PHOTO_PARTS, isPart, type ExportFile, type ListPart, type PartId,
+  AGENT_PARTS, FORMAT, FORMAT_VERSION, PARTS, PART_GROUPS, PHOTO_PARTS, fromNames, isArabic, isPart, type ExportFile, type ListPart, type PartId,
 } from "./client-transfer-parts";
 
 export * from "./client-transfer-parts";
@@ -55,11 +55,20 @@ const hoursOf = (v: unknown): Record<string, [string, string][]> | undefined => 
 export type ExportDeps = Pick<Data, "getAgent" | "getKnowledge" | "getDoctors" | "getDoctorImage" | "getItems" | "getItemImage" | "getDataTables" | "getDataRows" | "getCustomers" | "getSetting" | "listProfiles">;
 
 /** The file for the ticked parts. `photos` adds catalogue and team photos (much bigger file). */
-export async function buildClientExport(d: ExportDeps, tenant: Tenant, parts: PartId[], photos: boolean, at: string): Promise<ExportFile> {
+export interface LiveRead {
+  /** CallsDash's settings with what the agent holds in ElevenLabs read into them (lib/studio-import.ts), when that worked. */
+  agent?: AgentSettings;
+  realtime?: { path: string[]; model: string | null };
+  /** Why ElevenLabs could not be read; the file then carries CallsDash's own copy. */
+  error?: string;
+}
+
+export async function buildClientExport(d: ExportDeps, tenant: Tenant, parts: PartId[], photos: boolean, at: string, live?: LiveRead): Promise<ExportFile> {
   const want = new Set(parts);
   const has = (p: PartId) => want.has(p);
   const out: ExportFile["parts"] = {};
-  const agent: AgentSettings | undefined = await d.getAgent(tenant.id);
+  const agent: AgentSettings | undefined = live?.agent ?? await d.getAgent(tenant.id);
+  if (has("voiceMode") && live?.realtime) out.voiceMode = { model: live.realtime.model, path: live.realtime.path };
   if (agent) {
     const st = studioOf(agent) as unknown as Obj;
     if (has("instructions")) out.instructions = { prompt: structuredClone(agent.prompt), replyLength: agent.replyLength, formality: agent.formality, arabicWrittenStyle: agent.arabicWrittenStyle, customerLookup: agent.customerLookup };
@@ -116,6 +125,8 @@ export async function buildClientExport(d: ExportDeps, tenant: Tenant, parts: Pa
     from: { id: tenant.id, name: tenant.name, nameAr: tenant.branding.displayNameAr, displayName: tenant.branding.displayName },
     photos: withPhotos ? { catalogue: has("catalogue"), team: has("team") } : {},
     parts: out,
+    assistantFrom: live?.agent ? "live" : "stored",
+    ...(live?.error ? { liveError: live.error.slice(0, 400) } : {}),
   };
 }
 
@@ -129,6 +140,11 @@ export interface ImportOptions {
   /** Apply the photos in the file. */
   photos: boolean;
   from: ExportFile["from"];
+  /** The names to replace (the admin can edit the list on the import screen); missing = the file's own names. */
+  oldNames?: string[];
+  /** This client's names to put in their place; missing = its display names. */
+  newName?: string;
+  newNameAr?: string;
 }
 
 export type ImportDeps = Pick<Data,
@@ -137,17 +153,25 @@ export type ImportDeps = Pick<Data,
   | "setDoctorImage" | "getItems" | "putItem" | "deleteItem" | "getDataTables" | "putDataTable" | "getDataRows" | "putDataRows" | "deleteDataRows"
   | "getCustomers" | "putCustomer" | "audit">;
 
-function rename(tenant: Tenant, o: ImportOptions) {
-  const off = !o.rename || o.from.id === tenant.id;
-  const rn = renamer({ names: [o.from.name, o.from.displayName].filter(Boolean), namesAr: [o.from.nameAr].filter(Boolean) }, { name: tenant.branding.displayName || tenant.name, nameAr: tenant.branding.displayNameAr });
-  return { deep: <T,>(v: T): T => (off ? v : rn.deep(v)), text: (s: string) => (off ? s : rn.text(s)) };
+/**
+ * Replaces the other client's names with this client's names in every text that is imported (instructions, greetings, knowledge,
+ * services, catalogue, tables, look and wording...). English names become the English name, Arabic ones the Arabic name.
+ */
+export function importRenamer(tenant: Tenant, o: ImportOptions) {
+  const off = !o.rename;
+  const old = (o.oldNames?.length ? o.oldNames : fromNames({ from: o.from })).map((x) => x.trim()).filter(Boolean).slice(0, 20);
+  const rn = renamer(
+    { names: old.filter((x) => !isArabic(x)), namesAr: old.filter(isArabic) },
+    { name: o.newName?.trim() || tenant.branding.displayName || tenant.name, nameAr: o.newNameAr?.trim() || tenant.branding.displayNameAr || o.newName?.trim() || tenant.branding.displayName },
+  );
+  return { deep: <T,>(v: T): T => (off ? v : rn.deep(v)), text: (s: string) => (off ? s : rn.text(s)), count: () => (off ? 0 : rn.count()) };
 }
 
 /** Applies the settings parts (everything that is not a list) in one go. Returns the names of what was applied. */
-export async function applySettings(d: ImportDeps, tenantId: string, parts: Partial<Record<PartId, unknown>>, o: ImportOptions, actor: string): Promise<PartId[]> {
+export async function applySettings(d: ImportDeps, tenantId: string, parts: Partial<Record<PartId, unknown>>, o: ImportOptions, actor: string): Promise<{ done: PartId[]; renamed: number }> {
   let tenant = await d.getTenant(tenantId);
   if (!tenant) throw new Error("unknown client");
-  const rn = rename(tenant, o);
+  const rn = importRenamer(tenant, o);
   const done: PartId[] = [];
   const got = (p: PartId) => parts[p] !== undefined && parts[p] !== null;
 
@@ -162,7 +186,7 @@ export async function applySettings(d: ImportDeps, tenantId: string, parts: Part
   }
 
   // the assistant: one saved version for everything imported
-  const agentParts = PART_GROUPS.assistant.filter((p) => p !== "tests" && got(p));
+  const agentParts = PART_GROUPS.assistant.filter((p) => p !== "tests" && !AGENT_PARTS.includes(p) && got(p));
   if (agentParts.length) {
     const cur = await d.getAgent(tenantId);
     if (cur) {
@@ -191,8 +215,8 @@ export async function applySettings(d: ImportDeps, tenantId: string, parts: Part
         const x = rn.deep(obj(parts[id]));
         for (const k of SECTION_KEYS[s]) if (x[k] !== undefined) studio[k] = structuredClone(x[k]);
         if (s === "model" && typeof x.temperature === "number") next.temperature = Math.min(1, Math.max(0, x.temperature));
-        // a section saved in the other client is saved here too, so its options reach ElevenLabs
-        if (x.saved === true) touched.add(s);
+        // an imported section counts as saved, so every one of its options reaches ElevenLabs at the next update
+        touched.add(s);
       }
       // the studio's own reader drops anything out of range
       next.studio = studioOf({ studio: { ...studio, touched: [...touched] } as AgentSettings["studio"] });
@@ -264,10 +288,10 @@ export async function applySettings(d: ImportDeps, tenantId: string, parts: Part
     done.push("rules");
   }
   if (done.length) await d.audit(actor, `Imported from a file (${o.from.name || "unknown client"}): ${done.join(", ")}`.slice(0, 480), tenantId);
-  return done;
+  return { done, renamed: rn.count() };
 }
 
-export interface ListResult { added: number; updated: number; removed: number; skipped: number }
+export interface ListResult { added: number; updated: number; removed: number; skipped: number; renamed: number }
 
 /**
  * Applies one chunk of a list. `keep` (first chunk only, replace mode) is every name in the file's list: what this client has
@@ -276,9 +300,14 @@ export interface ListResult { added: number; updated: number; removed: number; s
 export async function applyList(d: ImportDeps, tenantId: string, part: ListPart, entries: unknown[], o: ImportOptions, actor: string, keep?: string[]): Promise<ListResult> {
   const tenant = await d.getTenant(tenantId);
   if (!tenant) throw new Error("unknown client");
-  const rn = rename(tenant, o);
-  const r: ListResult = { added: 0, updated: 0, removed: 0, skipped: 0 };
-  const list = entries.map(obj);
+  const rn = importRenamer(tenant, o);
+  const r: ListResult = { added: 0, updated: 0, removed: 0, skipped: 0, renamed: 0 };
+  // every text of the entries gets this client's name (photos are left as they are; customers are people, not texts about the business)
+  const list = entries.map(obj).map((e) => {
+    if (part === "customers") return e;
+    const { photo, ...rest } = e;
+    return { ...rn.deep(rest), ...(photo !== undefined ? { photo } : {}) };
+  });
   const clear = o.mode === "replace" && Array.isArray(keep);
   const kept = (name: string) => (keep ?? []).some((k) => typeof k === "string" && same(k, name));
 
@@ -287,7 +316,7 @@ export async function applyList(d: ImportDeps, tenantId: string, part: ListPart,
     if (clear) for (const k of have.filter((k) => !kept(k.question))) { await d.deleteKnowledge(tenantId, k.id, actor); r.removed++; }
     if (clear) have = await d.getKnowledge(tenantId);
     for (const e of list) {
-      const question = rn.text(str(e.question, 1000).trim()), answer = rn.text(str(e.answer, 8000).trim());
+      const question = str(e.question, 1000).trim(), answer = str(e.answer, 8000).trim();
       const language: Locale = e.language === "ar" ? "ar" : "en";
       if (!question || !answer) { r.skipped++; continue; }
       const old = have.find((k) => same(k.question, question));
@@ -314,7 +343,7 @@ export async function applyList(d: ImportDeps, tenantId: string, part: ListPart,
       const old = have.find((i) => same(i.name, name));
       const photo = o.photos && isPhoto(e.photo) ? e.photo : undefined;
       await d.putItem(tenantId, {
-        ...(old ? { id: old.id } : {}), name, nameAr: str(e.nameAr, 200) || undefined, details: rn.text(str(e.details, 4000)), detailsAr: rn.text(str(e.detailsAr, 4000)) || undefined,
+        ...(old ? { id: old.id } : {}), name, nameAr: str(e.nameAr, 200) || undefined, details: str(e.details, 4000), detailsAr: str(e.detailsAr, 4000) || undefined,
         price: str(e.price, 60) || undefined, keywords: str(e.keywords, 500), active: e.active !== false, createdAt: old?.createdAt ?? new Date().toISOString(),
       }, photo, actor);
       if (old) r.updated++; else r.added++;
@@ -375,6 +404,24 @@ export async function applyList(d: ImportDeps, tenantId: string, part: ListPart,
       if (old) r.updated++; else r.added++;
     }
   }
+  r.renamed = rn.count();
   return r;
 }
 
+
+/**
+ * Sets the agent's Voice mode in ElevenLabs (Realtime with a model, or Custom = null). The field's place is taken from the file,
+ * else from this client's own agent; with neither, ElevenLabs did not show the field and nothing is sent.
+ */
+export async function applyVoiceMode(
+  api: { updateAgent(agentId: string, body: Record<string, unknown>): Promise<void> }, agentId: string, mode: unknown, ownPath?: string[],
+): Promise<"set" | "unknown"> {
+  const m = obj(mode);
+  const model = typeof m.model === "string" && /^eleven_realtime_[\w]+$/.test(m.model) ? m.model : null;
+  const fromFile = arr(m.path).every((k) => typeof k === "string" && /^[a-z_]{1,60}$/.test(k)) ? (arr(m.path) as string[]) : [];
+  const path = fromFile.length && fromFile.at(-1) === "realtime_model" ? fromFile : ownPath?.at(-1) === "realtime_model" ? ownPath : null;
+  if (!path) return "unknown";
+  const body = path.reduceRight<unknown>((inner, k) => ({ [k]: inner }), model);
+  await api.updateAgent(agentId, { conversation_config: body });
+  return "set";
+}

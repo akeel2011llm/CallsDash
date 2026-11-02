@@ -287,6 +287,7 @@
     "@BusinessFields:roleCount",
     "@BusinessFields:schedulingShown",
     "@BusinessFields:staffScheduling",
+    "@ClientTransfer:live",
     "@ClientTransfer:mode",
     "@ClientTransfer:part",
     "@ClientTransfer:photos",
