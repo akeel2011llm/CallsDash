@@ -743,3 +743,10 @@ details:not(.fold):not(.card) > summary { padding-block: .3rem; cursor: pointer;
 .svc > form, .svc > details { margin-block-end: .6rem; }
 .svc-row { display: flex; align-items: center; gap: .75rem; padding: .6rem 0; }
 .check-grid.wide { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+
+/* ---------- Admin client Import/Export (app/(admin)/admin/clients/[id]/transfer, components/ClientTransfer.tsx) ---------- */
+.xfer-cards { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); align-items: start; }
+.xfer-groups { display: grid; gap: .9rem; }
+.xfer-group { border: 1px solid var(--line); border-radius: var(--radius); padding: .6rem .8rem .8rem; gap: .45rem; }
+.xfer-group legend { padding: 0 .3rem; }
+.xfer-group label.inline input { flex: none; }

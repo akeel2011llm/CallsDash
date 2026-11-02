@@ -20,7 +20,7 @@ export default async function ClientActivity({ params, searchParams }: { params:
     <>
       {(error === "confirm") && <Notice tone="warn">{t(`admin.err.${error}` as "admin.err.name")}</Notice>}
       {saved && <Notice tone="ok">{t("agent.saved").split(".")[0]}.</Notice>}
-      <PageHead title={t("ws.activity")} actions={<Link className="btn ghost" href={`/admin/clients/${id}/activity/duplicate`}>{t("dup.open")}</Link>} />
+      <PageHead title={t("ws.activity")} actions={<><Link className="btn ghost" href={`/admin/clients/${id}/transfer`}>{t("admin.importExport")}</Link><Link className="btn ghost" href={`/admin/clients/${id}/activity/duplicate`}>{t("dup.open")}</Link></>} />
       <FoldControls openAll={t("fold.openAll")} closeAll={t("fold.closeAll")} />
       <Fold id="audit" open title={t("admin.audit")}>
         <div className="table-wrap">
