@@ -10,7 +10,7 @@ export const FORMAT = "callsdash-client";
 export const FORMAT_VERSION = 1;
 
 export const PART_GROUPS = {
-  assistant: ["instructions", "voices", "studio.model", "studio.voice", "studio.conversation", "studio.hearing", "studio.knowledge", "studio.safety", "studio.analysis", "studio.widget", "tests"],
+  assistant: ["instructions", "voices", "voiceMode", "studio.model", "studio.voice", "studio.conversation", "studio.hearing", "studio.knowledge", "studio.safety", "studio.analysis", "studio.widget", "tests"],
   content: ["knowledge", "services", "catalogue", "tables"],
   team: ["business", "team"],
   setup: ["hours", "branding", "brandingImages", "contacts", "messages", "rules"],
@@ -28,6 +28,8 @@ export const isListPart = (p: string): p is ListPart => (LIST_PARTS as readonly 
 export const OFF_BY_DEFAULT: PartId[] = ["customers"];
 /** In the file for reference only: an import never applies them. */
 export const EXPORT_ONLY: PartId[] = ["signins"];
+/** Applied after the assistant was updated in ElevenLabs, straight to the agent (the Voice mode is not kept in CallsDash). */
+export const AGENT_PARTS: PartId[] = ["voiceMode"];
 /** Parts whose entries can carry photos (a tick of its own on both sides). */
 export const PHOTO_PARTS = ["catalogue", "team"] as const;
 
@@ -39,7 +41,18 @@ export interface ExportFile {
   /** Which list parts carry their photos. */
   photos: Partial<Record<(typeof PHOTO_PARTS)[number], boolean>>;
   parts: Partial<Record<PartId, unknown>>;
+  /**
+   * Where the assistant settings came from: "live" = read from the agent in ElevenLabs when the file was made (so edits made
+   * directly there are included), "stored" = CallsDash's own copy; `liveError` says why reading ElevenLabs failed.
+   */
+  assistantFrom?: "live" | "stored";
+  liveError?: string;
 }
+
+/** The names the file's client is known by (English and Arabic), to be replaced by the importing client's names. */
+export const fromNames = (f: Pick<ExportFile, "from">): string[] =>
+  [...new Set([f.from.displayName, f.from.name, f.from.nameAr].map((x) => x.trim()).filter((x) => x.length >= 3))];
+export const isArabic = (s: string) => /[\u0600-\u06FF]/.test(s);
 
 /** Checks a file read in the browser; returns the problem when it is not a CallsDash client file. */
 export function readExportFile(v: unknown): { ok: true; file: ExportFile } | { ok: false; error: "format" | "version" } {
@@ -53,6 +66,8 @@ export function readExportFile(v: unknown): { ok: true; file: ExportFile } | { o
     ok: true,
     file: {
       format: FORMAT, version: o.version, exportedAt: str(o.exportedAt, 40), photos: obj(o.photos) as ExportFile["photos"], parts,
+      ...(o.assistantFrom === "live" || o.assistantFrom === "stored" ? { assistantFrom: o.assistantFrom } : {}),
+      ...(typeof o.liveError === "string" && o.liveError ? { liveError: str(o.liveError, 400) } : {}),
       from: { id: str(from.id, 64), name: str(from.name, 120), nameAr: str(from.nameAr, 120), displayName: str(from.displayName, 120) },
     },
   };

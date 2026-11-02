@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import {
-  EXPORT_ONLY, LIST_PARTS, OFF_BY_DEFAULT, PART_GROUPS, PHOTO_PARTS, namesOf, partCount, readExportFile,
+  AGENT_PARTS, EXPORT_ONLY, LIST_PARTS, fromNames, OFF_BY_DEFAULT, PART_GROUPS, PHOTO_PARTS, namesOf, partCount, readExportFile,
   type ExportFile, type ListPart, type PartGroup, type PartId,
 } from "@/lib/client-transfer-parts";
 
@@ -52,6 +52,7 @@ export function ExportCard({ tenantId, L, counts }: { tenantId: string; L: Trans
         <button type="button" className="btn small ghost" onClick={() => setPicked(new Set())}>{L.none}</button>
       </div>
       <PartTicks L={L} available={all} picked={picked} setPicked={setPicked} counts={counts} />
+      <label className="inline"><input type="checkbox" name="live" value="1" defaultChecked />{L.live}</label>
       <label className="inline"><input type="checkbox" name="photos" value="1" />{L.photos}</label>
       {picked.has("customers") && <p className="notice warn">{L.customersWarn}</p>}
       <p className="muted small">{L.never}</p>
@@ -83,7 +84,7 @@ function chunks(entries: unknown[]): unknown[][] {
   return out.length ? out : [[]];
 }
 
-export function ImportCard({ tenantId, tenantName, L }: { tenantId: string; tenantName: string; L: TransferLabels }) {
+export function ImportCard({ tenantId, tenantName, nameEn, nameAr, L }: { tenantId: string; tenantName: string; nameEn: string; nameAr: string; L: TransferLabels }) {
   const [file, setFile] = useState<ExportFile | null>(null);
   const [error, setError] = useState("");
   const [picked, setPicked] = useState<Set<PartId>>(new Set());
@@ -95,6 +96,11 @@ export function ImportCard({ tenantId, tenantName, L }: { tenantId: string; tena
   const [log, setLog] = useState<string[]>([]);
   const [results, setResults] = useState<Result[]>([]);
   const [failure, setFailure] = useState("");
+  const [oldNames, setOldNames] = useState("");
+  const [newName, setNewName] = useState(nameEn);
+  const [newNameAr, setNewNameAr] = useState(nameAr);
+  const [renamed, setRenamed] = useState(0);
+  const [agentNote, setAgentNote] = useState<{ tone: "ok" | "warn"; text: string } | null>(null);
 
   const available = useMemo(() => (file ? (Object.keys(file.parts) as PartId[]) : []), [file]);
   const counts = useMemo(() => Object.fromEntries(available.map((p) => [p, partCount(file?.parts[p])])) as Partial<Record<PartId, number | null>>, [available, file]);
@@ -111,21 +117,26 @@ export function ImportCard({ tenantId, tenantName, L }: { tenantId: string; tena
       const r = readExportFile(JSON.parse(await f.text()));
       if (!r.ok) { setError(L[`bad.${r.error}`]); return; }
       setFile(r.file);
+      setOldNames(fromNames(r.file).join("\n"));
       setPicked(new Set((Object.keys(r.file.parts) as PartId[]).filter((p) => !OFF_BY_DEFAULT.includes(p) && !EXPORT_ONLY.includes(p))));
     } catch { setError(L["bad.read"]); }
   };
 
   const run = async () => {
     if (!file) return;
-    setStatus("running"); setFailure(""); setResults([]);
-    const options = { mode, rename: other && rename, photos: hasPhotos && photos, from: file.from };
+    setStatus("running"); setFailure(""); setResults([]); setAgentNote(null); setRenamed(0);
+    const options = {
+      mode, rename: other && rename, photos: hasPhotos && photos, from: file.from,
+      oldNames: oldNames.split(/[\n,،]+/).map((x) => x.trim()).filter(Boolean), newName, newNameAr,
+    };
+    let names = 0;
     const lines: string[] = [];
     const say = (s: string) => { lines.push(s); setLog([...lines]); };
     try {
-      const settings = Object.fromEntries(applying.filter((p) => !(LIST_PARTS as readonly string[]).includes(p)).map((p) => [p, file.parts[p]]));
+      const settings = Object.fromEntries(applying.filter((p) => !(LIST_PARTS as readonly string[]).includes(p) && !AGENT_PARTS.includes(p)).map((p) => [p, file.parts[p]]));
       if (Object.keys(settings).length) {
         say(L["step.settings"]);
-        await post(tenantId, { step: "settings", parts: settings, options });
+        names += Number((await post(tenantId, { step: "settings", parts: settings, options })).renamed ?? 0);
       }
       // the team after the business (its roles), the rest in any order
       const order: ListPart[] = ["team", "services", "knowledge", "catalogue", "tables", "customers"];
@@ -139,12 +150,20 @@ export function ImportCard({ tenantId, tenantName, L }: { tenantId: string; tena
           say(fill(L.stepList, { part: L[`part.${part}`], n: i + 1, of: list.length }));
           const r = await post(tenantId, { step: "list", part, entries: list[i], options, ...(i === 0 && mode === "replace" ? { keep: namesOf(part, entries) } : {}) });
           for (const k of ["added", "updated", "removed", "skipped"] as const) sum[k] += Number(r[k] ?? 0);
+          names += Number(r.renamed ?? 0);
         }
         out.push(sum);
         setResults([...out]);
       }
       say(L["step.finish"]);
-      await post(tenantId, { step: "finish", options });
+      setRenamed(names);
+      const f = await post(tenantId, { step: "finish", options, ...(applying.includes("voiceMode") ? { voiceMode: file.parts.voiceMode } : {}) });
+      const sync = String(f.sync ?? "");
+      const detail = f.detail ? ` (${String(f.detail)})` : "";
+      if (sync === "ok") {
+        const vm = f.voiceMode === "set" ? ` ${L["sync.voiceMode"]}` : f.voiceMode === "unknown" ? ` ${L["sync.voiceModeUnknown"]}` : f.voiceMode === "failed" ? ` ${L["sync.voiceModeFailed"]}${detail}` : "";
+        setAgentNote({ tone: f.voiceMode === "failed" ? "warn" : "ok", text: L["sync.ok"] + vm });
+      } else setAgentNote({ tone: "warn", text: (L[`sync.${sync}`] ?? L["sync.failed"]) + (sync === "failed" ? detail : "") });
       setStatus("done");
     } catch (e) {
       setFailure(e instanceof Error ? e.message : String(e));
@@ -162,6 +181,10 @@ export function ImportCard({ tenantId, tenantName, L }: { tenantId: string; tena
       {file && (
         <>
           <p><strong>{fill(L.from, { name: file.from.displayName || file.from.name || "?", date: file.exportedAt.slice(0, 10) })}</strong></p>
+          {file.assistantFrom === "live" && <p className="muted small">{L.fromLive}</p>}
+          {file.assistantFrom !== "live" && (available as string[]).some((p) => PART_GROUPS.assistant.includes(p as never)) && (
+            <p className="notice warn">{L.fromStored}{file.liveError ? ` ${file.liveError}` : ""}</p>
+          )}
           <PartTicks L={L} available={available} picked={picked} setPicked={setPicked} counts={counts} />
           {picked.has("signins") && (
             <div className="notice">
@@ -182,7 +205,19 @@ export function ImportCard({ tenantId, tenantName, L }: { tenantId: string; tena
               )}
             </fieldset>
           )}
-          {other && <label className="inline"><input type="checkbox" checked={rename} onChange={(e) => setRename(e.target.checked)} />{fill(L.rename, { from: file.from.displayName || file.from.name, to: tenantName })}</label>}
+          {other && (
+            <fieldset className="xfer-group">
+              <legend><label className="inline"><input type="checkbox" checked={rename} onChange={(e) => setRename(e.target.checked)} /><strong>{L.renameTitle}</strong></label></legend>
+              {rename && (
+                <>
+                  <label>{L.oldNames}<textarea rows={3} value={oldNames} onChange={(e) => setOldNames(e.target.value)} /></label>
+                  <small className="muted">{L.oldNamesHelp}</small>
+                  <label>{L.newName}<input value={newName} onChange={(e) => setNewName(e.target.value)} maxLength={120} /></label>
+                  <label>{L.newNameAr}<input value={newNameAr} onChange={(e) => setNewNameAr(e.target.value)} maxLength={120} dir="rtl" /></label>
+                </>
+              )}
+            </fieldset>
+          )}
           {hasPhotos && <label className="inline"><input type="checkbox" checked={photos} onChange={(e) => setPhotos(e.target.checked)} />{L.photosImport}</label>}
           {picked.has("customers") && <p className="notice warn">{L.customersWarn}</p>}
           <p className="muted small">{L.syncNote}</p>
@@ -194,6 +229,8 @@ export function ImportCard({ tenantId, tenantName, L }: { tenantId: string; tena
       {results.length > 0 && (
         <ul className="notes">{results.map((r) => <li key={r.part}>{fill(L.result, { part: L[`part.${r.part}`], added: r.added, updated: r.updated, removed: r.removed })}{r.skipped ? ` · ${fill(L.skipped, { n: r.skipped })}` : ""}</li>)}</ul>
       )}
+      {status === "done" && renamed > 0 && <p className="muted">{fill(L.renamedCount, { n: renamed })}</p>}
+      {agentNote && <p className={`notice ${agentNote.tone}`} role="status">{agentNote.text}</p>}
       {status === "done" && <p className="notice ok" role="status">{L.done}</p>}
       {status === "failed" && <p className="notice warn" role="alert">{fill(L.failed, { detail: failure })}</p>}
     </section>

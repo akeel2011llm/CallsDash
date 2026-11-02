@@ -102,6 +102,12 @@ export interface LiveAgent {
   firstMessage?: string;
   arabicFirstMessage?: string;
   /* Everything below is read only for "Read from ElevenLabs" (lib/studio-import.ts). */
+  /**
+   * The agent's Voice mode (ElevenLabs' Agent tab): `model` is the Realtime model (eleven_realtime_v1_mini or _max), null for
+   * Custom. ElevenLabs' docs name the field `realtime_model` without saying where it sits, so `path` is where it was found inside
+   * conversation_config. Missing when the agent JSON has no such field (a workspace without Realtime models).
+   */
+  realtime?: { path: string[]; model: string | null };
   parallelTools?: boolean;
   /** `preference` of backup_llm_config (default, disabled, override) and the models listed in `order`. */
   backupPreference?: string;
@@ -246,9 +252,26 @@ export function mapPrices(raw: unknown): LlmPrice[] {
   });
 }
 
+/** Where `key` sits in a JSON object (breadth first, a few levels deep), with its value. */
+export function findKey(root: unknown, key: string, depth = 5): { path: string[]; value: unknown } | null {
+  let level: { path: string[]; v: unknown }[] = [{ path: [], v: root }];
+  for (let d = 0; d <= depth && level.length; d++) {
+    const next: { path: string[]; v: unknown }[] = [];
+    for (const { path, v } of level) {
+      if (!v || typeof v !== "object" || Array.isArray(v)) continue;
+      const o = v as Record<string, unknown>;
+      if (key in o) return { path: [...path, key], value: o[key] };
+      for (const [k, x] of Object.entries(o)) if (x && typeof x === "object" && !Array.isArray(x)) next.push({ path: [...path, k], v: x });
+    }
+    level = next;
+  }
+  return null;
+}
+
 export function mapLiveAgent(raw: unknown): LiveAgent {
   const a = obj(raw);
   const cc = obj(a.conversation_config);
+  const rt = findKey(cc, "realtime_model");
   const agent = obj(cc.agent);
   const prompt = obj(agent.prompt);
   const tts = obj(cc.tts);
@@ -268,6 +291,7 @@ export function mapLiveAgent(raw: unknown): LiveAgent {
   const hold = obj(queue.hold_audio);
   const strings = (v: unknown) => (Array.isArray(v) ? arr(v).filter((x): x is string => typeof x === "string") : undefined);
   return {
+    ...(rt ? { realtime: { path: rt.path, model: typeof rt.value === "string" && rt.value ? rt.value : null } } : {}),
     name: str(a.name), llm: str(prompt.llm), temperature: num(prompt.temperature), maxTokens: num(prompt.max_tokens), reasoningEffort: str(prompt.reasoning_effort),
     language: str(agent.language), voiceId: str(tts.voice_id), ttsModel: str(tts.model_id), arabicVoiceId: str(ar.voice_id), arabicTtsModel: str(ar.model_id),
     stability: num(tts.stability), similarityBoost: num(tts.similarity_boost), speed: num(tts.speed),
