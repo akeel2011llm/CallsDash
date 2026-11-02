@@ -1,3 +1,4 @@
+import { readServices, servicesKey, servicesText } from "./services";
 import { createHash } from "node:crypto";
 import { AGENT_VERSION, buildAgentConfig, knowledgeText, toolDefinitions, widgetHostnames } from "./agent-config";
 import { buildExtras, withExtras, type ExtraGroup } from "./agent-extras";
@@ -99,9 +100,11 @@ export async function syncAgent(d: SyncDeps, tenantId: string, actor: string, op
   try {
     const toolIds = await ensureTools(d);
     const items = await d.data.getKnowledge(tenantId);
+    // the services list (lib/services.ts) goes into the same document, so the assistant knows what is offered
+    const offered = servicesText(readServices(await d.data.getSetting(servicesKey(tenantId)).catch(() => undefined)));
     const docName = `Knowledge: ${tenant.name}`.slice(0, 100);
     if (reuseDoc) newDoc = { id: prevDoc!, name: docName };
-    else if (items.length) newDoc = { id: (await d.api.createKnowledgeText({ name: docName, text: knowledgeText(items) })).id, name: docName };
+    else if (items.length || offered) newDoc = { id: (await d.api.createKnowledgeText({ name: docName, text: [offered, knowledgeText(items)].filter(Boolean).join("\n\n") })).id, name: docName };
     const doctors = await d.data.getDoctors(tenantId);
     const config = buildAgentConfig({ tenant, settings, doctors, toolIds, knowledgeDoc: newDoc, appUrl: d.appUrl, initSecret: d.initSecret });
     let agentId = settings.elevenLabsAgentId;

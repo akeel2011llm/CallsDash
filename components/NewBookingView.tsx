@@ -12,6 +12,8 @@ import type { BookingScope } from "@/components/BookingList";
 import { asksId, idInputProps, idRuleOf } from "@/lib/id-rule";
 import { ExtraInputs } from "@/components/ExtraFields";
 import { extraFieldsOf } from "@/lib/extra-fields";
+import { getSetting } from "@/lib/data";
+import { readServices, serviceName, servicesKey } from "@/lib/services";
 
 export type NewBookingParams = { doctor?: string; date?: string; err?: string; name?: string; phone?: string; service?: string };
 
@@ -23,6 +25,7 @@ export async function NewBookingView({ base, tenant, doctorId, sp }: BookingScop
   const picked = doctor ? await daySlots(await bookingService(), tenant.id, doctor.id, date) : null;
   const wa = confirmationOptions(tenant);
   const id = idRuleOf(tenant);
+  const services = readServices(await getSetting(servicesKey(tenant.id)).catch(() => undefined)).filter((x) => x.active);
   return (
     <>
       <PageHead title={t("bookings.new")} actions={<Link className="btn ghost" href={`${base}/bookings`}>{t("common.back")}</Link>} />
@@ -57,7 +60,8 @@ export async function NewBookingView({ base, tenant, doctorId, sp }: BookingScop
               <label>{t("bookings.patientCpr")}<input name="patientCpr" {...idInputProps(id)} /></label>
               <small className="muted">{t("bookings.cprHelp")}</small>
             </>}
-            <label>{t("common.service")}<input name="service" maxLength={120} placeholder={t("bookings.servicePlaceholder")} defaultValue={sp.service ?? ""} /></label>
+            <label>{t("common.service")}<input name="service" maxLength={120} placeholder={services.length ? t("services.pickOrType") : t("bookings.servicePlaceholder")} defaultValue={sp.service ?? ""} list={services.length ? "services-list" : undefined} autoComplete="off" dir="auto" /></label>
+            {services.length > 0 && <datalist id="services-list">{services.map((x) => <option key={x.id} value={serviceName(x, locale)}>{`${x.minutes} min${x.price ? ` · ${x.price}` : ""}`}</option>)}</datalist>}
             <ExtraInputs fields={extraFieldsOf(tenant, "booking")} t={t} locale={locale} />
             <label>{t("bookings.notes")}<textarea name="notes" rows={3} maxLength={1000} /></label>
             <small className="muted">{t("bookings.remindersNote")}</small>

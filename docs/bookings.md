@@ -42,3 +42,10 @@ A doctor never sees other doctors' bookings, credits, conversations or settings:
 - Availability (`lib/booking.ts`) uses the doctor's own hours when set, and treats leave and closed days as busy. Adding leave or a closed day says how many existing bookings fall on those days, so staff can move them.
 - **Booking edits**: patient name, phone, CPR number and service (a booking made before CPR was asked can be saved with the CPR left empty); the clinic team can hand a booking to another doctor at the same time if that doctor is free (the Google event moves calendars). A doctor can fix details on their own bookings but cannot change the doctor.
 - **Delete booking** (manager only, tick-box confirmation): removes the booking and its Google event with no record. Everyone else cancels, which keeps the record.
+
+## Services (2026-11-02)
+
+- Library: `lib/service-library.ts`, 20 kinds of business with 15 services each (English, Arabic, usual minutes).
+- Each client's list: `lib/services.ts` (setting `services.<tenantId>`), edited in `components/ServicesManager.tsx` by the admin (client > Business > Services) and the client's manager (Bookings > Services); receptionists see it read-only. Add from the library, add own, edit, hide, delete with a tick.
+- New booking and booking details offer the active services as a pick list (free text still allowed).
+- The assistant gets the active services at the top of its knowledge document (`servicesText`) at the next sync; every change runs the usual auto-sync.

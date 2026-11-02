@@ -32,6 +32,7 @@ export async function ClientTabs({ group }: { group: ClientGroup }) {
     items = [
       tab("/app/bookings", "nav.bookings"),
       tab("/app/calendar", "nav.calendarHours"),
+      tab("/app/services", "services.title"),
       ...(manager && businessOf(tenant).staffScheduling ? [tab("/app/doctors", "nav.doctors")] : []),
     ];
   } else if (group === "catalog") {
