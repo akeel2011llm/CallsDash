@@ -5,7 +5,7 @@ import {
   addDoctorAction, addTimeOffAction, removeDoctorAction, removeTimeOffAction, saveDoctorAction, saveDoctorHoursAction, testDoctorCalendarAction,
 } from "@/lib/manage-actions";
 import { todayKey } from "@/lib/booking-ui";
-import { roleName, roleOf, rolesOf } from "@/lib/business-types";
+import { departmentName, departmentsOf, roleName, roleOf, rolesOf } from "@/lib/business-types";
 import { Badge, Notice } from "./ui";
 import { SubmitButton } from "./SubmitButton";
 import { HoursFields } from "./HoursFields";
@@ -13,7 +13,7 @@ import { ConfirmDelete } from "./Confirm";
 import { ExtraInputs, ExtraValuesInline } from "./ExtraFields";
 import { extraFieldsOf } from "@/lib/extra-fields";
 
-export type DoctorNotice = { doc?: string; cal?: string; clash?: string; role?: string };
+export type DoctorNotice = { doc?: string; cal?: string; clash?: string; role?: string; dept?: string };
 const DOC_NOTICES = ["added", "saved", "removed", "name_missing", "name_taken", "hours_invalid", "dates_invalid", "confirm", "has_bookings", "has_login", "bad_extra"];
 const CAL_RESULTS = ["ok", "no_id", "no_key", "key_rejected", "not_shared", "timeout", "other"];
 
@@ -37,8 +37,22 @@ export function DoctorsManager({ tenant, doctors, bookings, logins, returnTo, sp
   const roles = rolesOf(tenant);
   const many = roles.length > 1;
   const filter = many && roles.some((r) => r.key === sp.role) ? sp.role : "";
-  const shown = filter ? doctors.filter((d) => roleOf(roles, d.role).key === filter) : doctors;
+  // departments (Denting, Paediatrics...): a picker and a filter appear once the client has any (Roles and departments page)
+  const depts = departmentsOf(tenant);
+  const deptFilter = sp.dept === "none" || depts.some((x) => x.key === sp.dept) ? sp.dept! : "";
+  const inDept = (d: Doctor, key: string) => (key === "none" ? !depts.some((x) => x.key === d.department) : d.department === key);
+  const shown = doctors.filter((d) => (!filter || roleOf(roles, d.role).key === filter) && (!deptFilter || inDept(d, deptFilter)));
   const base = returnTo.split(/[?#]/)[0];
+  const href = (role: string, dept: string) => `${base}${role || dept ? `?${[role && `role=${role}`, dept && `dept=${dept}`].filter(Boolean).join("&")}` : ""}#doctors`;
+  const deptOf = (d: Doctor) => depts.find((x) => x.key === d.department);
+  const deptPick = (cur?: string) => depts.length ? (
+    <label style={{ flex: 1, minWidth: 140 }}>{t("team.department")}
+      <select name="department" defaultValue={depts.some((x) => x.key === cur) ? cur : ""}>
+        <option value="">{t("team.noDepartment")}</option>
+        {depts.map((x) => <option key={x.key} value={x.key}>{departmentName(x, locale)}</option>)}
+      </select>
+    </label>
+  ) : null;
   const teamFields = extraFieldsOf(tenant, "team");
   const rolePick = (cur?: string) => many ? (
     <label style={{ flex: 1, minWidth: 140 }}>{t("team.role")}
@@ -54,11 +68,21 @@ export function DoctorsManager({ tenant, doctors, bookings, logins, returnTo, sp
       {doctors.length === 0 && <small className="muted">{t("admin.doctor.none")}</small>}
       {many && doctors.length > 0 && (
         <nav className="row" aria-label={t("team.role")}>
-          <a className={filter ? "btn small ghost" : "btn small"} href={`${base}#doctors`} aria-current={filter ? undefined : "true"}>{t("team.allRoles")} ({doctors.length})</a>
+          <a className={filter ? "btn small ghost" : "btn small"} href={href("", deptFilter)} aria-current={filter ? undefined : "true"}>{t("team.allRoles")} ({doctors.length})</a>
           {roles.map((r) => {
             const n = doctors.filter((d) => roleOf(roles, d.role).key === r.key).length;
-            return <a key={r.key} className={filter === r.key ? "btn small" : "btn small ghost"} href={`${base}?role=${r.key}#doctors`} aria-current={filter === r.key ? "true" : undefined}>{roleName(r, locale, true)} ({n})</a>;
+            return <a key={r.key} className={filter === r.key ? "btn small" : "btn small ghost"} href={href(r.key, deptFilter)} aria-current={filter === r.key ? "true" : undefined}>{roleName(r, locale, true)} ({n})</a>;
           })}
+        </nav>
+      )}
+      {depts.length > 0 && doctors.length > 0 && (
+        <nav className="row" aria-label={t("team.department")}>
+          <a className={deptFilter ? "btn small ghost" : "btn small"} href={href(filter ?? "", "")} aria-current={deptFilter ? undefined : "true"}>{t("team.allDepartments")}</a>
+          {depts.map((x) => {
+            const n = doctors.filter((d) => d.department === x.key).length;
+            return <a key={x.key} className={deptFilter === x.key ? "btn small" : "btn small ghost"} href={href(filter ?? "", x.key)} aria-current={deptFilter === x.key ? "true" : undefined}>{departmentName(x, locale)} ({n})</a>;
+          })}
+          <a className={deptFilter === "none" ? "btn small" : "btn small ghost"} href={href(filter ?? "", "none")}>{t("team.noDepartment")} ({doctors.filter((d) => inDept(d, "none")).length})</a>
         </nav>
       )}
       {shown.map((d) => {
@@ -75,7 +99,7 @@ export function DoctorsManager({ tenant, doctors, bookings, logins, returnTo, sp
                   // eslint-disable-next-line @next/next/no-img-element
                   ? <img src={`/api/data/photo/doctor/${d.id}?v=${Date.parse(d.photoAt) || 0}&t=${tenant.id}`} alt="" width={36} height={36} loading="lazy" style={{ objectFit: "cover", borderRadius: "50%" }} />
                   : null}
-                <span><strong>{d.name}</strong>{many ? <span className="muted"> · {roleName(roleOf(roles, d.role), locale)}</span> : null}{d.specialty ? <span className="muted"> · {d.specialty}</span> : null}
+                <span><strong>{d.name}</strong>{many ? <span className="muted"> · {roleName(roleOf(roles, d.role), locale)}</span> : null}{deptOf(d) ? <span className="muted"> · {departmentName(deptOf(d)!, locale)}</span> : null}{d.specialty ? <span className="muted"> · {d.specialty}</span> : null}
                   {teamFields.length > 0 && <small className="muted" style={{ display: "block" }}><ExtraValuesInline fields={teamFields} values={d.extra} t={t} locale={locale} /></small>}</span>
               </span>
               <span className="row">
@@ -95,6 +119,7 @@ export function DoctorsManager({ tenant, doctors, bookings, logins, returnTo, sp
                 <div className="row">
                   <label style={{ flex: 2, minWidth: 180 }}>{t("admin.doctor.name")}<input name="name" required maxLength={120} defaultValue={d.name} /></label>
                   {rolePick(d.role)}
+                  {deptPick(d.department)}
                   <label style={{ flex: 2, minWidth: 160 }}>{t("admin.doctor.specialty")}<input name="specialty" maxLength={120} defaultValue={d.specialty} /></label>
                   <label style={{ flex: 0 }}>{t("doctors.color")}<input type="color" name="color" defaultValue={d.color} /></label>
                 </div>
@@ -163,6 +188,7 @@ export function DoctorsManager({ tenant, doctors, bookings, logins, returnTo, sp
         {hidden}
         <label style={{ flex: 2, minWidth: 180 }}>{t("admin.doctor.name")}<input name="name" required maxLength={120} /></label>
         {rolePick(filter || undefined)}
+        {deptPick(deptFilter || undefined)}
         <label style={{ flex: 2, minWidth: 160 }}>{t("admin.doctor.specialty")}<input name="specialty" maxLength={120} /></label>
         <label style={{ flex: "1 1 100%" }}>{t("admin.doctor.about")}<textarea name="about" rows={2} maxLength={800} /></label>
         {teamFields.length > 0 && <div className="form-cols" style={{ flex: "1 1 100%" }}><ExtraInputs fields={teamFields} t={t} locale={locale} /></div>}

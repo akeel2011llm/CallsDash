@@ -35,7 +35,19 @@ export interface BusinessProfile {
    * decides the words and setup rules, and comes from the kind (BUSINESS_KINDS).
    */
   kind?: BusinessKind;
+  /** The client's departments (Denting, Paediatrics...), managed on Business > Roles and departments. Missing = none. */
+  departments?: Department[];
 }
+
+/** One department, named by the admin or picked from lib/team-library.ts. `key` never changes once made. */
+export interface Department { key: string; en: string; ar: string; about?: string }
+export const MAX_DEPARTMENTS = 40;
+
+/** The client's departments, in their order. */
+export function departmentsOf(t: Pick<Tenant, "business"> | null | undefined): Department[] {
+  return (t?.business?.departments ?? []).filter((d) => d && /^[a-z][a-z0-9_]{0,30}$/.test(d.key) && d.en?.trim()).slice(0, MAX_DEPARTMENTS);
+}
+export const departmentName = (d: Department, locale: Locale) => (locale === "ar" && d.ar ? d.ar : d.en);
 
 /** The 20 kinds offered in Type of business, each with the type whose words and rules it uses. Keys match lib/service-library.ts. */
 export const BUSINESS_KINDS = {
@@ -74,7 +86,7 @@ export type WordKey = (typeof WORD_KEYS)[number];
 
 /** One kind of team member, named by the admin in English and Arabic, singular and plural. `key` never changes once made. */
 export interface Role { key: string; one: string; many: string; oneAr: string; manyAr: string }
-export const MAX_ROLES = 12;
+export const MAX_ROLES = 40;
 
 export interface Vocab {
   staffOne: string; staffMany: string;

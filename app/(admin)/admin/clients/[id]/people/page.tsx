@@ -11,9 +11,9 @@ import { AccessEditor } from "@/components/AccessEditor";
 import { accessKey, readAccess } from "@/lib/access";
 import { getSetting } from "@/lib/data";
 
-export default async function ClientPeople({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ saved?: string; cal?: string; doc?: string; clash?: string; role?: string; access?: string }> }) {
+export default async function ClientPeople({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ saved?: string; cal?: string; doc?: string; clash?: string; role?: string; dept?: string; access?: string }> }) {
   const { id } = await params;
-  const { saved, cal, doc, clash, role, access } = await searchParams;
+  const { saved, cal, doc, clash, role, dept, access } = await searchParams;
   const tenant = await getTenant(id);
   if (!tenant) notFound();
   const [{ t, locale }, doctors, bookings, logins, rules] = await Promise.all([getT(tenant), getDoctors(id), getBookings(id), listProfiles(id), getSetting(accessKey(id)).then(readAccess).catch(() => readAccess(undefined))]);
@@ -26,7 +26,7 @@ export default async function ClientPeople({ params, searchParams }: { params: P
   return (
     <>
       {saved && <Notice tone="ok">{t("agent.saved").split(".")[0]}.</Notice>}
-      <PageHead title={t("ws.people")} actions={<Link className="btn ghost" href={`/admin/users?c=${id}`}>{t("ws.users")}</Link>} />
+      <PageHead title={t("ws.people")} actions={<><Link className="btn ghost" href={`/admin/clients/${id}/business/team`}>{t("teamlib.open")}</Link><Link className="btn ghost" href={`/admin/users?c=${id}`}>{t("ws.users")}</Link></>} />
       <Fold id="permissions" open title={t("admin.permissions")}>
         <form action={adminPermissionsAction} className="stack">
           <input type="hidden" name="tenantId" value={id} /><input type="hidden" name="returnTo" value={returnTo} />
@@ -38,7 +38,7 @@ export default async function ClientPeople({ params, searchParams }: { params: P
       </Fold>
       <AccessEditor tenantId={id} rules={rules} people={logins} t={t} saved={access === "saved"} />
       {access === "gone" && <Notice tone="warn">{t("access.gone")}</Notice>}
-      <DoctorsManager tenant={tenant} doctors={doctors} bookings={bookings} logins={logins} returnTo={returnTo} sp={{ doc, cal, clash, role }} t={t} locale={locale} />
+      <DoctorsManager tenant={tenant} doctors={doctors} bookings={bookings} logins={logins} returnTo={returnTo} sp={{ doc, cal, clash, role, dept }} t={t} locale={locale} />
     </>
   );
 }

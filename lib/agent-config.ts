@@ -2,7 +2,7 @@ import { variablePlaceholders } from "./agent-context";
 import { acceptsTemperature, defaultLlm } from "./agent-catalog";
 import { STUDIO_DEFAULTS, studioOf } from "./agent-studio";
 import { resolveVoiceId } from "./voices";
-import { relabel, roleName, roleOf, rolesOf, vocabOf } from "./business-types";
+import { departmentsOf, relabel, roleName, roleOf, rolesOf, vocabOf } from "./business-types";
 import { ID_CPR, asksId, idRuleOf, idify, type IdRule } from "./id-rule";
 import { describeField, extraFieldsOf, extraLines } from "./extra-fields";
 import type { AgentSettings, Doctor, KnowledgeItem, Tenant } from "./types";
@@ -120,7 +120,7 @@ const CLOSING_RULES = [
   "For a medical emergency tell the caller to call 999 immediately and also call handoff_to_staff with urgent set to true.",
 ];
 
-type DoctorLine = Pick<Doctor, "id" | "name" | "specialty" | "active"> & Partial<Pick<Doctor, "photoAt" | "role" | "extra">>;
+type DoctorLine = Pick<Doctor, "id" | "name" | "specialty" | "active"> & Partial<Pick<Doctor, "photoAt" | "role" | "department" | "extra">>;
 
 /**
  * The people who take bookings, with the id the tools expect, so the agent can name them and pass the right id. With more than one
@@ -134,10 +134,16 @@ function doctorSection(doctors: DoctorLine[], tenant?: Pick<Tenant, "business"> 
   const intro = many
     ? `${ours("Each person has one role:")} ${roles.map((r) => `${roleName(r, "en")} (in Arabic ${roleName(r, "ar")})`).join(", ")}. When a customer asks for a role, offer only people with that role, and check_availability with each of their doctor_id values.\n`
     : "";
+  // departments (Denting, Paediatrics...): listed with what each does, and each person says theirs
+  const depts = departmentsOf(tenant);
+  const deptIntro = depts.length
+    ? `${ours("Departments:")} ${depts.map((x) => `${x.en} (in Arabic ${x.ar})${x.about ? `: ${x.about.replace(/\s+/g, " ")}` : ""}`).join("; ")}. When a customer needs a department, offer only people in it.\n`
+    : "";
+  const deptOf = (d: DoctorLine) => depts.find((x) => x.key === d.department);
   // the client's own team fields marked "the assistant may tell customers" (languages spoken, gender)
   const told = extraFieldsOf(tenant, "team").filter((f) => f.ask);
   const details = (d: DoctorLine) => extraLines(told, d.extra, "en", { yes: "yes", no: "no" }).map((l) => `; ${l.label}: ${l.value}`).join("");
-  return `${ours("# Doctors")}\n${intro}${active.map((d) => `- ${d.name}${many ? ` [role: ${roleName(roleOf(roles, d.role), "en")}]` : ""}${d.specialty ? `, ${d.specialty}` : ""}${details(d)} (doctor_id: ${d.id})${d.photoAt ? " [has a photo]" : ""}`).join("\n")}`;
+  return `${ours("# Doctors")}\n${intro}${deptIntro}${active.map((d) => `- ${d.name}${many ? ` [role: ${roleName(roleOf(roles, d.role), "en")}]` : ""}${deptOf(d) ? ` [department: ${deptOf(d)!.en}]` : ""}${d.specialty ? `, ${d.specialty}` : ""}${details(d)} (doctor_id: ${d.id})${d.photoAt ? " [has a photo]" : ""}`).join("\n")}`;
 }
 
 /**
