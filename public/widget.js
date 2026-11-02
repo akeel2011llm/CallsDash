@@ -36,6 +36,7 @@
   // The assistant's show_image tool (a client tool, run here in the visitor's browser) draws a catalogue photo over the chat, just above its message box.
   // Only pictures served by this CallsDash address are drawn, whatever the assistant asks for.
   var PHONE_REPLY = "Not shown on this screen. Put the photo inside your reply as ![short caption](image_url) on its own line, using the same image_url.";
+  var VOICE_NO_CARD = "The photo cannot be shown on this screen. Do not say, spell or write any link or address. Just describe the item, and offer to send the details by message.";
   function photoUrl(raw) {
     try {
       var u = new URL(String(raw), base);
@@ -78,7 +79,8 @@
     if (typed) return PHONE_REPLY;
     if (placeInTranscript(embed, href, caption, rtl)) return "Shown.";
     // On a phone the chat fills the screen, so a floating card would sit outside it: the assistant writes the photo into its reply instead.
-    if (window.matchMedia && window.matchMedia("(max-width: 700px)").matches) return PHONE_REPLY;
+    // (In a spoken call the reply is read aloud, so it must not be told to write a photo address: it says nothing about one.)
+    if (window.matchMedia && window.matchMedia("(max-width: 700px)").matches) return VOICE_NO_CARD;
     Array.prototype.forEach.call(document.querySelectorAll('[data-callsdash-widget="photo"]'), function (n) { n.remove(); });
     var close = el("button", { type: "button", "aria-label": rtl ? "إغلاق" : "Close", text: "\u00d7", style: {
       position: "absolute", top: "4px", border: "0", background: "rgba(255,255,255,.9)", borderRadius: "999px", width: "28px", height: "28px", fontSize: "18px", lineHeight: "1", cursor: "pointer", color: "#14202b" } });
