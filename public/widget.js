@@ -46,7 +46,7 @@
 
   // Experimental: in a spoken call the photo is placed inside the chat's transcript (the widget's open shadow root), where a typed chat shows it.
   // The widget's markup is not ours and may change, so the transcript is found by what it is (the scrolling box holding the most text) and
-  // anything unexpected returns false: the caller then draws the floating card as before.
+  // anything unexpected returns false: the caller then draws the floating card as before. The dashboard copy is lib/transcript-photo.ts: keep them the same.
   function placeInTranscript(embed, href, caption, rtl) {
     try {
       var root = embed && embed.shadowRoot;

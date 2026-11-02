@@ -5,6 +5,7 @@ import type { TextConversation } from "@elevenlabs/client";
 import { agentVariables } from "@/lib/agent-context";
 import { CHAT_PHOTO_CSS, splitPhotos, type ChatPart } from "@/lib/chat-photos";
 import type { Tenant } from "@/lib/types";
+import { VOICE_NO_CARD, placeInTranscript } from "@/lib/transcript-photo";
 
 const WIDGET_SCRIPT = "https://unpkg.com/@elevenlabs/convai-widget-embed";
 const PHONE_REPLY = "Not shown on this screen. Put the photo inside your reply as ![short caption](image_url) on its own line, using the same image_url.";
@@ -107,13 +108,19 @@ function FloatingWidget({ agentId, language, openingHours }: { agentId: string; 
       const config = (event as CustomEvent).detail?.config;
       if (!config) return;
       smallChatPhotos(w);
+      // a typed chat is marked textOnly (as in public/widget.js): its photos go inside the assistant's reply
+      const conv = config.overrides?.conversation;
+      const typed = config.textOnly === true || conv?.textOnly === true || conv?.text_only === true;
       config.clientTools = {
         ...config.clientTools,
         show_image: (p: { image_url?: string; caption?: string }) => {
           const href = catalogueImage(p?.image_url);
           if (!href) return "That picture cannot be shown.";
-          // on a phone the chat fills the screen: the assistant writes the photo into its reply instead (as public/widget.js does)
-          if (window.matchMedia("(max-width: 700px)").matches) return PHONE_REPLY;
+          if (typed) return PHONE_REPLY;
+          // in a spoken call the photo goes inside the transcript, as on the clinic's website (public/widget.js)
+          if (placeInTranscript(w, href, p?.caption, language === "ar")) return "Shown.";
+          // on a phone the chat fills the screen and a spoken reply must not read a link: describe the item instead
+          if (window.matchMedia("(max-width: 700px)").matches) return VOICE_NO_CARD;
           img.src = href;
           img.alt = p?.caption ?? "";
           card.hidden = false;

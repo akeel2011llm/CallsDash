@@ -649,25 +649,27 @@ export function applySection(cur: AgentSettings, section: SectionId, p: ParsedSe
   return { ...cur, ...p.top, studio: { ...d, ...p.studio, touched } };
 }
 
+/** The studio options each section owns (the voices themselves belong to the client and are not in any section). */
+export const SECTION_KEYS: Record<SectionId, (keyof AgentStudio)[]> = {
+  model: ["llm", "maxTokens", "reasoningEffort", "parallelTools", "backupMode", "backupModels", "cascadeSeconds", "serviceTier"],
+  voice: ["ttsModelEn", "ttsModelAr", "stability", "similarity", "speed", "textNormalisation", "expressive", "audioTags", "effectFilter", "effectEnvironment", "effectNoise", "effectDistance"],
+  conversation: [
+    "turnEagerness", "turnTimeout", "silenceEndSeconds", "spellingPatience", "speculativeTurn", "maxDurationSeconds", "maxDurationMessage", "protectGreeting", "softTimeoutSeconds", "softTimeoutMessageEn", "softTimeoutMessageAr", "greetingEn", "greetingAr",
+    "backgroundSound", "backgroundVolume", "initialWaitSeconds", "ignoreTerms", "ignoreDefaults", "turnModel", "chatFiles", "chatFilesMax",
+  ],
+  hearing: ["asrProvider", "extraKeywords"],
+  knowledge: ["ragEnabled", "ragEmbedding", "ragMaxLength", "ragMaxChunks"],
+  safety: ["guardFocus", "guardInjection", "recordVoice", "dailyLimit", "concurrencyLimit", "bursting", "queueEnabled", "queueWaitSeconds"],
+  analysis: ["summaryLanguage", "criteriaOff", "tags"],
+  widget: ["widget"],
+};
+
 /** The section back to the defaults, still marked as saved so the defaults are sent explicitly. */
 export function resetSection(cur: AgentSettings, section: SectionId): AgentSettings {
   const d = studioOf(cur);
   const base = STUDIO_DEFAULTS;
   const reset: Partial<AgentStudio> = {};
-  const keys: Record<SectionId, (keyof AgentStudio)[]> = {
-    model: ["llm", "maxTokens", "reasoningEffort", "parallelTools", "backupMode", "backupModels", "cascadeSeconds", "serviceTier"],
-    voice: ["ttsModelEn", "ttsModelAr", "stability", "similarity", "speed", "textNormalisation", "expressive", "audioTags", "effectFilter", "effectEnvironment", "effectNoise", "effectDistance"],
-    conversation: [
-      "turnEagerness", "turnTimeout", "silenceEndSeconds", "spellingPatience", "speculativeTurn", "maxDurationSeconds", "maxDurationMessage", "protectGreeting", "softTimeoutSeconds", "softTimeoutMessageEn", "softTimeoutMessageAr", "greetingEn", "greetingAr",
-      "backgroundSound", "backgroundVolume", "initialWaitSeconds", "ignoreTerms", "ignoreDefaults", "turnModel", "chatFiles", "chatFilesMax",
-    ],
-    hearing: ["asrProvider", "extraKeywords"],
-    knowledge: ["ragEnabled", "ragEmbedding", "ragMaxLength", "ragMaxChunks"],
-    safety: ["guardFocus", "guardInjection", "recordVoice", "dailyLimit", "concurrencyLimit", "bursting", "queueEnabled", "queueWaitSeconds"],
-    analysis: ["summaryLanguage", "criteriaOff", "tags"],
-    widget: ["widget"],
-  };
-  for (const k of keys[section]) (reset as Record<string, unknown>)[k] = structuredClone(base[k]);
+  for (const k of SECTION_KEYS[section]) (reset as Record<string, unknown>)[k] = structuredClone(base[k]);
   // the model section also owns the temperature; the voice section keeps the chosen voices (they are the client's choice, not a tuning)
   const temperature = section === "model" ? 0.3 : cur.temperature;
   return { ...cur, temperature, studio: { ...d, ...reset, touched: [...new Set([...d.touched, section])] } };

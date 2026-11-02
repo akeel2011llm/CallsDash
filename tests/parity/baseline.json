@@ -1,5 +1,6 @@
 {
   "routes": [
+    "GET /api/admin/clients/[id]/export",
     "GET /api/admin/voices",
     "GET /api/brand/[slug]/[kind]",
     "GET /api/data/export/[kind]",
@@ -14,6 +15,7 @@
     "GET /app/customers/csv",
     "GET /app/reports/csv",
     "GET /auth/callback",
+    "POST /api/admin/clients/[id]/import",
     "POST /api/admin/voices",
     "POST /api/agent-tools/[tool]",
     "POST /api/hold-audio",
@@ -49,6 +51,7 @@
     "page /admin/clients/[id]/data/tables/new",
     "page /admin/clients/[id]/people",
     "page /admin/clients/[id]/setup",
+    "page /admin/clients/[id]/transfer",
     "page /admin/clients/new",
     "page /admin/settings",
     "page /admin/users",
@@ -284,6 +287,9 @@
     "@BusinessFields:roleCount",
     "@BusinessFields:schedulingShown",
     "@BusinessFields:staffScheduling",
+    "@ClientTransfer:mode",
+    "@ClientTransfer:part",
+    "@ClientTransfer:photos",
     "@CustomerFields:cpr",
     "@CustomerFields:email",
     "@CustomerFields:id",
