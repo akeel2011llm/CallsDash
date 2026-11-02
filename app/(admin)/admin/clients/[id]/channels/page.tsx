@@ -138,6 +138,7 @@ export default async function Channels({ params, searchParams }: { params: Promi
 
       <Fold title={t("channels.phone.title")} badge={<Badge tone={TONE[tenant.channels.phone]}>{t(`channels.status.${tenant.channels.phone}` as Key)}</Badge>}>
         <p className="muted">{t("channels.phone.help")}</p>
+        <div><Link className="btn" href={`/admin/clients/${id}/channels/phone`}>{t("channels.phone.manage")}</Link></div>
         <form action={savePhoneAction} className="stack">
           {hidden}
           <div className="grid" style={{ gap: ".75rem", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))" }}>

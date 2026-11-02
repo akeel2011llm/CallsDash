@@ -292,7 +292,7 @@ export interface Integrations {
   whatsapp?: WhatsappSettings;
   /** `accountId` is the Instagram business account id Meta sends in webhooks; `inboundUrl` is the custom channel address copied from ElevenLabs. */
   instagram?: { accountId?: string; username?: string; inboundUrl?: string };
-  phone?: { number?: string; provider?: "twilio" | "sip" | "other" };
+  phone?: { number?: string; provider?: "twilio" | "sip" | "other"; /** The number's id in ElevenLabs once it is connected on the phone page (the Twilio SID and token are never stored). */ elevenLabsId?: string };
 }
 
 /** A clinic's WhatsApp number and the booking confirmation it sends (lib/whatsapp.ts has the wording). */

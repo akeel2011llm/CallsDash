@@ -180,7 +180,7 @@ export async function savePhoneAction(f: FormData) {
   const id = str(f, "tenantId");
   const t = await only(id);
   const provider = (["twilio", "sip", "other"] as const).find((p) => p === str(f, "provider"));
-  await store.setIntegrations(id, { ...t.integrations, phone: { number: str(f, "number").slice(0, 40) || undefined, provider } }, actor, "Phone settings saved");
+  await store.setIntegrations(id, { ...t.integrations, phone: { number: str(f, "number").slice(0, 40) || undefined, provider, elevenLabsId: t.integrations.phone?.elevenLabsId } }, actor, "Phone settings saved");
   await store.setChannelStatus(id, "phone" satisfies Channel, status(f), actor);
   done(id);
   redirect(page(id, "saved=1"));
