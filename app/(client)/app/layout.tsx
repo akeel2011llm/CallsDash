@@ -24,7 +24,7 @@ export default async function ClientLayout({ children }: { children: React.React
   const items: (NavItem & { section?: Section })[] = [
     { href: "/app", label: t("nav.today"), icon: "home", exact: true, tab: true },
     { section: "inbox", href: "/app/conversations", label: t("nav.inbox"), icon: "chat", tab: true, also: ["/app/attention", "/app/messages", "/app/recordings"], badge: attention + openRequests || undefined, group: t("nav.g.work") },
-    { section: "bookings", href: "/app/bookings", label: t("nav.bookings"), icon: "check", tab: true, also: ["/app/calendar", "/app/doctors"] },
+    { section: "bookings", href: "/app/bookings", label: t("nav.bookings"), icon: "check", tab: true, also: ["/app/calendar", "/app/services", "/app/doctors"] },
     { section: "customers", href: "/app/customers", label: t("nav.customers"), icon: "contact", tab: true },
     { section: "catalog", href: "/app/catalogue", label: t("nav.catalog"), short: t("nav.catalog.short"), icon: "tag", also: ["/app/data", "/app/tables"], group: t("nav.g.business") },
     { section: "assistant", href: "/app/assistant", label: t("nav.yourAssistant"), icon: "sliders", also: ["/app/knowledge", "/app/agent", "/app/voice", "/app/website"] },

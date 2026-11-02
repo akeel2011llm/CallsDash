@@ -3,7 +3,8 @@ import { asksId, idInputProps, idRuleOf } from "@/lib/id-rule";
 import { notFound } from "next/navigation";
 import { getT } from "@/lib/i18n";
 import { dayKey, fill, fmtDateTime, fmtTime } from "@/lib/format";
-import { getBookings, getDoctors } from "@/lib/data";
+import { getBookings, getDoctors, getSetting } from "@/lib/data";
+import { readServices, serviceName, servicesKey } from "@/lib/services";
 import { bookingService } from "@/lib/booking-service";
 import { daySlots, isBookingError, todayKey } from "@/lib/booking-ui";
 import { rescheduleBookingAction, saveBookingNotesAction, setBookingStatusAction } from "@/lib/actions";
@@ -23,6 +24,7 @@ const tone = (s: string) => (s === "confirmed" || s === "completed" ? "ok" : s =
 /** `canDelete`: the clinic's manager. Everyone else cancels, which keeps the record. */
 export async function BookingDetailView({ base, tenant, doctorId, id, sp, canDelete = false }: BookingScope & { id: string; sp: BookingDetailParams; canDelete?: boolean }) {
   const { t, locale } = await getT(tenant);
+  const services = readServices(await getSetting(servicesKey(tenant.id)).catch(() => undefined)).filter((x) => x.active);
   const booking = (await getBookings(tenant.id)).find((b) => b.id === id && (!doctorId || b.doctorId === doctorId));
   if (!booking) notFound();
   const doctors = await getDoctors(tenant.id);
@@ -115,7 +117,8 @@ export async function BookingDetailView({ base, tenant, doctorId, id, sp, canDel
             <label style={{ flex: 1, minWidth: 150 }}>{t("common.phone")}<input name="patientPhone" required maxLength={30} defaultValue={booking.patientPhone} dir="ltr" inputMode="tel" /></label>
             {asksId(idRule) && <label style={{ flex: 1, minWidth: 130 }}>{t("bookings.patientCpr")}<input name="patientCpr" {...idInputProps(idRule)} placeholder={undefined} defaultValue={booking.patientCpr ?? ""} required={Boolean(booking.patientCpr)} /></label>}
           </div>
-          <label>{t("common.service")}<input name="service" maxLength={120} defaultValue={booking.service} /></label>
+          <label>{t("common.service")}<input name="service" maxLength={120} defaultValue={booking.service} list={services.length ? "services-list" : undefined} autoComplete="off" dir="auto" /></label>
+          {services.length > 0 && <datalist id="services-list">{services.map((x) => <option key={x.id} value={serviceName(x, locale)} />)}</datalist>}
           <ExtraInputs fields={extraFields} values={booking.extra} t={t} locale={locale} />
           {wa.languages.length > 1 && (
             <label>{t("bookings.wa.lang")}

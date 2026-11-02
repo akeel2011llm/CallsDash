@@ -42,7 +42,7 @@ export function sectionOf(path: string): Section | null {
   const p = path.split(/[?#]/)[0];
   const under = (...hs: string[]) => hs.some((h) => p === h || p.startsWith(h + "/"));
   if (under("/app/conversations", "/app/attention", "/app/messages", "/app/recordings")) return "inbox";
-  if (under("/app/bookings", "/app/calendar", "/app/doctors")) return "bookings";
+  if (under("/app/bookings", "/app/calendar", "/app/services", "/app/doctors")) return "bookings";
   if (under("/app/customers")) return "customers";
   if (under("/app/catalogue", "/app/tables", "/app/data")) return "catalog";
   if (under("/app/assistant", "/app/knowledge", "/app/agent", "/app/voice", "/app/website")) return "assistant";

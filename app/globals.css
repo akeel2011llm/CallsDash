@@ -736,3 +736,10 @@ details:not(.fold):not(.card) > summary { padding-block: .3rem; cursor: pointer;
   .grid.tight .stat .muted { font-size: .78rem; line-height: 1.25; }
   .grid.tight .stat strong { font-size: 1.3rem; }
 }
+
+/* services list (components/ServicesManager.tsx) */
+.svc > summary { display: flex; align-items: center; gap: .75rem; padding: .6rem 0; cursor: pointer; min-block-size: 48px; }
+.svc[open] > summary { margin-block-end: .5rem; }
+.svc > form, .svc > details { margin-block-end: .6rem; }
+.svc-row { display: flex; align-items: center; gap: .75rem; padding: .6rem 0; }
+.check-grid.wide { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }

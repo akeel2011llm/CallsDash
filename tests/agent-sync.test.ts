@@ -55,6 +55,14 @@ describe("agent sync", () => {
     const body = calls.find((c) => c.fn === "createAgent")!.args[0] as { conversation_config: { agent: { prompt: { tool_ids: string[] } } } };
     expect(body.conversation_config.agent.prompt.tool_ids).toHaveLength(13);
   });
+  it("puts the services list into the knowledge document, even with no questions and answers", async () => {
+    const { deps, data, tenant, calls } = await setup();
+    await data.setSetting(`services.${tenant.id}`, [{ id: "svc_1", name: "Cleaning", nameAr: "تنظيف", minutes: 45, price: "BHD 20" }, { id: "svc_2", name: "Hidden", minutes: 10, active: false }]);
+    await syncAgent(deps, tenant.id, "admin");
+    const doc = calls.find((c) => c.fn === "createKnowledgeText")!.args[0] as { text: string };
+    expect(doc.text).toContain("- Cleaning (تنظيف): about 45 minutes, price BHD 20");
+    expect(doc.text).not.toContain("Hidden");
+  });
   it("brings only the shared tools up to date when their saved definition is older, and does nothing when it is current", async () => {
     const { deps, data, tenant, calls } = await setup();
     await syncAgent(deps, tenant.id, "admin");
