@@ -21,13 +21,13 @@ export interface TabItem {
  * button works). On a phone the row scrolls sideways and keeps the active tab in view; in Arabic it runs right to left.
  * Used for the client workspace and for grouped menu areas (Inbox, Bookings, Billing...).
  */
-export function Tabs({ items, label }: { items: TabItem[]; label: string }) {
+export function Tabs({ items, label, wrap }: { items: TabItem[]; label: string; /** On a phone, show every tab as a pill on as many lines as needed instead of scrolling sideways. */ wrap?: boolean }) {
   const path = usePathname() ?? "";
   const on = activeTab(path, items);
   const ref = useRef<HTMLAnchorElement | null>(null);
   useEffect(() => { ref.current?.scrollIntoView({ block: "nearest", inline: "nearest" }); }, [on]);
   return (
-    <nav className="ptabs" aria-label={label}>
+    <nav className={wrap ? "ptabs wrap" : "ptabs"} aria-label={label}>
       {items.map((t, i) => (
         <Link
           key={t.href} href={t.href} ref={i === on ? ref : undefined}

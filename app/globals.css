@@ -684,3 +684,55 @@ details.fold[open] > summary { border-block-end: 1px solid var(--line); }
 /* Easy to tap on a phone (at least 24 px high): the back link above a client, and the small fold-out lines */
 .ws-back { display: inline-block; padding-block: .3rem; }
 details:not(.fold):not(.card) > summary { padding-block: .3rem; cursor: pointer; }
+
+/* ---------- client portal rearrangement (2026-11-02) ---------- */
+/* grouped client tabs: on a phone every tab shows as a pill, nothing hides off the edge */
+@media (max-width: 640px) {
+  .ptabs.wrap { flex-wrap: wrap; overflow: visible; border: 0; gap: .4rem; padding: 0; }
+  .ptabs.wrap .ptab { border: 1px solid var(--line); border-radius: 999px; padding: .45rem .85rem; margin: 0; background: var(--surface); min-block-size: 40px; }
+  .ptabs.wrap .ptab.active { background: var(--brand); color: var(--on-brand); border-color: var(--brand); }
+  .ptabs.wrap .ptab.active .pill { background: var(--on-brand); color: var(--brand); }
+}
+/* Today */
+.hero.today { padding-block: 1.1rem; min-block-size: 0; }
+.hero-date { display: block; opacity: .85; font-size: .85rem; margin-block-end: .15rem; }
+.quick { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: .6rem; }
+.quick-btn {
+  display: flex; align-items: center; gap: .6rem; padding: .8rem 1rem; min-block-size: 52px; border-radius: var(--radius);
+  background: var(--surface); border: 1px solid var(--line); color: var(--text); font-weight: 600; text-decoration: none;
+}
+.quick-btn:hover { border-color: var(--brand); color: var(--brand); text-decoration: none; }
+.quick-btn svg { color: var(--brand); flex: none; }
+@media (max-width: 640px) { .quick { grid-template-columns: 1fr 1fr; } .quick-btn { padding: .7rem .75rem; font-size: .92rem; } }
+.day-list { list-style: none; margin: 0; padding: 0; display: grid; }
+.day-list li { border-block-end: 1px solid var(--line); }
+.day-list li:last-child { border-block-end: 0; }
+.day-list a { display: flex; align-items: center; gap: .75rem; padding: .6rem 0; color: inherit; text-decoration: none; min-block-size: 48px; }
+.day-list a:hover .who > :first-child { color: var(--brand); }
+.day-list .time { flex: none; inline-size: 3.6rem; color: var(--brand); display: inline-flex; }
+.day-list .who { flex: 1; min-inline-size: 0; display: grid; }
+.day-list .who small, .day-list .clip { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.day-list .badge { flex: none; }
+.day-list li.past { opacity: .6; }
+/* access per person */
+.check-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: .35rem .9rem; }
+.access-person { border: 1px solid var(--line); border-radius: calc(var(--radius) - 2px); padding: .55rem .8rem; }
+.access-person > summary { cursor: pointer; }
+.access-person[open] > summary { margin-block-end: .6rem; }
+/* phone cards: a cell may name itself */
+@media (max-width: 640px) {
+  table.cards td[data-label]::before { content: attr(data-label) " "; color: var(--muted); font-size: .82rem; }
+  table.cards td.actions { display: flex; gap: .4rem; flex-wrap: wrap; padding-block-start: .35rem; }
+}
+
+@media (max-width: 640px) {
+  table.cards td.lead { color: var(--text); font-size: .98rem; font-weight: 600; }
+  table.cards td.sub { display: inline-block; inline-size: auto; color: var(--muted); font-size: .88rem; margin-inline-end: .6rem; }
+}
+
+@media (max-width: 640px) {
+  .grid.tight { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .5rem; }
+  .grid.tight .stat { padding: .6rem .65rem; }
+  .grid.tight .stat .muted { font-size: .78rem; line-height: 1.25; }
+  .grid.tight .stat strong { font-size: 1.3rem; }
+}

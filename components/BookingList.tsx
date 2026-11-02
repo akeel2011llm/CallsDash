@@ -47,7 +47,7 @@ export async function BookingList({ base, tenant, doctorId, sp }: BookingScope &
       <PageHead title={t("bookings.title")} actions={<><Link className="btn" href={`${base}/bookings/new`}>{t("bookings.new")}</Link>{base === "/app" && <><a className="btn ghost" href="/app/bookings/export">{t("sheet.csv")}</a><a className="btn ghost" href="/app/bookings/export?format=xlsx">{t("sheet.xlsx")}</a></>}</>} />
       {isBookingError(sp.err) && <Notice tone="warn">{t(`bookings.err.${sp.err}` as "bookings.err.slot_taken")}</Notice>}
       {sp.deleted && <Notice tone="ok">{t("bookings.deleted")}</Notice>}
-      <div className="grid">
+      <div className="grid tight">
         <Stat label={t("bookings.todayCount")} value={todayLive} />
         <Stat label={t("home.bookings")} value={upcomingLive} />
         <Stat label={t("bookings.noShows30")} value={noShows} />
@@ -55,38 +55,46 @@ export async function BookingList({ base, tenant, doctorId, sp }: BookingScope &
       <div className="row">
         {VIEWS.map((v) => <Link key={v} className={`btn small ${v === view ? "" : "ghost"}`} href={keep({ view: v })}>{t(`bookings.view.${v}` as "bookings.view.all")}</Link>)}
       </div>
-      <form className="filters card" method="get">
+      <form className="card stack" method="get" role="search">
         <input type="hidden" name="view" value={view} />
-        <label>{t("common.search")}<input name="q" defaultValue={sp.q ?? ""} placeholder={t("bookings.searchPlaceholder")} /></label>
-        {!doctorId && (
-          <label>{t("common.doctor")}
-            <select name="doctor" defaultValue={sp.doctor ?? ""}>
-              <option value="">{t("common.all")}</option>
-              {doctors.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-            </select>
-          </label>
-        )}
-        <label>{t("common.status")}
-          <select name="status" defaultValue={sp.status ?? ""}>
-            <option value="">{t("common.all")}</option>
-            {(["confirmed", "rescheduled", "completed", "cancelled", "no_show"] as const).map((s) => <option key={s} value={s}>{t(`booking.${s}` as "booking.confirmed")}</option>)}
-          </select>
-        </label>
-        <SubmitButton className="btn" type="submit">{t("common.apply")}</SubmitButton>
+        <div className="row" style={{ flexWrap: "nowrap" }}>
+          <input name="q" defaultValue={sp.q ?? ""} placeholder={t("bookings.searchPlaceholder")} aria-label={t("common.search")} style={{ flex: 1, minInlineSize: 0 }} />
+          <SubmitButton className="btn" type="submit">{t("common.search")}</SubmitButton>
+        </div>
+        <details open={Boolean(sp.doctor || sp.status)}>
+          <summary className="muted" style={{ cursor: "pointer" }}>{t("bookings.moreFilters")}</summary>
+          <div className="filters" style={{ marginBlockStart: ".5rem" }}>
+            {!doctorId && (
+              <label>{t("common.doctor")}
+                <select name="doctor" defaultValue={sp.doctor ?? ""}>
+                  <option value="">{t("common.all")}</option>
+                  {doctors.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                </select>
+              </label>
+            )}
+            <label>{t("common.status")}
+              <select name="status" defaultValue={sp.status ?? ""}>
+                <option value="">{t("common.all")}</option>
+                {(["confirmed", "rescheduled", "completed", "cancelled", "no_show"] as const).map((s) => <option key={s} value={s}>{t(`booking.${s}` as "booking.confirmed")}</option>)}
+              </select>
+            </label>
+            <SubmitButton className="btn ghost" type="submit">{t("common.apply")}</SubmitButton>
+          </div>
+        </details>
       </form>
       <div className="card table-wrap">
-        <table>
+        <table className="cards">
           <thead><tr><th>{t("common.date")}</th><th>{t("common.patient")}</th>{!doctorId && <th>{t("common.doctor")}</th>}<th>{t("common.service")}</th><th>{t("common.status")}</th><th /></tr></thead>
           <tbody>
             {rows.length === 0 && <tr><td colSpan={doctorId ? 5 : 6} className="muted">{t("common.none")}</td></tr>}
             {rows.map((b) => (
               <tr key={b.id}>
-                <td><Link href={`${base}/bookings/${b.id}`}>{fmtDateTime(b.startsAt, locale)}</Link></td>
-                <td>{b.patientName}<br /><small className="muted" dir="ltr">{b.patientPhone}{b.patientCpr ? ` · ${t("bookings.cprShort")} ${b.patientCpr}` : ""}</small></td>
-                {!doctorId && <td>{docName.get(b.doctorId)}</td>}
-                <td>{b.service}</td>
+                <td className="lead"><Link href={`${base}/bookings/${b.id}`}>{fmtDateTime(b.startsAt, locale)}</Link></td>
+                <td><span dir="auto">{b.patientName}</span><br /><small className="muted" dir="ltr">{b.patientPhone}{b.patientCpr ? ` · ${t("bookings.cprShort")} ${b.patientCpr}` : ""}</small></td>
+                {!doctorId && <td className="sub">{docName.get(b.doctorId)}</td>}
+                <td className="sub">{b.service}</td>
                 <td><Badge tone={tone(b.status)}>{t(`booking.${b.status}` as "booking.confirmed")}</Badge></td>
-                <td>
+                <td className="actions">
                   <div className="row">
                     <Link className="btn small ghost" href={`${base}/bookings/${b.id}`}>{t("bookings.open")}</Link>
                     {live(b.status) && (

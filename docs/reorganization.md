@@ -431,3 +431,12 @@ Answers: sitemap approved; wizard for new AND existing clients; client "Doctors"
 | 7 | Clean up |
 | 8 | QA at 390 px EN + AR |
 Orders/payment status and the payment gateway come after this, on top of 6c.
+
+## Client portal rearrangement (2026-11-02)
+
+- Menu, in the order a front desk works: **Today**, then Inbox, Bookings, Customers, then Catalog, Assistant, Reports, then Credits, Settings (`app/(client)/app/layout.tsx`).
+- **Today** (`/app`): date, quick buttons (new booking, find a customer, callbacks, try the assistant), today's appointments, a to-do list (callbacks and conversations that need a person), then the week. Charts by channel and outcome stay in Reports.
+- **Assistant > Test** (`/app/assistant`): the "Try the assistant" panel, moved off the home page. The Assistant menu item opens it.
+- Phone: grouped tabs wrap as pills (`Tabs wrap`), bookings, customers and catalogue lists turn into cards (`table.cards` with `td.lead`, `td.sub`, `td.actions`), bookings filters fold under the search box.
+- Lists first: knowledge "Add" is folded and delete needs a tick; customers' lookup setting moved to a fold under the list.
+- **Access per person** (`lib/access.ts`, `lib/access-actions.ts`, `components/AccessEditor.tsx`): the admin (client > People) and the client manager (Settings > Team) tick which sections receptionists may open, for all receptionists or one person. Managers always see everything. Stored in setting `access.<tenantId>`; pages (group layouts and section layouts), exports and client actions check it with `requireSection`. Demo sign-in has "Receptionist at …" to try it.

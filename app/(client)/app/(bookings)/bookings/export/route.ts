@@ -1,4 +1,4 @@
-import { requireClient } from "@/lib/auth";
+import { requireSection } from "@/lib/auth";
 import { getBookings, getDoctors } from "@/lib/data";
 import { formatOf, sheetResponse } from "@/lib/sheet";
 import { extraFieldsOf } from "@/lib/extra-fields";
@@ -10,7 +10,7 @@ const local = (iso: string) => new Date(new Date(iso).getTime() + 3 * 3_600_000)
 
 /** Every booking as a spreadsheet: CSV, or Excel with ?format=xlsx. Same people as the Bookings screen. */
 export async function GET(req: Request) {
-  const { tenant } = await requireClient();
+  const { tenant } = await requireSection("bookings");
   const [bookings, doctors] = await Promise.all([getBookings(tenant.id), getDoctors(tenant.id)]);
   const names = new Map(doctors.map((d) => [d.id, d.name]));
   const fields = extraFieldsOf(tenant, "booking");

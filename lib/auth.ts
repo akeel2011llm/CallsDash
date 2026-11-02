@@ -2,7 +2,8 @@ import "server-only";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { demoMode } from "./demo-flag";
-import { getDoctors, getProfile, getTenant } from "./data";
+import { getDoctors, getProfile, getSetting, getTenant } from "./data";
+import { accessKey, readAccess, sectionsFor, type Section } from "./access";
 import { supabaseConfigured, supabaseServer } from "./supabase";
 import type { Doctor, Session, Tenant } from "./types";
 
@@ -37,6 +38,11 @@ export async function getSession(): Promise<Session | null> {
     const tenantId = v.slice(7);
     return (await getTenant(tenantId)) ? { role: "client", tenantId } : null;
   }
+  // demo only: a receptionist of the client, to try what a team member sees
+  if (v?.startsWith("reception:")) {
+    const tenantId = v.slice(10);
+    return (await getTenant(tenantId)) ? { role: "client", tenantId, staffRole: "receptionist", userId: `demo-reception-${tenantId}` } : null;
+  }
   return null;
 }
 
@@ -70,6 +76,18 @@ export async function requireClient(): Promise<{ tenant: Tenant; actor: string; 
   return { tenant: t, actor: "admin (view as client)", viewingAsAdmin: true, staffRole: "manager" };
 }
 
+/** The portal sections the signed-in client person may open (lib/access.ts). */
+export async function clientSections(c: { tenant: Tenant; staffRole: "manager" | "receptionist"; userId?: string }): Promise<Section[]> {
+  return sectionsFor(readAccess(await getSetting(accessKey(c.tenant.id)).catch(() => undefined)), c.staffRole, c.userId);
+}
+
+/** requireClient, and the person may open this section; otherwise back to the home page with a note. */
+export async function requireSection(section: Section) {
+  const c = await requireClient();
+  if (!(await clientSections(c)).includes(section)) redirect("/app?denied=1");
+  return c;
+}
+
 /** The doctor portal's gate: the doctor's own sign-in, and which of the clinic's doctors they are. */
 export async function requireDoctor(): Promise<{ tenant: Tenant; doctor: Doctor; actor: string; userId?: string }> {
   const s = await getSession();
@@ -92,6 +110,6 @@ export async function requireBookingUser(): Promise<{ tenant: Tenant; actor: str
     const d = await requireDoctor();
     return { tenant: d.tenant, actor: d.actor, doctorId: d.doctor.id, base: "/doctor" };
   }
-  const c = await requireClient();
+  const c = await requireSection("bookings");
   return { tenant: c.tenant, actor: c.actor, base: "/app" };
 }

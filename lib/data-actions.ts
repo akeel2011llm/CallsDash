@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { requireAdmin, requireClient } from "./auth";
+import { requireAdmin, requireSection } from "./auth";
 import { autoSync } from "./auto-sync";
 import { getData } from "./data";
 import { CustomerError, saveCustomerByStaff } from "./customers";
@@ -30,7 +30,7 @@ async function scopeOf(f: FormData): Promise<Scope> {
     if (!tenant) redirect("/admin");
     return { tenant, actor, admin: true, home: `/admin/clients/${tenant.id}/data`, knowledge: true };
   }
-  const { tenant, actor, viewingAsAdmin, staffRole } = await requireClient();
+  const { tenant, actor, viewingAsAdmin, staffRole } = await requireSection("catalog");
   if (!viewingAsAdmin && (!tenant.permissions.dataManager || staffRole !== "manager")) redirect("/app");
   return { tenant, actor, admin: false, home: "/app/data", knowledge: viewingAsAdmin || tenant.permissions.editKnowledge };
 }

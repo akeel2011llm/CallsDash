@@ -7,13 +7,16 @@ import { Fold } from "@/components/Fold";
 import { getBookings, getDoctors, getTenant, listProfiles } from "@/lib/data";
 import { adminPermissionsAction } from "@/lib/actions";
 import { DoctorsManager } from "@/components/DoctorsManager";
+import { AccessEditor } from "@/components/AccessEditor";
+import { accessKey, readAccess } from "@/lib/access";
+import { getSetting } from "@/lib/data";
 
-export default async function ClientPeople({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ saved?: string; cal?: string; doc?: string; clash?: string; role?: string }> }) {
+export default async function ClientPeople({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ saved?: string; cal?: string; doc?: string; clash?: string; role?: string; access?: string }> }) {
   const { id } = await params;
-  const { saved, cal, doc, clash, role } = await searchParams;
+  const { saved, cal, doc, clash, role, access } = await searchParams;
   const tenant = await getTenant(id);
   if (!tenant) notFound();
-  const [{ t, locale }, doctors, bookings, logins] = await Promise.all([getT(tenant), getDoctors(id), getBookings(id), listProfiles(id)]);
+  const [{ t, locale }, doctors, bookings, logins, rules] = await Promise.all([getT(tenant), getDoctors(id), getBookings(id), listProfiles(id), getSetting(accessKey(id)).then(readAccess).catch(() => readAccess(undefined))]);
   const perms = [
     ["editPrompt", "admin.perm.editPrompt"], ["editVoice", "admin.perm.editVoice"],
     ["editBehaviour", "admin.perm.editBehaviour"], ["editKnowledge", "admin.perm.editKnowledge"],
@@ -33,6 +36,8 @@ export default async function ClientPeople({ params, searchParams }: { params: P
           <SubmitButton className="btn" type="submit">{t("common.save")}</SubmitButton>
         </form>
       </Fold>
+      <AccessEditor tenantId={id} rules={rules} people={logins} t={t} saved={access === "saved"} />
+      {access === "gone" && <Notice tone="warn">{t("access.gone")}</Notice>}
       <DoctorsManager tenant={tenant} doctors={doctors} bookings={bookings} logins={logins} returnTo={returnTo} sp={{ doc, cal, clash, role }} t={t} locale={locale} />
     </>
   );

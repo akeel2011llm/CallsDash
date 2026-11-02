@@ -18,6 +18,8 @@ const P: Record<string, React.ReactNode> = {
   bell: <><path d="M6 17.5V11a6 6 0 0 1 12 0v6.5l1.5 1.5h-15z" /><path d="M10 21h4" /></>,
   users: <><circle cx="9" cy="8.5" r="3.2" /><path d="M3 19.5a6 6 0 0 1 12 0M16 5.5a3.2 3.2 0 0 1 0 6M18 14.5a6 6 0 0 1 3 5" /></>,
   tick: <path d="M5 12.5l4.5 4.5L19 7.5" />,
+  plus: <path d="M12 5v14M5 12h14" />,
+  search: <><circle cx="10.5" cy="10.5" r="6" /><path d="m15 15 5 5" /></>,
   user: <><circle cx="12" cy="8.5" r="3.5" /><path d="M5 20a7 7 0 0 1 14 0" /></>,
   key: <><circle cx="8" cy="15" r="3.5" /><path d="M10.5 12.5 19 4M16 7l2.5 2.5M13.5 9.5 15.5 11.5" /></>,
   list: <><path d="M9 6h11M9 12h11M9 18h11" /><circle cx="4.5" cy="6" r="1" /><circle cx="4.5" cy="12" r="1" /><circle cx="4.5" cy="18" r="1" /></>,

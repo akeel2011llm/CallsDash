@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { requireAdmin, requireClient } from "./auth";
+import { requireAdmin, requireSection } from "./auth";
 import { getData } from "./data";
 import { MAX_IMPORT_BYTES, parseCsv } from "./data-hub";
 import { sheetFromFile } from "./sheet";
@@ -30,7 +30,7 @@ async function scopeOf(f: FormData): Promise<Scope> {
     if (!tenant) redirect("/admin");
     return { tenant, actor, admin: true, manager: true, base: `/admin/clients/${tenant.id}/data/tables` };
   }
-  const { tenant, actor, viewingAsAdmin, staffRole } = await requireClient();
+  const { tenant, actor, viewingAsAdmin, staffRole } = await requireSection("catalog");
   return { tenant, actor, admin: viewingAsAdmin, manager: staffRole === "manager", base: "/app/tables" };
 }
 

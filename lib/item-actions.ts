@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { requireClient } from "./auth";
+import { requireSection } from "./auth";
 import { ItemError, itemImageDataUrl, saveItemByStaff } from "./items";
 import { getData } from "./data";
 
@@ -10,7 +10,7 @@ const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 
 /** Adds an item (no id) or saves changes to one, with its photo. Anyone who may edit the knowledge base may edit the catalogue. */
 export async function saveItemAction(f: FormData) {
-  const { tenant, actor } = await requireClient();
+  const { tenant, actor } = await requireSection("catalog");
   if (!tenant.permissions.editKnowledge) throw new Error("forbidden");
   const id = str(f, "id");
   const back = id ? `/app/catalogue/${id}` : "/app/catalogue";
@@ -36,7 +36,7 @@ export async function saveItemAction(f: FormData) {
 
 /** Erases an item and its photo. Managers only, with the tick box. */
 export async function deleteItemAction(f: FormData) {
-  const { tenant, actor, staffRole } = await requireClient();
+  const { tenant, actor, staffRole } = await requireSection("catalog");
   const id = str(f, "id");
   if (staffRole !== "manager" || !tenant.permissions.editKnowledge) redirect(`/app/catalogue/${id}`);
   if (f.get("confirm") !== "on") redirect(`/app/catalogue/${id}?err=confirm`);
