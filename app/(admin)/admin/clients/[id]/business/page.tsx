@@ -10,7 +10,7 @@ import { adminTenantSettingsAction } from "@/lib/actions";
 import { adminClientProfileAction, adminBusinessAction } from "@/lib/manage-actions";
 import { BusinessFields } from "@/components/BusinessFields";
 import { ContactForm } from "@/components/ContactForm";
-import { businessOf, vocabOf } from "@/lib/business-types";
+import { businessOf, kindChoice, vocabOf } from "@/lib/business-types";
 import { EXTRA_TARGETS, extraFieldsOf } from "@/lib/extra-fields";
 import { ExtraFieldsDesigner } from "@/components/ExtraFields";
 import { dictionaries, type Key } from "@/lib/i18n";
@@ -59,7 +59,7 @@ export default async function ClientBusiness({ params, searchParams }: { params:
           <SubmitButton className="btn" type="submit">{t("common.save")}</SubmitButton>
         </form>
       </Fold>
-      <Fold id="business" open={saved === "business" || err === "role_in_use" || err === "id_name"} title={plain("biz.title")} hint={plain(`biz.type.${biz.type}`)}>
+      <Fold id="business" open={saved === "business" || err === "role_in_use" || err === "id_name"} title={plain("biz.title")} hint={plain(`biz.kind.${kindChoice(biz)}` as Key)}>
         <form action={adminBusinessAction} className="stack">
           <input type="hidden" name="tenantId" value={id} /><input type="hidden" name="returnTo" value={returnTo} />
           <small className="muted">{plain("biz.help")}</small>

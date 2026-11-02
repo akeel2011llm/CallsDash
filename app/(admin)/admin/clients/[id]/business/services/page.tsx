@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/auth";
 import { getT } from "@/lib/i18n";
+import { businessOf } from "@/lib/business-types";
 import * as store from "@/lib/data";
 import { readServices, servicesKey } from "@/lib/services";
 import { ServicesManager, type ServicesQuery } from "@/components/ServicesManager";
@@ -18,7 +19,7 @@ export default async function AdminServices({ params, searchParams }: { params: 
   return (
     <>
       <PageHead title={t("services.title")} subtitle={t("services.subtitle")} actions={<Link className="btn ghost" href={`/admin/clients/${id}/business`}>{t("common.back")}</Link>} />
-      <ServicesManager tenantId={id} list={list} sp={await searchParams} t={t} locale={locale} canEdit />
+      <ServicesManager tenantId={id} list={list} sp={await searchParams} t={t} locale={locale} canEdit kind={businessOf(tenant).kind} />
     </>
   );
 }

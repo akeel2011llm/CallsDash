@@ -1,4 +1,4 @@
-import { BUSINESS_TYPES, MAX_ROLES, VOCAB, businessOf, rolesOf, type BusinessProfile, type WordKey } from "@/lib/business-types";
+import { KIND_GROUPS, MAX_ROLES, kindChoice, VOCAB, businessOf, rolesOf, type BusinessProfile, type WordKey } from "@/lib/business-types";
 import type { Key } from "@/lib/i18n";
 import { ID_KINDS, idRuleOf } from "@/lib/id-rule";
 
@@ -20,8 +20,12 @@ export function BusinessFields({ t, business }: { t: (k: Key) => string; busines
   return (
     <>
       <label>{t("biz.type")}
-        <select name="businessType" defaultValue={b.type}>
-          {BUSINESS_TYPES.map((x) => <option key={x} value={x}>{t(`biz.type.${x}` as Key)}</option>)}
+        <select name="businessType" defaultValue={kindChoice(b)}>
+          {KIND_GROUPS.map((g) => (
+            <optgroup key={g.key} label={t(`biz.group.${g.key}` as Key)}>
+              {g.options.map((x) => <option key={x} value={x}>{t(`biz.kind.${x}` as Key)}</option>)}
+            </optgroup>
+          ))}
         </select>
       </label>
       <small className="muted">{t("biz.type.help")}</small>

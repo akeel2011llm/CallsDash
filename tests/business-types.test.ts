@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 
 import { dictionaries } from "@/lib/i18n";
-import { BUSINESS_TYPES, businessFromForm, businessOf, relabel, roleName, roleOf, rolesFromForm, rolesOf, rulesOf, VOCAB, vocabOf, type BusinessProfile } from "@/lib/business-types";
+import { BUSINESS_KINDS, BUSINESS_TYPES, KIND_GROUPS, isBusinessKind, kindChoice, businessFromForm, businessOf, relabel, roleName, roleOf, rolesFromForm, rolesOf, rulesOf, VOCAB, vocabOf, type BusinessProfile } from "@/lib/business-types";
 import { buildPrompt, toolDefinitions } from "@/lib/agent-config";
 import { agent } from "@/lib/seed";
 
@@ -183,5 +183,40 @@ describe("the assistant's own sections follow the business words", () => {
     expect(promptForWords(own, t0, salon)!.identity).toBe("My own words for this clinic.");
     // nothing to change: null
     expect(promptForWords(s, t0, { type: "clinic" })).toBeNull();
+  });
+});
+
+describe("business kinds (20 kinds in Type of business)", () => {
+  const form = (v: Record<string, string>) => businessFromForm((k) => v[k] ?? "", (k) => k in v);
+  it("offers every kind of the services library, each once, plus shop, other service and something else", async () => {
+    const { SERVICE_LIBRARY } = await import("@/lib/service-library");
+    const opts = KIND_GROUPS.flatMap((g) => g.options);
+    expect(new Set(opts).size).toBe(opts.length);
+    expect(Object.keys(BUSINESS_KINDS).sort()).toEqual(SERVICE_LIBRARY.map((x) => x.key).sort());
+    expect(opts.filter((o) => isBusinessKind(o))).toHaveLength(20);
+    expect(opts).toEqual(expect.arrayContaining(["retail", "service", "custom"]));
+  });
+  it("a kind sets its type, and a plain type keeps working", () => {
+    expect(form({ businessType: "dental" })).toMatchObject({ type: "clinic", kind: "dental", staffScheduling: true });
+    expect(form({ businessType: "barber" })).toMatchObject({ type: "salon", kind: "barber" });
+    expect(form({ businessType: "carWash" })).toMatchObject({ type: "service", kind: "carWash" });
+    expect(form({ businessType: "retail" })).not.toHaveProperty("kind");
+    expect(form({ businessType: "toString" })).toMatchObject({ type: "clinic" });
+    expect(form({ businessType: "toString" })).not.toHaveProperty("kind");
+  });
+  it("shows the stored kind, or the closest one for clients from before kinds", () => {
+    expect(kindChoice({ type: "clinic" })).toBe("health");
+    expect(kindChoice({ type: "salon" })).toBe("ladies");
+    expect(kindChoice({ type: "retail" })).toBe("retail");
+    expect(kindChoice({ type: "salon", kind: "spa" })).toBe("spa");
+    expect(kindChoice({ type: "retail", kind: "spa" })).toBe("retail");
+  });
+  it("has English and Arabic labels for every option and group", () => {
+    for (const d of [dictionaries.en, dictionaries.ar] as Record<string, string>[]) {
+      for (const g of KIND_GROUPS) {
+        expect(d[`biz.group.${g.key}`]).toBeTruthy();
+        for (const o of g.options) expect(d[`biz.kind.${o}`]).toBeTruthy();
+      }
+    }
   });
 });
