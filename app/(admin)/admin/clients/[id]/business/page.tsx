@@ -35,7 +35,7 @@ export default async function ClientBusiness({ params, searchParams }: { params:
       {saved === "fields" && <Notice tone="ok">{t("fields.saved")}</Notice>}
       {err?.startsWith("fields_") && `${err.replace("fields_", "fields.err.")}` in dictionaries.en && <Notice tone="warn">{t(err.replace("fields_", "fields.err.") as Key).replace("{who}", (who ?? "").slice(0, 60))}</Notice>}
       {saved && saved !== "business" && <Notice tone="ok">{t("agent.saved").split(".")[0]}.</Notice>}
-      <PageHead title={t("ws.business")} actions={<><Link className="btn ghost" href={`/admin/clients/${id}/business/services`}>{t("services.title")}</Link><Link className="btn ghost" href={`/admin/clients/${id}/business/branding`}>{t("brand.open")}</Link></>} />
+      <PageHead title={t("ws.business")} actions={<><Link className="btn ghost" href={`/admin/clients/${id}/business/services`}>{t("services.title")}</Link><Link className="btn ghost" href={`/admin/clients/${id}/business/team`}>{t("teamlib.open")}</Link><Link className="btn ghost" href={`/admin/clients/${id}/business/branding`}>{t("brand.open")}</Link></>} />
       <FoldControls openAll={t("fold.openAll")} closeAll={t("fold.closeAll")} />
       <div className="grid two fold-grid">
       <Fold id="profile" open title={t("admin.profile")}>

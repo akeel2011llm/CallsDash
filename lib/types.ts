@@ -395,6 +395,8 @@ export interface Doctor {
   specialty: string;
   /** The key of the client's role this person has (lib/business-types.ts rolesOf). Missing = the client's first role. */
   role?: string;
+  /** The key of the client's department this person works in (lib/business-types.ts departmentsOf). Missing = none. */
+  department?: string;
   /** Answers to the client's own team member fields (lib/extra-fields.ts), by field key. */
   extra?: Record<string, string>;
   /** What the assistant tells customers about the doctor (experience, languages, what they treat), in English and Arabic. */

@@ -17,7 +17,7 @@ import { ToolError } from "./booking";
 import { DuplicateError } from "./errors";
 import { autoSync } from "./auto-sync";
 import type { Booking, DateRange } from "./types";
-import { businessFromForm, businessOf, rolesOf } from "./business-types";
+import { businessFromForm, businessOf, departmentsOf, rolesOf } from "./business-types";
 import { promptForWords } from "./business-words";
 import { deleteRecordings, recordingState } from "./recordings";
 import { ExtraError, cleanExtra, extraFieldsOf, extraFromForm, extraFromLines, isExtraTarget, mergeExtra } from "./extra-fields";
@@ -65,6 +65,12 @@ async function roleFrom(f: FormData, tenantId: string): Promise<string | undefin
  * The client's own team member fields from a team form (lib/extra-fields.ts): the answers merged into what was stored,
  * undefined when the form has none, null when a required one is blank or an answer does not fit.
  */
+/** The department key the form chose, if it is one of the client's departments; otherwise none. */
+async function departmentFrom(f: FormData, tenantId: string): Promise<string | undefined> {
+  const key = str(f, "department");
+  return key && departmentsOf(await store.getTenant(tenantId)).some((d) => d.key === key) ? key : undefined;
+}
+
 async function teamExtra(f: FormData, tenantId: string, before?: Record<string, string>): Promise<Record<string, string> | undefined | null> {
   if (!f.has("extraShown")) return undefined;
   const fields = extraFieldsOf(await store.getTenant(tenantId), "team");
@@ -85,7 +91,7 @@ export async function addDoctorAction(f: FormData) {
   if ((await store.getDoctors(tenantId)).some((d) => d.name.toLowerCase() === name.toLowerCase())) go(f, fallback, "doc=name_taken", "#doctors");
   const extra = await teamExtra(f, tenantId);
   if (extra === null) go(f, fallback, "doc=bad_extra", "#doctors");
-  await store.addDoctor(tenantId, { name, specialty: str(f, "specialty").slice(0, 120), about: str(f, "about").slice(0, 800), aboutAr: str(f, "aboutAr").slice(0, 800), role: await roleFrom(f, tenantId), ...(extra ? { extra } : {}) }, actor);
+  await store.addDoctor(tenantId, { name, specialty: str(f, "specialty").slice(0, 120), about: str(f, "about").slice(0, 800), aboutAr: str(f, "aboutAr").slice(0, 800), role: await roleFrom(f, tenantId), department: await departmentFrom(f, tenantId), ...(extra ? { extra } : {}) }, actor);
   await autoSync(tenantId, actor);
   refreshAll();
   go(f, fallback, "doc=added", "#doctors");
@@ -105,6 +111,7 @@ export async function saveDoctorAction(f: FormData) {
     ...(extra ? { extra } : {}),
     name, specialty: str(f, "specialty").slice(0, 120), about: str(f, "about").slice(0, 800), aboutAr: str(f, "aboutAr").slice(0, 800), color: hex.test(color) ? color : doc.color, active: f.get("active") === "on",
     ...(f.has("role") ? { role: await roleFrom(f, tenantId) } : {}),
+    ...(f.has("department") ? { department: await departmentFrom(f, tenantId) } : {}),
   }, actor);
   if (f.has("calendarId")) {
     const calendarId = str(f, "calendarId").slice(0, 300);
@@ -362,6 +369,8 @@ export async function adminBusinessAction(f: FormData) {
   if (!f.has("idShown") && before.id) business.id = before.id;
   // the client's own fields have their own form below this one
   if (before.fields) business.fields = before.fields;
+  // departments have their own page (Business > Roles and departments)
+  if (before.departments) business.departments = before.departments;
   // a role still given to someone cannot be removed: they would silently become another role
   if (business.roles) {
     const kept = new Set(business.roles.map((r) => r.key));
