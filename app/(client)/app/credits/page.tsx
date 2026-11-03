@@ -2,7 +2,9 @@ import { systemText } from "@/lib/system-text";
 import { requireClient } from "@/lib/auth";
 import { getT } from "@/lib/i18n";
 import { fmtDate, fmtDateTime, fmtNum } from "@/lib/format";
-import { getLedger, getWallet, usageByChannel } from "@/lib/data";
+import { getConversations, getLedger, getWallet, usageByChannel } from "@/lib/data";
+import { clientForecast } from "@/lib/usage-insights";
+import { fill } from "@/lib/format";
 import { requestTopUpAction } from "@/lib/actions";
 import { Badge, Notice, PageHead, Stat } from "@/components/ui";
 import { SubmitButton } from "@/components/SubmitButton";
@@ -15,6 +17,9 @@ export default async function CreditsPage({ searchParams }: { searchParams: Prom
   const monthStart = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1));
   const usage = await usageByChannel(tenant.id, monthStart);
   const total = Object.values(usage).reduce((a, b) => a + b, 0) || 1;
+  // how long the credits last at the last 14 days' pace (the admin sees the same figure on Platform settings)
+  const now = Date.now();
+  const fc = clientForecast({ tenantId: tenant.id, name: tenant.name, conversations: (await getConversations(tenant.id)).filter((c) => now - Date.parse(c.startedAt) <= 62 * 86_400_000), walletBalance: w.balance, revenuePerCredit: 0, real: {} }, now);
   return (
     <>
       <PageHead title={t("credits.title")} />
@@ -22,6 +27,11 @@ export default async function CreditsPage({ searchParams }: { searchParams: Prom
       <div className="grid">
         <Stat label={t("credits.balance")} value={fmtNum(w.balance, locale, 1)} tone={w.low ? "warn" : undefined} hint={t("credits.explain")} />
       </div>
+      <section className={`card acct-balance ${fc.wallet.daysLeft !== undefined && fc.wallet.daysLeft < 14 ? "warn" : "ok"}`}>
+        <h2>{t("acct.mine.title")}</h2>
+        <p className="acct-verdict">{fc.wallet.daysLeft !== undefined && fc.wallet.daysLeft > 365 ? t("acct.mine.overYear") : fc.wallet.runsOutAt ? fill(t("acct.mine.lasts"), { date: fmtDate(new Date(fc.wallet.runsOutAt).toISOString(), locale), days: fmtNum(fc.wallet.daysLeft ?? 0, locale, 0) }) : t("acct.mine.none")}</p>
+        <p className="muted acct-line">{fill(t("acct.mine.month"), { min: fmtNum(fc.mtd.minutes, locale, 0), msg: fmtNum(fc.mtd.messages, locale, 0) })}</p>
+      </section>
       {tenant.plans.filter((p) => p.active).length > 1 && (
         <section className="card stack">
           <h2>{t("credits.plans")}</h2>

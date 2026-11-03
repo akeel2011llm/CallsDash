@@ -8,9 +8,11 @@ import { viewAsClient } from "@/lib/actions";
 import { Badge, PageHead, Stat } from "@/components/ui";
 import { SubmitButton } from "@/components/SubmitButton";
 import { BuildBadge } from "@/components/BuildBadge";
+import { BalanceCard } from "@/components/AccountInsights";
+import { loadInsights } from "@/lib/account-server";
 
 export default async function AdminHome() {
-  const [{ t, locale }, tenants, alerts, requests, owed] = await Promise.all([getT(), listTenants(), getAlerts(), getTopUpRequests(), creditsOwed()]);
+  const [{ t, locale }, tenants, alerts, requests, owed, ins] = await Promise.all([getT(), listTenants(), getAlerts(), getTopUpRequests(), creditsOwed(), loadInsights()]);
   const openAlerts = alerts.filter((a) => !a.resolved);
   const wallets = new Map(await Promise.all(tenants.map(async (c) => [c.id, await getWallet(c.id)] as const)));
   // setup progress in wizard phases (5); a client the admin marked live shows "Live" instead
@@ -19,6 +21,7 @@ export default async function AdminHome() {
     <>
       <BuildBadge />
       <PageHead title={t("admin.title")} actions={<Link className="btn" href="/admin/clients/new">{t("admin.newClient")}</Link>} />
+      <BalanceCard ins={ins} t={t} locale={locale} returnTo="/admin" compact />
       <div className="grid">
         <Stat label={t("admin.clientsLive")} value={`${tenants.filter((x) => x.status === "live").length} / ${tenants.length}`} />
         <Stat label={t("admin.openAlerts")} value={openAlerts.length} tone={openAlerts.length ? "warn" : undefined} />
