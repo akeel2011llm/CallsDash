@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { parsePostCall, unansweredConfirmation, verifySignature } from "@/lib/elevenlabs";
 import { findTenantByAgent, getAgent, getData, getSetting, recordConversation } from "@/lib/data";
 import { conversationCostUsd, ratesFor } from "@/lib/costing";
+import { recordRealCost } from "@/lib/account-server";
 import { FEES_KEY, pricesKey } from "@/lib/pricing";
 import { recordVisit } from "@/lib/customers";
 
@@ -27,9 +28,11 @@ export async function POST(req: Request) {
   if (!tenant) return NextResponse.json({ error: "unknown agent" }, { status: 404 });
   // what it cost us: ElevenLabs' fee plus the share of the AI model this client's assistant uses, the same sums as the Assistant studio
   // (a failure here must never lose the conversation: without a worked-out cost it is recorded at the flat estimate)
-  const costUsd = await Promise.all([getAgent(tenant.id), getSetting(FEES_KEY), getSetting(pricesKey(tenant.id))])
+  // ElevenLabs' own dollar figure when the payload has one (the real cost, AI model included); otherwise our estimate
+  const costUsd = parsed.cost?.usd ?? await Promise.all([getAgent(tenant.id), getSetting(FEES_KEY), getSetting(pricesKey(tenant.id))])
     .then(([agent, fees, prices]) => conversationCostUsd(parsed.conversation, ratesFor(agent, fees, prices)))
     .catch(() => undefined);
+  if (parsed.cost) await recordRealCost(tenant.id, parsed.externalId, parsed.cost);
   const res = await recordConversation(tenant.id, { ...parsed.conversation, costUsd });
   // the customer's record gets this conversation (a failure here must never lose or fail the conversation that is already stored)
   if (!res.duplicate) {

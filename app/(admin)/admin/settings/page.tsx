@@ -6,16 +6,21 @@ import { ServerKeys } from "@/components/ServerKeys";
 import { Fold } from "@/components/Fold";
 import { Notice } from "@/components/ui";
 import { SubmitButton } from "@/components/SubmitButton";
+import { AccountInsights } from "@/components/AccountInsights";
+import { loadInsights } from "@/lib/account-server";
 
 /**
  * Platform settings (docs/reorganization.md, milestone 4): the admin's own account and guides, plus everything that is the
  * same for every client: the server keys in Vercel and the ElevenLabs fees used for cost and margin.
  */
-export default async function PlatformSettings({ searchParams }: { searchParams: Promise<{ feesSaved?: string; feesBad?: string }> }) {
+export default async function PlatformSettings({ searchParams }: { searchParams: Promise<{ feesSaved?: string; feesBad?: string; refreshed?: string }> }) {
   const sp = await searchParams;
-  const [{ t }, fees] = await Promise.all([getT(), loadFees()]);
+  const [{ t, locale }, fees, ins] = await Promise.all([getT(), loadFees(), loadInsights()]);
   return (
-    <SettingsPage title={t("nav.platform")}>
+    <SettingsPage title={t("nav.platform")} top={<>
+      {sp.refreshed && <Notice tone="ok">{t("acct.refreshed")}</Notice>}
+      <AccountInsights ins={ins} t={t} locale={locale} />
+    </>}>
       <Fold id="fees" open={Boolean(sp.feesSaved || sp.feesBad)} title={t("studio.fees.title")} hint={t("platform.fees.help")}>
         {sp.feesSaved && <Notice tone="ok">{t("studio.fees.saved")}</Notice>}
         {sp.feesBad && <Notice tone="warn">{t("studio.fees.bad")}</Notice>}

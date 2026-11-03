@@ -750,3 +750,36 @@ details:not(.fold):not(.card) > summary { padding-block: .3rem; cursor: pointer;
 .xfer-group { border: 1px solid var(--line); border-radius: var(--radius); padding: .6rem .8rem .8rem; gap: .45rem; }
 .xfer-group legend { padding: 0 .3rem; }
 .xfer-group label.inline input { flex: none; }
+
+/* ElevenLabs balance, usage and forecast (components/AccountInsights.tsx) */
+.acct-balance { display: grid; gap: .55rem; border-inline-start: 4px solid var(--ok); }
+.acct-balance.warn { border-inline-start-color: var(--warn); }
+.acct-balance.danger { border-inline-start-color: var(--bad); }
+.acct-head { display: flex; align-items: center; justify-content: space-between; gap: .75rem; flex-wrap: wrap; }
+.acct-head h2 { margin: 0; }
+.acct-big { display: flex; align-items: baseline; gap: .6rem; flex-wrap: wrap; }
+.acct-big strong { font-size: clamp(2rem, 7vw, 2.8rem); line-height: 1.05; font-variant-numeric: tabular-nums; }
+.acct-bar { block-size: 12px; }
+.acct-balance.ok .acct-bar > span { background: var(--ok); }
+.acct-balance.warn .acct-bar > span { background: var(--warn); }
+.acct-balance.danger .acct-bar > span { background: var(--bad); }
+.acct-line { margin: 0; }
+.acct-verdict { margin: 0; padding: .55rem .75rem; border-radius: var(--radius); font-weight: 600; background: color-mix(in srgb, var(--ok) 9%, var(--surface)); }
+.acct-verdict.warn { background: color-mix(in srgb, var(--warn) 12%, var(--surface)); }
+.acct-verdict.danger { background: color-mix(in srgb, var(--bad) 11%, var(--surface)); color: var(--bad); }
+.acct-balance > .btn { justify-self: start; }
+.acct-facts { margin: 0 0 .8rem; padding-inline-start: 1.1rem; display: grid; gap: .45rem; }
+.acct-split { display: grid; gap: .35rem; margin-block-start: .4rem; }
+.acct-split-row { display: grid; grid-template-columns: minmax(8rem, 14rem) 1fr auto; gap: .6rem; align-items: center; }
+.acct-mine td { font-weight: 600; background: color-mix(in srgb, var(--brand) 7%, transparent); }
+.acct-clients { display: grid; gap: .75rem; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); margin-block-end: .6rem; }
+.acct-client { border: 1px solid var(--line); border-radius: var(--radius); padding: .75rem .9rem; display: grid; gap: .5rem; background: var(--surface); min-inline-size: 0; }
+.acct-client header { display: flex; justify-content: space-between; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.acct-client dl { margin: 0; display: grid; gap: .3rem; }
+.acct-client dl > div { display: flex; justify-content: space-between; gap: .75rem; flex-wrap: wrap; }
+.acct-client dt { color: var(--muted); }
+.acct-client dd { margin: 0; text-align: end; }
+@media (max-width: 640px) {
+  .acct-split-row { grid-template-columns: 1fr auto; }
+  .acct-split-row .bar { grid-column: 1 / -1; grid-row: 2; }
+}

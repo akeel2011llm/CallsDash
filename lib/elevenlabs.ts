@@ -22,6 +22,8 @@ export interface ParsedCall {
   agentId: string;
   externalId: string;
   conversation: NewConversation;
+  /** What ElevenLabs says the conversation cost: credits (`metadata.cost`) and US dollars (`metadata.cost_fiat`), when it reports them. */
+  cost?: { credits?: number; usd?: number; minutes: number };
   /** The customer's phone number when the payload carries one (a phone call or WhatsApp chat), as ElevenLabs wrote it. */
   callerPhone?: string;
 }
@@ -76,10 +78,13 @@ export function parsePostCall(body: Json): ParsedCall | null {
   // the number our own start-of-conversation webhook was given (lib/agent-context.ts), else the ones ElevenLabs records itself
   const callerPhone = [dyn.caller_phone, dyn.system__caller_id, meta.phone_call?.external_number, meta.whatsapp?.whatsapp_user_id]
     .map((v) => String(v ?? "").trim()).find((v) => v.replace(/\D/g, "").length >= 8);
+  const fin = (v: unknown) => (typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : undefined);
+  const credits = fin(meta.cost), usd = fin(meta.cost_fiat);
   return {
     agentId,
     externalId,
     ...(callerPhone ? { callerPhone } : {}),
+    ...(credits !== undefined || usd !== undefined ? { cost: { ...(credits !== undefined ? { credits } : {}), ...(usd !== undefined ? { usd } : {}), minutes: Math.max(0, Number(meta.call_duration_secs) || 0) / 60 } } : {}),
     conversation: {
       channel, mode, language, outcome, transcript,
       startedAt: new Date((Number.isFinite(startedSec) && startedSec > 0 ? startedSec : Date.now() / 1000) * 1000).toISOString(),
