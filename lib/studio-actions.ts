@@ -75,10 +75,10 @@ export async function refreshModelsAction(f: FormData) {
 /** What our ElevenLabs plan charges per voice minute and per chat message, which every cost on the screen starts from. */
 export async function saveFeesAction(f: FormData) {
   const { actor } = await requireAdmin();
-  // the fees are the same for every client: the form lives in Platform settings (no client); a client page may still send one
+  // the fees are the same for every client: the form lives in Billing > ElevenLabs account (no client); a client page may still send one
   const id = str(f, "tenantId");
   if (id) await only(id);
-  const to = (q: string) => (id ? page(id, q, "#pricing") : `/admin/settings?${q}#fees`);
+  const to = (q: string) => (id ? page(id, q, "#pricing") : `/admin/billing/elevenlabs?${q}#fees`);
   const n = (k: string) => Number(str(f, k).replace(",", "."));
   const minuteUsd = n("minuteUsd"), messageUsd = n("messageUsd");
   const ok = [minuteUsd, messageUsd].every((v) => Number.isFinite(v) && v >= 0 && v < 10);

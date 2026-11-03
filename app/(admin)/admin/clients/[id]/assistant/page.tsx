@@ -575,7 +575,7 @@ export default async function AssistantStudioPage({ params, searchParams }: { pa
             <dt>{T("studio.fees.minute")}</dt><dd dir="ltr">{fees.minuteUsd}</dd>
             <dt>{T("studio.fees.message")}</dt><dd dir="ltr">{fees.messageUsd}</dd>
           </dl>
-          <small><Link href="/admin/settings#fees">{T("studio.fees.onPlatform")}</Link></small>
+          <small><Link href="/admin/billing/elevenlabs#fees">{T("studio.fees.onPlatform")}</Link></small>
           <dl className="scan-grid">
             <dt>{T("studio.fees.rate")}</dt><dd dir="ltr">{rate ? `${fmtBhd(rate)} ${T("studio.fees.perCredit")}` : T("studio.model.noPlan")}</dd>
             <dt>{T("studio.fees.unit")}</dt><dd>{T("studio.fees.unitText")}</dd>

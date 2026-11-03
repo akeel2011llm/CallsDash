@@ -16,6 +16,6 @@ export async function refreshAccountAction(f: FormData) {
   const asked = api ? await backfillRealCosts(api).catch(() => 0) : 0;
   await audit(actor, `Read the ElevenLabs balance and usage again${asked ? ` (and the real cost of ${asked} conversations)` : ""}`).catch(() => undefined);
   revalidatePath("/admin", "layout");
-  const back = safePath(f.get("returnTo"), "/admin/settings");
+  const back = safePath(f.get("returnTo"), "/admin/billing/elevenlabs");
   redirect(`${back}${back.includes("?") ? "&" : "?"}refreshed=1#elevenlabs`);
 }

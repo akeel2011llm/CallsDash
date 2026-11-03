@@ -10,9 +10,11 @@ export default async function BillingHub({ children }: { children: React.ReactNo
       <Tabs
         label={t("billing.tabs")}
         items={[
+          { href: "/admin/billing/clients", label: t("billing.clients") },
           { href: "/admin/billing/packages", label: t("billing.packages") },
           { href: "/admin/billing/usage", label: t("billing.usage") },
           { href: "/admin/billing/requests", label: t("billing.requests"), badge: requests.length || undefined },
+          { href: "/admin/billing/elevenlabs", label: t("billing.elevenlabs") },
         ]}
       />
       {children}
