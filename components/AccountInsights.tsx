@@ -64,7 +64,7 @@ export function BalanceCard({ ins, t, locale, returnTo, compact }: { ins: Insigh
             : fill(t("acct.pace.ok"), { perDay: fmtNum(b.perDay, locale, 0), left: fmtNum(Math.max(0, b.limit - (b.projectedAtReset ?? b.used)), locale, 0) })}
       </p>
       <small className="muted">{fill(t("acct.updated"), { when: ago(ins.snapshot!.fetchedAt, t, locale) })}</small>
-      {compact && <Link className="btn small ghost" href="/admin/settings#elevenlabs">{t("acct.details")}</Link>}
+      {compact && <Link className="btn small ghost" href="/admin/billing/elevenlabs#elevenlabs">{t("acct.details")}</Link>}
     </section>
   );
 }
@@ -91,7 +91,7 @@ export function AccountInsights({ ins, t, locale }: { ins: Insights; t: T; local
 
   return (
     <>
-      <BalanceCard ins={ins} t={t} locale={locale} returnTo="/admin/settings" />
+      <BalanceCard ins={ins} t={t} locale={locale} returnTo="/admin/billing/elevenlabs" />
       {ins.snapshot?.errors.length ? <p className="notice warn" dir="ltr">{ins.snapshot.errors.join(" · ")}</p> : null}
 
       <Fold id="usage-plain" open title={t("acct.usage.title")} hint={t("acct.usage.hint")}>

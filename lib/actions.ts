@@ -1,5 +1,6 @@
 "use server";
 
+import { notifyAdmin } from "./billing-server";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
@@ -216,6 +217,7 @@ export async function requestTopUpAction(f: FormData) {
   const { tenant, actor } = await requireSection("billing");
   const credits = Math.min(100_000, Math.max(1, Math.round(num(f, "credits")) || 500));
   await store.requestTopUp(tenant.id, credits, actor);
+  await notifyAdmin(`CallsDash: ${tenant.name} asked for a top-up`, `${tenant.name} asked for ${credits} credits.\nOpen Billing > Top-up requests to approve it.\n\n${tenant.name} طلب شحن ${credits} رصيد. افتح الفوترة ثم طلبات شحن الرصيد للموافقة.`);
   revalidatePath("/admin");
   back(f, "/app/credits", "requested=1");
 }

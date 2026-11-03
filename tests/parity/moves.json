@@ -5,7 +5,7 @@
     "/admin/clients/[id]/duplicate": "/admin/clients/[id]/activity/duplicate",
     "/admin/packages": "/admin/billing/packages",
     "/admin/usage": "/admin/billing/usage",
-    "/admin/billing": "/admin/billing/packages"
+    "/admin/billing": "/admin/billing/clients"
   },
   "actions": {},
   "fields": {
@@ -20,6 +20,7 @@
     "@BusinessFields:staffMany": "Still on the form: BusinessFields now draws all twelve word boxes (staff, customer, place; English and Arabic) with one helper, so the scanner no longer sees the literal names. businessFromForm reads every key in WORD_KEYS.",
     "@BusinessFields:staffOneAr": "Still on the form: BusinessFields now draws all twelve word boxes (staff, customer, place; English and Arabic) with one helper, so the scanner no longer sees the literal names. businessFromForm reads every key in WORD_KEYS.",
     "@BusinessFields:staffManyAr": "Still on the form: BusinessFields now draws all twelve word boxes (staff, customer, place; English and Arabic) with one helper, so the scanner no longer sees the literal names. businessFromForm reads every key in WORD_KEYS.",
-    "deleteKnowledgeAction:id": "Still sent: the delete now sits behind a tick box (components/Confirm.tsx ConfirmDelete), which writes the id as a hidden field from its fields prop."
+    "deleteKnowledgeAction:id": "Still sent: the delete now sits behind a tick box (components/Confirm.tsx ConfirmDelete), which writes the id as a hidden field from its fields prop.",
+    "requestTopUpAction:credits": "Still sent as a hidden field named credits by the amount picker (components/TopUpPicker.tsx), which the parity scan cannot see inside a client component."
   }
 }

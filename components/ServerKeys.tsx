@@ -5,7 +5,7 @@ import { Fold } from "./Fold";
 import { Badge } from "./ui";
 import { SecretGenerator } from "./SecretGenerator";
 
-const ENV = ["SUPABASE_SERVICE_ROLE_KEY", "GOOGLE_SERVICE_ACCOUNT_JSON", "ELEVENLABS_API_KEY", "AGENT_TOOLS_SECRET", "ELEVENLABS_WEBHOOK_SECRET", "META_APP_SECRET", "META_VERIFY_TOKEN", "NEXT_PUBLIC_SITE_URL"] as const;
+const ENV = ["SUPABASE_SERVICE_ROLE_KEY", "GOOGLE_SERVICE_ACCOUNT_JSON", "ELEVENLABS_API_KEY", "AGENT_TOOLS_SECRET", "ELEVENLABS_WEBHOOK_SECRET", "META_APP_SECRET", "META_VERIFY_TOKEN", "NEXT_PUBLIC_SITE_URL", "RESEND_API_KEY", "BILLING_FROM_EMAIL", "CRON_SECRET"] as const;
 
 /**
  * Set or Missing for every server key in Vercel. These belong to the whole platform, not one client, so they live in Platform

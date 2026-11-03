@@ -5,6 +5,10 @@ import { getConversations, getStaffRequests, getWallet } from "@/lib/data";
 import { needsAttention } from "@/lib/flags";
 import { publicBranding } from "@/lib/brand-image";
 import type { Section } from "@/lib/access";
+import { dueReminders } from "@/lib/billing-status";
+import { loadBillingSettings, loadClientBilling } from "@/lib/billing-server";
+import { fill, fmtDate, fmtNum } from "@/lib/format";
+import { BillingBanner } from "@/components/BillingBanner";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +24,17 @@ export default async function ClientLayout({ children }: { children: React.React
   const { t, locale } = await getT(tenant);
   const [w, requests, convs, sections] = await Promise.all([getWallet(tenant.id), getStaffRequests(tenant.id), getConversations(tenant.id), clientSections(c)]);
   const attention = convs.filter(needsAttention).length;
+  // the on-screen billing reminder, for people who may open Billing
+  let lines: { key: string; text: string }[] = [];
+  if (sections.includes("billing")) {
+    const [bs, own] = await Promise.all([loadBillingSettings(), loadClientBilling(tenant.id)]);
+    if (bs.onScreen && !own.muted) {
+      lines = dueReminders(tenant.plans, w.batches, new Date(), own.daysBefore ?? bs.daysBefore).map((r) => ({
+        key: r.key,
+        text: fill(t(r.kind === "expiry" ? "bc.line.expiry" : r.kind === "overdue" ? "bc.line.overdue" : "bc.line.renewal"), { plan: r.name ?? "", date: fmtDate(r.date, locale), n: fmtNum(r.kind === "expiry" ? r.credits ?? 0 : r.daysLeft, locale, 0), days: fmtNum(r.daysLeft, locale, 0) }),
+      }));
+    }
+  }
   const openRequests = requests.filter((r) => r.status === "open").length;
   const items: (NavItem & { section?: Section })[] = [
     { href: "/app", label: t("nav.today"), icon: "home", exact: true, tab: true },
@@ -52,6 +67,7 @@ export default async function ClientLayout({ children }: { children: React.React
       viewingAs={viewingAsAdmin}
       nav={nav}
     >
+      <BillingBanner scope={`client-${tenant.id}`} lines={lines} href="/app/credits" labels={{ title: t("bc.banner.title"), close: t("bc.banner.close"), open: t("bc.banner.open") }} />
       {children}
     </Shell>
   );

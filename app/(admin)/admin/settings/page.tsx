@@ -1,38 +1,15 @@
 import { getT } from "@/lib/i18n";
-import { loadFees } from "@/lib/studio-server";
-import { saveFeesAction } from "@/lib/studio-actions";
 import { SettingsPage } from "@/components/SettingsPage";
 import { ServerKeys } from "@/components/ServerKeys";
-import { Fold } from "@/components/Fold";
-import { Notice } from "@/components/ui";
-import { SubmitButton } from "@/components/SubmitButton";
-import { AccountInsights } from "@/components/AccountInsights";
-import { loadInsights } from "@/lib/account-server";
 
 /**
- * Platform settings (docs/reorganization.md, milestone 4): the admin's own account and guides, plus everything that is the
- * same for every client: the server keys in Vercel and the ElevenLabs fees used for cost and margin.
+ * Platform settings: the admin's own password and guides, and the server settings (the keys set in Vercel). Money and usage
+ * (ElevenLabs balance, fees, packages, reminders) live in Billing.
  */
-export default async function PlatformSettings({ searchParams }: { searchParams: Promise<{ feesSaved?: string; feesBad?: string; refreshed?: string }> }) {
-  const sp = await searchParams;
-  const [{ t, locale }, fees, ins] = await Promise.all([getT(), loadFees(), loadInsights()]);
+export default async function PlatformSettings() {
+  const { t } = await getT();
   return (
-    <SettingsPage title={t("nav.platform")} top={<>
-      {sp.refreshed && <Notice tone="ok">{t("acct.refreshed")}</Notice>}
-      <AccountInsights ins={ins} t={t} locale={locale} />
-    </>}>
-      <Fold id="fees" open={Boolean(sp.feesSaved || sp.feesBad)} title={t("studio.fees.title")} hint={t("platform.fees.help")}>
-        {sp.feesSaved && <Notice tone="ok">{t("studio.fees.saved")}</Notice>}
-        {sp.feesBad && <Notice tone="warn">{t("studio.fees.bad")}</Notice>}
-        <form action={saveFeesAction} className="stack">
-          <div className="grid two">
-            <label>{t("studio.fees.minute")}<input type="number" name="minuteUsd" defaultValue={fees.minuteUsd} min={0} max={9.999} step="any" dir="ltr" inputMode="decimal" /></label>
-            <label>{t("studio.fees.message")}<input type="number" name="messageUsd" defaultValue={fees.messageUsd} min={0} max={9.999} step="any" dir="ltr" inputMode="decimal" /></label>
-          </div>
-          <small className="muted">{t("studio.fees.where")}</small>
-          <div><SubmitButton className="btn" type="submit">{t("studio.fees.save")}</SubmitButton></div>
-        </form>
-      </Fold>
+    <SettingsPage title={t("nav.platform")}>
       <ServerKeys t={t} />
     </SettingsPage>
   );

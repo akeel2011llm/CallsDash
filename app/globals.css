@@ -783,3 +783,29 @@ details:not(.fold):not(.card) > summary { padding-block: .3rem; cursor: pointer;
   .acct-split-row { grid-template-columns: 1fr auto; }
   .acct-split-row .bar { grid-column: 1 / -1; grid-row: 2; }
 }
+
+/* Billing hub (components/BillingBanner.tsx, app/(admin)/admin/billing/clients) */
+.billing-banner { display: flex; gap: .75rem; align-items: flex-start; justify-content: space-between; margin-block-end: 1rem; }
+.billing-banner-body { display: grid; gap: .35rem; min-inline-size: 0; }
+.billing-banner ul { margin: 0; padding-inline-start: 1.1rem; display: grid; gap: .15rem; }
+.billing-banner-x { font-size: 1.2rem; line-height: 1; min-inline-size: 36px; }
+.bc-grid { display: grid; gap: .9rem; grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr)); }
+.bc-client { display: grid; gap: .65rem; min-inline-size: 0; scroll-margin-block-start: 1rem; }
+.bc-client header { display: flex; justify-content: space-between; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.bc-client header .row { gap: .35rem; }
+.bc-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .5rem; margin: 0; }
+.bc-facts > div { display: grid; gap: .1rem; min-inline-size: 0; }
+.bc-facts dt { color: var(--muted); font-size: .85rem; }
+.bc-facts dd { margin: 0; font-weight: 650; overflow-wrap: anywhere; }
+.bc-plans { display: grid; gap: .4rem; margin: 0; padding: 0; list-style: none; }
+.bc-plans li { padding: .5rem .65rem; border: 1px solid var(--line); border-radius: var(--radius); display: grid; gap: .15rem; }
+.bc-plans li.late { border-color: color-mix(in srgb, var(--bad) 45%, var(--line)); }
+.bc-plans li.soon { border-color: color-mix(in srgb, var(--warn) 50%, var(--line)); }
+.bc-sub { border-top: 1px solid var(--line); padding-block-start: .5rem; }
+.bc-sub > summary { cursor: pointer; font-weight: 600; }
+.bc-sub form { margin-block-start: .6rem; }
+.bc-amounts { display: flex; flex-wrap: wrap; gap: .5rem; }
+.bc-amounts label { display: inline-flex; align-items: center; gap: .4rem; padding: .45rem .8rem; border: 1px solid var(--line); border-radius: 99px; cursor: pointer; background: var(--surface); }
+.bc-amounts label:has(input:checked) { border-color: var(--brand); background: color-mix(in srgb, var(--brand) 10%, var(--surface)); }
+.bc-amounts input[type=radio] { inline-size: auto; min-block-size: 0; }
+@media (max-width: 640px) { .bc-facts { grid-template-columns: 1fr 1fr; } }
